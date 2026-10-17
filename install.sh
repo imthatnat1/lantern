@@ -57,7 +57,10 @@ if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
 fi
 EOS
 chmod +x /opt/lantern/update.sh
-( crontab -l 2>/dev/null | grep -v lantern/update.sh; echo "*/10 * * * * /opt/lantern/update.sh" ) | crontab -
+printf '*/10 * * * * root /opt/lantern/update.sh >> /opt/lantern/data/update.log 2>&1\n' > /etc/cron.d/lantern
+chmod 644 /etc/cron.d/lantern
+mkdir -p /opt/lantern/data
+echo "Auto-update installed: /etc/cron.d/lantern (every 10 minutes)"
 
 say "4/5  Building and testing"
 echo "node $(node -v), npm $(npm -v)"
