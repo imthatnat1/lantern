@@ -46,6 +46,12 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
     if ((safe.top10Pct ?? 0) > 35) return { ok: false, why: `rejected: fresh coin, top 10 hold ${safe.top10Pct!.toFixed(0)}%` };
   }
   if (s.buys5m >= 20 && s.sells5m === 0) return { ok: false, why: "rejected: buys but no sells in 5m, possible honeypot" };
+  // Vertical launches: a coin that went 5x in an hour (or 20x in six) while still under 6h old is a pump, not a setup,
+  // unless it has already spread to a real holder base.
+  if (!pinned && ageH < 6 && (s.change1h > 500 || s.change6h > 2000)) {
+    const wide = (safe.holders ?? 0) >= 1000 && (safe.top10Pct ?? 100) < 25;
+    if (!wide) return { ok: false, why: `rejected: vertical launch, +${Math.round(Math.max(s.change1h, s.change6h))}% at ${ageH.toFixed(1)}h old` };
+  }
   return { ok: true, holders: safe.holders, top10: safe.top10Pct };
 }
 

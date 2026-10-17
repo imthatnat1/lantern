@@ -101,6 +101,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
   const looks = (db.prepare(`SELECT s.* FROM signals_log s JOIN (SELECT mode, mint, max(at) AS at FROM signals_log WHERE at > ? GROUP BY mode, mint) l
     ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at WHERE s.taken=0 ORDER BY s.at DESC LIMIT 80`).all(now - 24 * 3_600_000) as any[])
     .map(r => ({ mode: r.mode, mint: r.mint, symbol: r.symbol, score: r.score, reason: r.reason, at: r.at, priceThen: r.price, rejected: /^rejected/i.test(r.reason), setup: r.setup ? JSON.parse(r.setup) : null,
+      watching: !/^rejected/i.test(r.reason) && !!r.setup && now - r.at < 3 * 3_600_000,
       watchedSince: (db.prepare("SELECT min(at) AS t FROM signals_log WHERE mode=? AND mint=? AND at > ?").get(r.mode, r.mint, now - 24 * 3_600_000) as any)?.t ?? r.at, market: mkt(r.mint) }));
 
   // Missed runners: anything we declined in 48h that then went 2x or more from the look price.
