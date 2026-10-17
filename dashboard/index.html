@@ -85,7 +85,14 @@
   .labels span { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ivory-dim); }
   .labels span.hot { border-color: var(--blossom); color: var(--blossom); }
   .score { font-family: var(--serif); font-size: 24px; font-weight: 500; color: var(--blossom); }
-  .fill { padding: 12px 16px; }
+  .fill { padding: 12px 16px 12px 14px; border-left: 4px solid var(--line-2); }
+  .fill.buy { border-left-color: var(--blossom); }
+  .fill.win { border-left-color: var(--sage); }
+  .fill.loss { border-left-color: var(--coral); }
+  .fill .tag { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  .fill.buy .tag { color: var(--blossom); } .fill.win .tag { color: var(--sage); } .fill.loss .tag { color: var(--coral); }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ivory-dim); margin: 8px 0 2px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
   .fill .head .gain { font-size: 17px; }
   .fill .reason { grid-column: 2 / -1; font-size: 13px; color: var(--ivory-dim); margin-top: 6px; }
   .fill .reason b { color: var(--ivory); font-weight: 500; }
@@ -158,6 +165,7 @@
 <div id="hot"></div>
 
 <h2>Today's trades <small id="tradesSummary"></small></h2>
+<div class="legend"><span><i style="background:var(--blossom)"></i>bought</span><span><i style="background:var(--sage)"></i>sold at a profit</span><span><i style="background:var(--coral)"></i>sold at a loss</span></div>
 <div class="chips" id="tradeChips" style="margin-top:6px"></div>
 <div id="trades"></div>
 
@@ -359,12 +367,13 @@ function tradeRows(fills) {
   return f.map(x => {
     const sym = x.symbol || (x.market && x.market.symbol) || short(x.mint);
     const buy = x.side === "buy";
-    const head = buy ? `<span class="dim">bought</span> ${usd(x.usd)}` : `<span class="${x.pnlUsd >= 0 ? "up" : "down"}">${usd(x.pnlUsd, true)} (${pct(x.pnlPct)})</span>`;
-    const title = buy ? "Bought" : reasonTitle(x.reason);
-    return `<div class="card fill">
-      <div class="head">${av(sym)}<div class="sym">${esc(sym)}<small>${x.mode}</small>${rewardFlag(x.market)}</div><div class="gain">${head}</div>
+    const kind = buy ? "buy" : x.pnlUsd > 0 ? "win" : "loss";
+    const tag = buy ? "Bought" : x.pnlUsd > 0 ? "Sold at a profit" : "Sold at a loss";
+    const head = buy ? `${usd(x.usd)}` : `<span class="${x.pnlUsd >= 0 ? "up" : "down"}">${usd(x.pnlUsd, true)}<small style="color:inherit">${pct(x.pnlPct)}</small></span>`;
+    return `<div class="card fill ${kind}">
+      <div class="head">${av(sym)}<div class="sym"><div class="tag">${tag}</div>${esc(sym)}<small>${x.mode}</small>${rewardFlag(x.market)}</div><div class="gain">${head}</div>
       ${links(x.mint, x.market)}
-      <div class="reason"><b>${title}</b> · ${hhmm(x.at)}${!buy && x.fraction < 0.99 ? ` · sold ${Math.round(x.fraction * 100)}%` : ""}<br>${esc(x.reason)}</div></div>
+      <div class="reason"><b>${buy ? "Entry" : reasonTitle(x.reason)}</b> · ${hhmm(x.at)}${!buy && x.fraction < 0.99 ? ` · sold ${Math.round(x.fraction * 100)}% of the position` : ""}<br>${esc(x.reason)}</div></div>
     </div>`;
   }).join("");
 }
