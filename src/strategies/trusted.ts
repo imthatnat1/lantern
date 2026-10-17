@@ -29,9 +29,15 @@ export const trusted: Strategy = {
     // Pushed by the Helius webhook when it's working; poll as a fallback when nothing has arrived in the last hour.
     const pushed = pushedBuys(since, "trusted");
     const anyPushRecently = pushedBuys(ctx.now - 60 * 60_000).length > 0;
-    const buys = pushed.length || anyPushRecently
-      ? pushed.map(b => ({ wallet: b.wallet, mint: b.mint, signature: `${b.wallet}:${b.mint}:${b.at}`, at: b.at, solSpent: b.sol }))
-      : (await Promise.all(wallets.map(w => helius.recentBuys(w, since, C.heliusDailyCredits)))).flat();
+    let buys: { wallet: string; mint: string; signature: string; at: number; solSpent: number }[];
+    if (pushed.length || anyPushRecently) {
+      buys = pushed.map(b => ({ wallet: b.wallet, mint: b.mint, signature: `${b.wallet}:${b.mint}:${b.at}`, at: b.at, solSpent: b.sol }));
+    } else {
+      // Polling costs 100 credits per wallet per call, so it runs on its own slower clock.
+      if (ctx.now - kv.get("trusted:lastPollAt", 0) < C.heliusPollEveryMs) return out;
+      kv.set("trusted:lastPollAt", ctx.now);
+      buys = (await Promise.all(wallets.map(w => helius.recentBuys(w, ctx.now - C.heliusPollEveryMs - 60_000, C.heliusDailyCredits)))).flat();
+    }
 
     // Group by mint; count distinct wallets within the window.
     const byMint = new Map<string, Set<string>>();   // mint -> wallet addresses

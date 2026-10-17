@@ -167,7 +167,10 @@ export const config = {
       fadeVolX: 0.3,
     },
     trusted: {
-      pollEveryMs: 100_000,
+      /** How often pushed webhook events are processed. */
+      pollEveryMs: 60_000,
+      /** Fallback Helius polling cadence when the webhook isn't delivering. 3 wallets x 96 polls x 100 credits ~ 29k/day. */
+      heliusPollEveryMs: 15 * 60_000,
       maxOpen: 4,
       sizeUsd: 4, sizeUsdTwoWallets: 8, twoWalletWindowMs: 30 * 60_000,
       minScore: 50,
@@ -176,7 +179,7 @@ export const config = {
       minLiquidity: 10_000, minHolders: 30,
       minHoldersAtMcap: { mcap: 80_000, holders: 500 },
       backstopMs: 24 * 3_600_000,
-      heliusDailyCredits: 4_500,
+      heliusDailyCredits: 30_000,   // Helius free tier is ~1M credits/month
     },
   },
 } as const;

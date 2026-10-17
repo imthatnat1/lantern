@@ -26,7 +26,11 @@ export const dip: Strategy = {
     const mints = await allCandidates();
     const snaps = await dex.snapshots(mints.slice(0, 120));
     // Candles are the scarce resource (GeckoTerminal 30/min per IP). Check the most active coins first, cap per scan.
-    const ranked = [...snaps.values()].sort((a, b) => (b.volume1h || 0) - (a.volume1h || 0)).slice(0, 20);
+    // Only coins dip is allowed to trade compete for the slots (pinned first), so junk doesn't crowd out ZCAT/PURR/the creative pairs.
+    const ranked = [...snaps.values()]
+      .filter(s => isPinned(s.mint) || isStonkPair(s) || isQuality(s))
+      .sort((a, b) => (Number(isPinned(b.mint)) - Number(isPinned(a.mint))) || (b.volume1h || 0) - (a.volume1h || 0))
+      .slice(0, 20);
     for (const s of ranked) {
       try {
         const sig = await check(s, ctx);
@@ -38,7 +42,6 @@ export const dip: Strategy = {
 };
 
 async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
-  if (!isPinned(s.mint) && !isStonkPair(s) && !isQuality(s)) return null;
   const pre = await prefilter(s, "dip");
   if (!pre.ok) { logLook("dip", s, pre.why!, pre.holders); return null; }
   if (!s.pairAddress) return null;
