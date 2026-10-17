@@ -17,7 +17,7 @@ import { trusted } from "./strategies/trusted.js";
 import { dip } from "./strategies/dip.js";
 import { ride } from "./strategies/ride.js";
 import { startServer, snapshotEquity } from "./server.js";
-import { ensureWebhook, soldSince } from "./data/wallets.js";
+import { ensureWebhook, soldSince, rotateKols } from "./data/wallets.js";
 
 const strategies: Strategy[] = [ride, dip, ultra, bounce, pullback, trusted];
 const lastRun = new Map<string, number>();
@@ -141,7 +141,10 @@ async function main() {
   log.info({ capital: config.startingCapital, modes: strategies.map(s => s.name) }, "lantern starting");
   if (!kv.get("startedAt", 0)) kv.set("startedAt", Date.now());
   feed.start();
-  ensureWebhook(process.env.PUBLIC_URL ?? "http://134.199.147.128:8787").catch(e => log.warn({ err: String(e) }, "webhook setup failed"));
+  const publicUrl = process.env.PUBLIC_URL ?? "http://134.199.147.128:8787";
+  ensureWebhook(publicUrl).catch(e => log.warn({ err: String(e) }, "webhook setup failed"));
+  setTimeout(() => rotateKols(publicUrl).catch(e => log.warn({ err: String(e) }, "kol rotation failed")), 60_000);
+  setInterval(() => rotateKols(publicUrl).catch(e => log.warn({ err: String(e) }, "kol rotation failed")), 6 * 3_600_000);
   startServer(() => markPrices, () => ({
     feedDownS: Math.round(Math.min(feed.downForMs, 99_999_000) / 1000),
     dexStaleS: Math.round((Date.now() - Math.max(lastDexOk, dex.lastOkAt)) / 1000),

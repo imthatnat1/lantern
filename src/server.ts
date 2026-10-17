@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import { db, positions, kv } from "./db.js";
 import * as broker from "./engine/broker.js";
 import { config } from "./config.js";
-import { ingest, scorecard } from "./data/wallets.js";
+import { ingest, scorecard, currentKols } from "./data/wallets.js";
 import { log } from "./log.js";
 
 /**
@@ -137,6 +137,6 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     health: { ...health, rejectedTicks24h: rejected.n, rejected: rejectedRows, startedAt: kv.get("startedAt", now), uptimeMs: now - kv.get("startedAt", now) },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
     open, closed, fills, equity, byMode, looks, missed: [...missed, ...stoppedThenRan],
-    wallets: scorecard(7),
+    wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
   };
 }

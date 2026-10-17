@@ -65,7 +65,8 @@
 
   .card { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 10px 0; }
   .card .head { display: grid; grid-template-columns: 40px 1fr auto; gap: 2px 12px; align-items: center; }
-  .av { width: 40px; height: 40px; border-radius: 50%; background: var(--line-2); color: var(--ivory); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; letter-spacing: .02em; }
+  .av { width: 40px; height: 40px; border-radius: 50%; background: var(--line-2); color: var(--ivory); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; letter-spacing: .02em; overflow: hidden; }
+  .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .card .sym { font-weight: 600; font-size: 17px; line-height: 1.2; }
   .card .sym small { font-weight: 500; color: var(--night); background: var(--blossom); border-radius: 999px; padding: 1px 8px; margin-left: 8px; font-size: 11px; vertical-align: 2px; }
   .card .sym small.dim { background: var(--line-2); color: var(--ivory-dim); }
@@ -220,7 +221,7 @@ const dmy = t => new Date(t).toLocaleDateString("en-AU", { day: "numeric", month
 const hourB = () => Number(new Date().toLocaleString("en-AU", { hour: "numeric", hour12: false, timeZone: "Australia/Brisbane" }));
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const short = m => m ? m.slice(0, 4) + "…" + m.slice(-4) : "";
-const av = sym => `<div class="av">${esc(String(sym || "??").replace(/^\$/, "").slice(0, 2).toUpperCase())}</div>`;
+const av = (sym, m) => { const ini = esc(String(sym || "??").replace(/^\$/, "").slice(0, 2).toUpperCase()); const img = m && m.image && /^https:\/\//.test(m.image) ? m.image : null; return `<div class="av">${img ? `<img src="${esc(img)}" alt="" loading="lazy" onerror="this.parentNode.textContent='${ini}'">` : ini}</div>`; };
 const STANDARD_QUOTES = /^(SOL|WSOL|USDC|USDT|USD1|PYUSD)$/i;
 
 let S = null, modeFilter = "all", tradeFilter = "all", rangeH = 24;
@@ -327,7 +328,7 @@ function openRows(open) {
     const tps = p.takeProfits.map((t, i) => `${p.tpTaken.includes(i) ? "✓" : ""}${Math.round(t.sell * 100)}% at +${Math.round(t.gain * 100)}%`).join(", ");
     return `<div class="card">
       <div class="head">
-        ${av(p.symbol)}
+        ${av(p.symbol, m)}
         <div class="sym">${esc(p.symbol)}<small>${p.mode}${p.leg ? " · " + p.leg : ""}</small>${rewardFlag(m)}</div>
         <div class="gain ${p.gainPct >= 0 ? "up" : "down"}">${pct(p.gainPct)}<small>${usd(p.pnlUsd, true)}</small></div>
         ${links(p.mint, m)}
@@ -373,7 +374,7 @@ function hotRows(looks, open) {
     if (m.vol1h && m.vol24h) { const vx = (m.vol1h * 24) / m.vol24h; if (vx >= 1.5) labels.push(`vol ${vx.toFixed(1)}x`); }
     return `<div class="card">
       <div class="head">
-        ${av(l.symbol)}
+        ${av(l.symbol, l.market)}
         <div class="sym">${esc(l.symbol)}<small class="${held.has(l.mint) ? "" : "dim"}">${held.has(l.mint) ? "held" : l.mode}</small>${rewardFlag(m)}</div>
         <div class="gain"><span class="score">${l.score ? Math.round(l.score) : "·"}</span><small>${big(m.mcap)}</small></div>
         ${links(l.mint, m)}
@@ -400,7 +401,7 @@ function tradeRows(fills) {
     const tag = buy ? "Bought" : x.pnlUsd > 0 ? "Sold at a profit" : "Sold at a loss";
     const head = buy ? `${usd(x.usd)}` : `<span class="${x.pnlUsd >= 0 ? "up" : "down"}">${usd(x.pnlUsd, true)}<small style="color:inherit">${pct(x.pnlPct)}</small></span>`;
     return `<div class="card fill ${kind}">
-      <div class="head">${av(sym)}<div class="sym"><div class="tag">${tag}</div>${esc(sym)}<small>${x.mode}</small>${rewardFlag(x.market)}</div><div class="gain">${head}</div>
+      <div class="head">${av(sym, x.market)}<div class="sym"><div class="tag">${tag}</div>${esc(sym)}<small>${x.mode}</small>${rewardFlag(x.market)}</div><div class="gain">${head}</div>
       ${links(x.mint, x.market)}
       <div class="reason"><b>${buy ? "Entry" : reasonTitle(x.reason)}</b> · ${hhmm(x.at)}${!buy && x.fraction < 0.99 ? ` · sold ${Math.round(x.fraction * 100)}% of the position` : ""}<br>${esc(x.reason)}</div></div>
     </div>`;
@@ -417,10 +418,11 @@ function reasonTitle(r) {
 }
 
 function walletTable(ws) {
-  if (!ws || !ws.length) return `<div class="empty">No wallet buys recorded yet. The Helius feed fills this in as they trade.</div>`;
+  const bench = S && S.kols ? `<p class="dim" style="font-size:13px;margin:0 0 8px">Trusted: ${esc((S.trusted || []).join(", "))}. KOL bench (rotates daily on record): ${esc(S.kols.join(", "))}.</p>` : "";
+  if (!ws || !ws.length) return bench + `<div class="empty">No wallet buys recorded yet. The Helius feed fills this in as they trade.</div>`;
   const rows = ws.sort((a, b) => (b.up2x / (b.n || 1)) - (a.up2x / (a.n || 1))).map(w =>
     `<tr><td>${esc(w.name)} <span class="dim">${w.tier}</span></td><td>${w.n}</td><td class="${w.up2x ? "up" : ""}">${w.n ? Math.round(w.up2x / w.n * 100) + "%" : "—"}</td><td class="${w.down50 ? "down" : ""}">${w.n ? Math.round(w.down50 / w.n * 100) + "%" : "—"}</td><td class="${w.medianRet >= 0 ? "up" : "down"}">${pct(w.medianRet)}</td></tr>`).join("");
-  return `<table><tr><th>wallet</th><th>buys</th><th>hit 2x</th><th>halved</th><th>median now</th></tr>${rows}</table>`;
+  return bench + `<table><tr><th>wallet</th><th>buys</th><th>hit 2x</th><th>halved</th><th>median now</th></tr>${rows}</table>`;
 }
 
 function modeTable(byMode) {
@@ -446,7 +448,7 @@ function missedRows(missed) {
       : /copycat|slop|safety/i.test(m.reason) ? `A filter blocked it and it ran ${m.peakX.toFixed(1)}x. Pin it if it's a real community coin.`
       : `Passed on it (${esc(m.reason)}), then it ran ${m.peakX.toFixed(1)}x.`;
     return `<div class="card">
-      <div class="head">${av(m.symbol)}<div class="sym">${esc(m.symbol)}<small>${m.mode}</small></div><div class="gain up">+${Math.round((m.peakX - 1) * 100)}%<small>${why}</small></div>
+      <div class="head">${av(m.symbol, m.market)}<div class="sym">${esc(m.symbol)}<small>${m.mode}</small></div><div class="gain up">+${Math.round((m.peakX - 1) * 100)}%<small>${why}</small></div>
       ${links(m.mint, m.market)}</div>
       <div class="note">${big(m.mcap || (m.market && m.market.mcap))} when we looked → peak ${m.peakX.toFixed(1)}x · now ${m.nowX.toFixed(1)}x · ${ago(Date.now() - m.at)} ago<br>${esc(m.reason)}</div>
       <div class="lesson">${lesson}</div>
@@ -470,7 +472,7 @@ function looksRows(looks) {
   $("looksCount").textContent = looks.length ? `(${looks.length})` : "";
   if (!looks.length) return `<div class="empty">No looks logged yet.</div>`;
   return looks.map(l => `<div class="card fill ${l.rejected ? "loss" : ""}">
-    <div class="head">${av(l.symbol)}<div class="sym">${l.rejected ? '<div class="tag">Rejected</div>' : ""}${esc(l.symbol)}<small class="dim">${l.mode}</small></div><div class="gain"><small>${ago(Date.now() - l.at)} ago${l.market ? " · " + big(l.market.mcap) : ""}</small></div>
+    <div class="head">${av(l.symbol, l.market)}<div class="sym">${l.rejected ? '<div class="tag">Rejected</div>' : ""}${esc(l.symbol)}<small class="dim">${l.mode}</small></div><div class="gain"><small>${ago(Date.now() - l.at)} ago${l.market ? " · " + big(l.market.mcap) : ""}</small></div>
     <div class="reason">${esc(l.reason)}</div></div></div>`).join("");
 }
 

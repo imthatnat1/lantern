@@ -17,7 +17,7 @@ interface DsPair {
   txns?: { m5?: { buys: number; sells: number }; h1?: { buys: number; sells: number } };
   priceChange?: { m5?: number; h1?: number; h6?: number; h24?: number };
   pairCreatedAt?: number;
-  info?: { websites?: { url: string }[]; socials?: { type: string; url: string }[] };
+  info?: { imageUrl?: string; websites?: { url: string }[]; socials?: { type: string; url: string }[] };
 }
 
 /** Best pair for a mint: the one with the most liquidity. */
@@ -42,6 +42,7 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
     onCurve: p.dexId === "pumpfun",
     website: p.info?.websites?.[0]?.url,
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
+    imageUrl: p.info?.imageUrl,
     fetchedAt: Date.now(),
   };
   lastOkAt = Date.now();
@@ -83,6 +84,7 @@ async function snapshotFromPair(mint: string, p: DsPair): Promise<TokenSnapshot 
     createdAt: p.pairCreatedAt ?? Date.now(), onCurve: p.dexId === "pumpfun",
     website: p.info?.websites?.[0]?.url,
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
+    imageUrl: p.info?.imageUrl,
     fetchedAt: Date.now(),
   };
   lastOkAt = Date.now();

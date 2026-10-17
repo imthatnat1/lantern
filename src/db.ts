@@ -178,6 +178,7 @@ export const cooldowns = {
 
 // Migration for databases created before the setup column existed.
 try { db.exec("ALTER TABLE signals_log ADD COLUMN setup TEXT"); } catch { /* already there */ }
+try { db.exec("ALTER TABLE market ADD COLUMN image TEXT"); } catch { /* already there */ }
 
 export interface Setup {
   /** What has to happen, in plain words. */
@@ -202,18 +203,18 @@ export const audit = {
 
 export const market = {
   upsert(s: import("./types.js").TokenSnapshot, holders?: number, labels?: string[]) {
-    db.prepare(`INSERT INTO market(mint,symbol,name,pair,quote,price,mcap,liquidity,vol24h,vol1h,vol5m,buys5m,sells5m,ch5m,ch1h,ch6h,ch24h,created_at,holders,on_curve,website,twitter,labels,updated_at)
-      VALUES(@mint,@symbol,@name,@pair,@quote,@price,@mcap,@liquidity,@vol24h,@vol1h,@vol5m,@buys5m,@sells5m,@ch5m,@ch1h,@ch6h,@ch24h,@created_at,@holders,@on_curve,@website,@twitter,@labels,@updated_at)
+    db.prepare(`INSERT INTO market(mint,symbol,name,pair,quote,price,mcap,liquidity,vol24h,vol1h,vol5m,buys5m,sells5m,ch5m,ch1h,ch6h,ch24h,created_at,holders,on_curve,website,twitter,labels,updated_at,image)
+      VALUES(@mint,@symbol,@name,@pair,@quote,@price,@mcap,@liquidity,@vol24h,@vol1h,@vol5m,@buys5m,@sells5m,@ch5m,@ch1h,@ch6h,@ch24h,@created_at,@holders,@on_curve,@website,@twitter,@labels,@updated_at,@image)
       ON CONFLICT(mint) DO UPDATE SET symbol=excluded.symbol,name=excluded.name,pair=excluded.pair,quote=excluded.quote,price=excluded.price,mcap=excluded.mcap,liquidity=excluded.liquidity,
         vol24h=excluded.vol24h,vol1h=excluded.vol1h,vol5m=excluded.vol5m,buys5m=excluded.buys5m,sells5m=excluded.sells5m,ch5m=excluded.ch5m,ch1h=excluded.ch1h,ch6h=excluded.ch6h,ch24h=excluded.ch24h,
         created_at=excluded.created_at,holders=COALESCE(excluded.holders,market.holders),on_curve=excluded.on_curve,website=excluded.website,twitter=excluded.twitter,
-        labels=CASE WHEN excluded.labels='[]' THEN market.labels ELSE excluded.labels END,updated_at=excluded.updated_at`)
+        labels=CASE WHEN excluded.labels='[]' THEN market.labels ELSE excluded.labels END,updated_at=excluded.updated_at,image=COALESCE(excluded.image,market.image)`)
       .run({
         mint: s.mint, symbol: s.symbol, name: s.name, pair: s.pairAddress ?? null, quote: s.quoteSymbol ?? null,
         price: s.priceUsd, mcap: s.mcapUsd, liquidity: s.liquidityUsd, vol24h: s.volume24h, vol1h: s.volume1h, vol5m: s.volume5m,
         buys5m: s.buys5m, sells5m: s.sells5m, ch5m: s.change5m, ch1h: s.change1h, ch6h: s.change6h, ch24h: s.change24h,
         created_at: s.createdAt, holders: holders ?? s.holders ?? null, on_curve: s.onCurve ? 1 : 0, website: s.website ?? null, twitter: s.twitter ?? null,
-        labels: JSON.stringify(labels ?? []), updated_at: Date.now(),
+        labels: JSON.stringify(labels ?? []), updated_at: Date.now(), image: s.imageUrl ?? null,
       });
   },
 };

@@ -33,6 +33,7 @@ export interface TokenSnapshot {
   onCurve: boolean;
   website?: string;
   twitter?: string;
+  imageUrl?: string;
   fetchedAt: number;
 }
 
