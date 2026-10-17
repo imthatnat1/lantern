@@ -64,6 +64,8 @@ export const config = {
     sanityAgreePct: 0.15,
     /** Pools under this get close-based stops only and half size. */
     thinPoolUsd: 50_000,
+    /** Size each entry so that selling the whole position moves the pool by at most this much. */
+    maxExitImpactPct: 0.02,
   },
 
   allocation: <Record<Mode, number>>{

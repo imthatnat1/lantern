@@ -5,7 +5,7 @@ import * as rug from "../data/rugcheck.js";
 import * as jup from "../data/jupiter.js";
 import { config } from "../config.js";
 import { isCopycat, isSlop } from "../engine/filters.js";
-import { cooldowns, audit, market } from "../db.js";
+import { cooldowns, audit, market, recorder } from "../db.js";
 
 export interface Context {
   now: number;
@@ -39,9 +39,30 @@ export async function gate(s: TokenSnapshot, mode: Signal["mode"], sizeUsd: numb
   return { ok: true, holders: safe.holders, top10: safe.top10Pct };
 }
 
+/** Holder growth over the last 10 minutes as a fraction, or null if unknown. */
+export function holderVelocity(mint: string): number | null {
+  try { return recorder.holderVelocity(mint, 10 * 60_000); } catch { return null; }
+}
+
+/** Score points for holder growth: +20 at >=25%/10m, +10 at >=10%, -10 if shrinking >5%. */
+export function holderScore(mint: string): number {
+  const v = holderVelocity(mint);
+  if (v == null) return 0;
+  if (v >= 0.25) return 20;
+  if (v >= 0.10) return 10;
+  if (v <= -0.05) return -10;
+  return 0;
+}
+
+function velocityLabel(mint: string): string[] {
+  const v = holderVelocity(mint);
+  if (v == null || Math.abs(v) < 0.03) return [];
+  return [`holders ${v > 0 ? "+" : ""}${(v * 100).toFixed(0)}% / 10m`];
+}
+
 export function logSignal(sig: Signal, taken: boolean, why: string) {
   audit.signal(sig.mode, sig.mint, sig.symbol, sig.score, taken, why, sig.snapshot.priceUsd, sig.snapshot.mcapUsd, sig.snapshot.liquidityUsd);
-  const labels: string[] = [];
+  const labels: string[] = [...velocityLabel(sig.mint)];
   if (sig.meta?.walletCount) labels.push(`${sig.meta.walletCount} trusted bought`);
   market.upsert(sig.snapshot, sig.meta?.holders as number | undefined, labels);
 }
@@ -53,7 +74,7 @@ export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, hol
   if (Date.now() - (lastLook.get(k) ?? 0) < 60 * 60_000) return;   // one look per coin per mode per hour
   lastLook.set(k, Date.now());
   audit.signal(mode, s.mint, s.symbol, 0, false, why, s.priceUsd, s.mcapUsd, s.liquidityUsd);
-  market.upsert(s, holders);
+  market.upsert(s, holders, velocityLabel(s.mint));
 }
 
 export async function candles5and15(pair: string): Promise<{ c5: Candle[]; c15: Candle[] }> {

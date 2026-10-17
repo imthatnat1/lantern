@@ -4,7 +4,7 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
 import { allCandidates, isPinned, isQuality, isStonkPair } from "../data/universe.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, logSignal, reclaim, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.dip;
 
@@ -63,6 +63,7 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   if (isPinned(s.mint)) score += 10;
   if (isStonkPair(s)) score += 5;
   if (s.liquidityUsd >= 500_000) score += 5;
+  score += holderScore(s.mint);
   if (score < C.minScore) { logLook("dip", s, `score ${score.toFixed(0)} below ${C.minScore}`); return null; }
 
   const sig: Signal = {

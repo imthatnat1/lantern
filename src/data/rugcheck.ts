@@ -23,7 +23,7 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
   let rep: RcReport;
   try {
     rep = await getJson<RcReport>(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`, {
-      ttlMs: 10 * 60_000,
+      ttlMs: 5 * 60_000,
       headers: config.keys.rugcheck ? { authorization: `Bearer ${config.keys.rugcheck}` } : {},
     });
   } catch (e) {

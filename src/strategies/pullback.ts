@@ -5,7 +5,7 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, logSignal, reclaim, type Context, type Strategy } from "./base.js";
+import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.pullback;
 
@@ -58,7 +58,9 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const g = await gate(s, "pullback", C.sizeUsd);
   if ((g.holders ?? 0) < C.minHolders) return null;
   const a15 = atr(c15);
-  const score = 60 + Math.min(20, retrace * 50) + (buySellRatio(s) > 1.3 ? 10 : 0) + (s.liquidityUsd > 50_000 ? 10 : 0);
+  const hv = holderVelocity(s.mint);
+  if (hv != null && hv <= -0.10) { logLook("pullback", s, `holders shrinking ${(hv * 100).toFixed(0)}% in 10m`); return null; }
+  const score = 60 + Math.min(20, retrace * 50) + (buySellRatio(s) > 1.3 ? 10 : 0) + (s.liquidityUsd > 50_000 ? 10 : 0) + holderScore(s.mint);
 
   const sig: Signal = {
     mode: "pullback", mint: s.mint, symbol: s.symbol, sizeUsd: C.sizeUsd, score,

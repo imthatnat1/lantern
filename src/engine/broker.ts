@@ -67,6 +67,9 @@ export function openPosition(sig: Signal, solPrice: number, now = Date.now()): P
   const snap = sig.snapshot;
   let size = sig.sizeUsd;
   if (snap.liquidityUsd < config.risk.thinPoolUsd) size = size / 2;   // thin pool: half size
+  // Size by exit, not by dollars: a sell of `size` into a pool moves price by about size / (liq/2).
+  // Cap so that estimated exit impact stays under maxExitImpactPct. Floor at $2 so tiny pools get a token position, not nothing.
+  if (snap.liquidityUsd > 0) size = Math.max(2, Math.min(size, snap.liquidityUsd * config.risk.maxExitImpactPct / 2));
   const { effPrice, feesUsd } = fillModel("buy", snap.priceUsd, size, snap.liquidityUsd, snap.onCurve, solPrice);
   const qty = (size - feesUsd) / effPrice;
   const atr15 = sig.meta?.atr15 as number ?? 0;

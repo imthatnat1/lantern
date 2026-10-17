@@ -3,7 +3,7 @@ import { log } from "../log.js";
 import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, logSignal, reclaim, type Context, type Strategy } from "./base.js";
+import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.bounce;
 
@@ -49,7 +49,9 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   const g = await gate(s, "bounce", C.sizeUsd);
   if ((g.holders ?? 0) < C.minHolders) return null;
   const a15 = atr(c15);
-  const score = 55 + Math.min(25, dd * 40) + (buySellRatio(s) > 1.5 ? 10 : 0) + ((g.holders ?? 0) > 200 ? 10 : 0);
+  const hv = holderVelocity(s.mint);
+  if (hv != null && hv <= -0.10) { logLook("bounce", s, `holders shrinking ${(hv * 100).toFixed(0)}% in 10m`); return null; }
+  const score = 55 + Math.min(25, dd * 40) + (buySellRatio(s) > 1.5 ? 10 : 0) + ((g.holders ?? 0) > 200 ? 10 : 0) + holderScore(s.mint);
 
   const sig: Signal = {
     mode: "bounce", mint: s.mint, symbol: s.symbol, sizeUsd: C.sizeUsd, score,

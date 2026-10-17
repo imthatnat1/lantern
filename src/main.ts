@@ -5,6 +5,7 @@ import { PumpPortal } from "./data/pumpportal.js";
 import * as dex from "./data/dexscreener.js";
 import * as gecko from "./data/gecko.js";
 import * as jup from "./data/jupiter.js";
+import * as rug from "./data/rugcheck.js";
 import { readPrice } from "./engine/price.js";
 import { evaluate } from "./engine/exits.js";
 import * as broker from "./engine/broker.js";
@@ -80,6 +81,21 @@ async function missedRunnersLoop() {
   }
 }
 
+/**
+ * Holder velocity: re-check holder counts for coins on the radar every 5 minutes, so strategies can
+ * see "holders +18% in 10m". Volume can be faked by one wallet; a rising holder count is harder.
+ */
+let lastHoldersAt = 0;
+async function holdersLoop() {
+  const now = Date.now();
+  if (now - lastHoldersAt < 5 * 60_000) return;
+  lastHoldersAt = now;
+  const rows = db.prepare(`SELECT DISTINCT mint, on_curve FROM market WHERE updated_at > ? ORDER BY updated_at DESC LIMIT 25`).all(now - 30 * 60_000) as { mint: string; on_curve: number }[];
+  for (const r of rows) {
+    try { await rug.safety(r.mint, !!r.on_curve); } catch { /* recorded inside safety() when it works */ }
+  }
+}
+
 async function scanLoop() {
   const now = Date.now();
   if (kv.get("paused", false)) return;
@@ -128,6 +144,7 @@ async function main() {
     try { await exitLoop(); } catch (e) { log.error({ err: String(e) }, "exitLoop crashed"); }
     try { await scanLoop(); } catch (e) { log.error({ err: String(e) }, "scanLoop crashed"); }
     try { await missedRunnersLoop(); } catch (e) { log.warn({ err: String(e) }, "missedRunners failed"); }
+    try { await holdersLoop(); } catch (e) { log.warn({ err: String(e) }, "holdersLoop failed"); }
     setTimeout(tick, 5000);
   };
   tick();
