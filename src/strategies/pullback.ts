@@ -25,7 +25,9 @@ export const pullback: Strategy = {
     const out: Signal[] = [];
     const mints = await allCandidates();
     const snaps = await dex.snapshots(mints.slice(0, 90));
-    for (const s of snaps.values()) {
+    // Candles are the scarce resource (GeckoTerminal 30/min per IP). Check the most active coins first, cap per scan.
+    const ranked = [...snaps.values()].sort((a, b) => (b.volume1h || 0) - (a.volume1h || 0)).slice(0, 15);
+    for (const s of ranked) {
       try {
         const sig = await check(s, ctx);
         if (sig) out.push(sig);

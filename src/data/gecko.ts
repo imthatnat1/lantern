@@ -10,7 +10,7 @@ type Tf = "minute" | "hour";
 export async function candles(pairAddress: string, agg: 1 | 5 | 15, limit = 100): Promise<Candle[]> {
   const tf: Tf = "minute";
   const url = `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddress}/ohlcv/${tf}?aggregate=${agg}&limit=${limit}&currency=usd`;
-  const r = await getJson<{ data: { attributes: { ohlcv_list: number[][] } } }>(url, { ttlMs: agg * 60_000 * 0.6 });
+  const r = await getJson<{ data: { attributes: { ohlcv_list: number[][] } } }>(url, { ttlMs: agg * 60_000 * 0.8 });
   const list = r.data?.attributes?.ohlcv_list ?? [];
   return list
     .map(([t, o, h, l, c, v]) => ({ t: t * 1000, o, h, l, c, v }))

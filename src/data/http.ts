@@ -16,12 +16,15 @@ function take(host: string, ratePerSec: number, cap: number): number {
 
 const limits: Record<string, { rate: number; cap: number }> = {
   "api.dexscreener.com": { rate: 4, cap: 8 },
-  "api.geckoterminal.com": { rate: 0.4, cap: 2 },   // ~25/min, under their 30/min
+  "api.geckoterminal.com": { rate: 0.25, cap: 1 },  // 15/min. Their cap is 30/min per IP and v1 shares the IP.
   "api.rugcheck.xyz": { rate: 1, cap: 3 },
   "lite-api.jup.ag": { rate: 3, cap: 6 },
 };
 
 const cache = new Map<string, { at: number; v: unknown }>();
+/** After a 429, stop calling that host for a while instead of burning the quota on retries. */
+const coolUntil = new Map<string, number>();
+export function hostCooling(host: string): boolean { return (coolUntil.get(host) ?? 0) > Date.now(); }
 
 export async function getJson<T>(url: string, opts: { ttlMs?: number; headers?: Record<string, string>; timeoutMs?: number } = {}): Promise<T> {
   const ttl = opts.ttlMs ?? 0;
@@ -30,6 +33,7 @@ export async function getJson<T>(url: string, opts: { ttlMs?: number; headers?: 
     if (c && Date.now() - c.at < ttl) return c.v as T;
   }
   const host = new URL(url).host;
+  if (hostCooling(host)) throw new Error(`cooling ${host}`);
   const lim = limits[host];
   if (lim) {
     const wait = take(host, lim.rate, lim.cap);
@@ -40,7 +44,9 @@ export async function getJson<T>(url: string, opts: { ttlMs?: number; headers?: 
   try {
     const res = await fetch(url, { headers: { accept: "application/json", ...(opts.headers ?? {}) }, signal: ctrl.signal });
     if (res.status === 429) {
-      log.warn({ host }, "rate limited");
+      const ra = Number(res.headers.get("retry-after")) || 30;
+      coolUntil.set(host, Date.now() + ra * 1000);
+      log.warn({ host, pauseS: ra }, "rate limited, pausing this host");
       throw new Error(`429 ${host}`);
     }
     if (!res.ok) throw new Error(`${res.status} ${url}`);
