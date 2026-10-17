@@ -12,7 +12,8 @@ Paper-trading bot for Solana memecoins. It runs while you sleep. Built 17 Oct 20
 | KURP (+2333%), Irene, OPTIMA skipped as "already 3x" | `strategies/pullback.ts` waits for the first retrace that holds and gets bought back |
 | RUGRIOT bought because a trusted wallet did | Trusted buys are candidates. Our own score must be >= 50, mcap <= $150k, no buying into a 40% 5m pump, slop filter |
 | PumpPortal dropped for 4h, no reconnect | Auto-reconnect with backoff and an idle watchdog. Bot keeps trading on DexScreener while it's down |
-| 14 modes, 71 trades in 19h | 5 modes: dip, ultra, bounce, pullback, trusted |
+| 14 modes, 71 trades in 19h | 6 modes: ride, dip, ultra, bounce, pullback, trusted |
+| Runner family: six variants, 4% tick stops, $5 positions, lost on every coin | `strategies/ride.ts`: pick 1-2 proven leaders, hold a core with a wide trail and farm the swings with a sleeve |
 | Core and Swing found good coins (ZCAT, PURR, Stonk.fun pairs) and bled them on a 15% tick stop | `strategies/dip.ts` keeps that universe (pinned + Stonk.fun ZEC/HYPE/xStock pairs + established trenders) with close-based stops |
 
 Kept from v1: fee and slippage model, 50% profit vault, daily loss stop, drawdown halt, capital-at-risk cap, copycat filter, RugCheck safety gate, Jupiter test-sell.

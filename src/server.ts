@@ -71,7 +71,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       closeStop: p.plan.closeStopPrice, stopPct: p.plan.closeStopPrice / p.entryPrice - 1,
       hardFloorPct: -p.plan.hardFloorPct, trailArmed: (p.peakClose / p.entryPrice - 1) >= p.plan.trailAfterGain,
       peakPct: p.peakPrice / p.entryPrice - 1, tpTaken: p.tpTaken, takeProfits: p.plan.takeProfits,
-      reason: p.meta.reason, score: p.meta.score, mcapAtEntry: (p.meta.mcapAtEntry as number) ?? null,
+      reason: p.meta.reason, score: p.meta.score, mcapAtEntry: (p.meta.mcapAtEntry as number) ?? null, leg: (p.meta.leg as string) ?? null,
       market: mkt(p.mint),
     };
   });

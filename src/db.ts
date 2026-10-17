@@ -254,3 +254,20 @@ export const creators = {
     return !!db.prepare("SELECT 1 FROM rugged_creators WHERE creator=?").get(creator);
   },
 };
+
+export const ride = {
+  /** Sleeve trades closed today on a mint, and when/how the last one ended. */
+  sleeveHistory(mint: string, dayStart: number) {
+    const n = (db.prepare("SELECT count(*) AS n FROM positions WHERE mode='ride' AND mint=? AND json_extract(meta,'$.leg')='sleeve' AND entry_at>=?").get(mint, dayStart) as any).n as number;
+    const last = db.prepare("SELECT closed_at, realized_usd FROM positions WHERE mode='ride' AND mint=? AND json_extract(meta,'$.leg')='sleeve' AND status='closed' ORDER BY closed_at DESC LIMIT 1").get(mint) as { closed_at: number; realized_usd: number } | undefined;
+    return { tradesToday: n, lastClosedAt: last?.closed_at, lastWon: last ? last.realized_usd > 0 : undefined };
+  },
+  hasCore(mint: string): boolean {
+    return !!db.prepare("SELECT 1 FROM positions WHERE mode='ride' AND mint=? AND status='open' AND json_extract(meta,'$.leg')='core'").get(mint);
+  },
+  hasSleeve(mint: string): boolean {
+    return !!db.prepare("SELECT 1 FROM positions WHERE mode='ride' AND mint=? AND status='open' AND json_extract(meta,'$.leg')='sleeve'").get(mint);
+  },
+  leaders(): string[] { return kv.get<string[]>("ride:leaders", []); },
+  setLeaders(m: string[]) { kv.set("ride:leaders", m); },
+};

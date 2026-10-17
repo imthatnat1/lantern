@@ -15,9 +15,10 @@ import { bounce } from "./strategies/bounce.js";
 import { pullback } from "./strategies/pullback.js";
 import { trusted } from "./strategies/trusted.js";
 import { dip } from "./strategies/dip.js";
+import { ride } from "./strategies/ride.js";
 import { startServer, snapshotEquity } from "./server.js";
 
-const strategies: Strategy[] = [dip, ultra, bounce, pullback, trusted];
+const strategies: Strategy[] = [ride, dip, ultra, bounce, pullback, trusted];
 const lastRun = new Map<string, number>();
 const migrations = new Map<string, number>(kv.get<[string, number][]>("migrations", []));
 const markPrices = new Map<string, number>();

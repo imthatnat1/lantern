@@ -284,7 +284,7 @@ function stats(s) {
 }
 
 function chips(s) {
-  const modes = ["dip", "ultra", "bounce", "pullback", "trusted"];
+  const modes = ["ride", "dip", "ultra", "bounce", "pullback", "trusted"];
   const counts = { all: s.open.length };
   for (const m of modes) counts[m] = s.open.filter(o => o.mode === m).length;
   $("chips").innerHTML = ["all", ...modes].map(m => `<button data-m="${m}" class="${modeFilter === m ? "on" : ""}">${m === "all" ? "All" : m}<span>${counts[m] || ""}</span></button>`).join("");
@@ -324,7 +324,7 @@ function openRows(open) {
     return `<div class="card">
       <div class="head">
         ${av(p.symbol)}
-        <div class="sym">${esc(p.symbol)}<small>${p.mode}</small>${rewardFlag(m)}</div>
+        <div class="sym">${esc(p.symbol)}<small>${p.mode}${p.leg ? " · " + p.leg : ""}</small>${rewardFlag(m)}</div>
         <div class="gain ${p.gainPct >= 0 ? "up" : "down"}">${pct(p.gainPct)}<small>${usd(p.pnlUsd, true)}</small></div>
         ${links(p.mint, m)}
       </div>

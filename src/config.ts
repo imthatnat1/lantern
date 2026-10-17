@@ -69,11 +69,12 @@ export const config = {
   },
 
   allocation: <Record<Mode, number>>{
-    ultra: 0.25,
+    ultra: 0.20,
     bounce: 0.15,
     pullback: 0.20,
     trusted: 0.10,
-    dip: 0.30,
+    dip: 0.20,
+    ride: 0.15,
   },
 
   minExitLiquidityUsd: <Record<Mode, number>>{
@@ -82,6 +83,7 @@ export const config = {
     pullback: 8_000,
     trusted: 8_000,
     dip: 20_000,
+    ride: 50_000,
   },
 
   modes: {
@@ -140,6 +142,20 @@ export const config = {
       /** Skip if the 24h move is still > +150% (overheated). */
       overheated24h: 150,
       minScore: 55,
+    },
+    ride: {
+      scanEveryMs: 3 * 60_000,
+      maxLeaders: 2,
+      /** Leader qualification. */
+      minVol24h: 2_000_000, minLiquidity: 100_000,
+      /** Core position: wide trail, meant to sit through the whole run. */
+      coreSizeUsd: 8, coreTrailPct: 0.35, coreTrailAfterGain: 0.25, coreMaxLoss: 0.30,
+      /** Trading sleeve: works the swings around the core. */
+      sleeveSizeUsd: 8, sleeveTrailPct: 0.12, sleeveMaxLoss: 0.15,
+      pullbackMin: 0.08, pullbackMax: 0.35,
+      maxSleeveTradesPerDay: 6, reenterAfterWinMs: 30 * 60_000, reenterAfterLossMs: 2 * 3_600_000,
+      /** Drop the leader when 1h volume falls under this fraction of its average, or it prints a 1h lower low. */
+      fadeVolX: 0.3,
     },
     trusted: {
       pollEveryMs: 100_000,

@@ -57,7 +57,8 @@ export function canOpen(sig: Signal, markPrices: Map<string, number>, feedHealth
   const modeCap = eq * config.allocation[sig.mode];
   const modeOpen = positions.openByMode(sig.mode).reduce((s, p) => s + p.remainingQty * (markPrices.get(p.mint) ?? p.lastGoodPrice), 0);
   if (modeOpen + sig.sizeUsd > modeCap) return { ok: false, why: `${sig.mode} allocation full` };
-  if (positions.isHeld(sig.mint)) return { ok: false, why: "already held" };
+  // ride holds a core and a sleeve on the same coin on purpose; everything else is one position per coin.
+  if (sig.mode !== "ride" && positions.isHeld(sig.mint)) return { ok: false, why: "already held" };
   if (sig.sizeUsd > a.cash) return { ok: false, why: "no cash" };
   if (sig.snapshot.liquidityUsd < config.minExitLiquidityUsd[sig.mode]) return { ok: false, why: "below min exit liquidity" };
   return { ok: true };

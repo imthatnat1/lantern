@@ -54,6 +54,7 @@ function basePlan(mode: Mode, entry: number, pair: string | null, at: number): E
     case "bounce": return { hardFloorPct: 0.45, closeStopPrice: structuralStop(entry, lo6, atr, 0.5, 0.25), takeProfits: [{ gain: 0.45, sell: 0.5 }], trailPct: 0.2, trailAfterGain: 0.3, maxHoldMs: 12 * 3_600_000 };
     case "trusted": return { hardFloorPct: 0.45, closeStopPrice: structuralStop(entry, lo6, atr, 1, 0.3), takeProfits: [{ gain: 1, sell: 0.5 }], trailPct: 0.3, trailAfterGain: 0.6, maxHoldMs: 24 * 3_600_000 };
     case "dip": return { hardFloorPct: 0.4, closeStopPrice: structuralStop(entry, lo24, atr, 1, 0.25), takeProfits: [{ gain: 0.4, sell: 0.33 }], trailPct: 0.2, trailAfterGain: 0.2, trailLadder: [{ peakGain: 0.6, trailPct: 0.25 }], maxHoldMs: 0 };
+    case "ride": return { hardFloorPct: 0.3, closeStopPrice: structuralStop(entry, lo6, atr, 0.5, 0.15), takeProfits: [{ gain: 0.15, sell: 0.5 }], trailPct: 0.12, trailAfterGain: 0.06, maxHoldMs: 12 * 3_600_000 };
   }
 }
 
