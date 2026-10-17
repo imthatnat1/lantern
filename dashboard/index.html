@@ -493,11 +493,11 @@ async function load() {
   try {
     const r = await fetch("/api/state", { cache: "no-store" });
     if (r.status === 401) { $("login").style.display = "flex"; return; }
-    const s = await r.json();
+    let s; try { s = await r.json(); } catch { return fail("The dashboard server returned an error (HTTP " + r.status + ")."); }
     if (!r.ok) return fail(s.error || "Unknown error");
     $("login").style.display = "none";
     render(s);
-  } catch (e) { fail("Network error. Pull down to retry."); }
+  } catch (e) { fail("Network error. Pull down to retry. (" + String(e).slice(0, 80) + ")"); }
 }
 
 $("loginForm").onsubmit = async e => {
