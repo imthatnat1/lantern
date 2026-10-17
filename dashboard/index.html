@@ -209,7 +209,7 @@ const pct = n => (n == null || isNaN(n)) ? "—" : (n > 0 ? "+" : n < 0 ? "−" 
 const big = n => n == null ? "—" : n >= 1e6 ? "$" + (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? "$" + (n / 1e3).toFixed(n >= 1e5 ? 0 : 1) + "k" : "$" + n.toFixed(0);
 const px = n => n == null ? "—" : n >= 1 ? n.toFixed(2) : n.toPrecision(3);
 const num = n => n == null ? "—" : n.toLocaleString("en-AU");
-const ago = ms => { if (ms == null || ms < 0) return "—"; const m = Math.round(ms / 60000); if (m < 60) return m + "m"; const h = Math.floor(m / 60); return h < 48 ? h + "h" + (m % 60 ? " " + (m % 60) + "m" : "") : (h / 24).toFixed(1) + "d"; };
+const ago = ms => { if (ms == null) return "—"; ms = Math.max(0, ms); const m = Math.round(ms / 60000); if (m < 60) return m + "m"; const h = Math.floor(m / 60); return h < 48 ? h + "h" + (m % 60 ? " " + (m % 60) + "m" : "") : (h / 24).toFixed(1) + "d"; };
 const age = created => created ? ago(Date.now() - created) : "—";
 const hhmm = t => new Date(t).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit", timeZone: "Australia/Brisbane" });
 const dmy = t => new Date(t).toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "Australia/Brisbane" });
