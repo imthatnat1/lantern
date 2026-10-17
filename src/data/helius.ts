@@ -30,7 +30,7 @@ export async function recentBuys(wallet: string, sinceMs: number, budget: number
   spend(CREDITS_PER_CALL);
   const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${config.keys.helius}&limit=10&type=SWAP`;
   let txs: HeliusTx[];
-  try { txs = await getJson<HeliusTx[]>(url); } catch (e) { log.warn({ wallet, err: String(e) }, "helius fetch failed"); return []; }
+  try { txs = await getJson<HeliusTx[]>(url); kv.set("helius:lastOkAt", Date.now()); } catch (e) { kv.set("helius:lastErr", String(e).slice(0, 40)); log.warn({ wallet, err: String(e) }, "helius fetch failed"); return []; }
 
   const out: WalletBuy[] = [];
   for (const tx of txs) {
@@ -51,7 +51,7 @@ export async function recentSells(wallet: string, mint: string, sinceMs: number,
   spend(CREDITS_PER_CALL);
   const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${config.keys.helius}&limit=10&type=SWAP`;
   let txs: HeliusTx[];
-  try { txs = await getJson<HeliusTx[]>(url); } catch { return 0; }
+  try { txs = await getJson<HeliusTx[]>(url); kv.set("helius:lastOkAt", Date.now()); } catch { return 0; }
   let sold = 0;
   for (const tx of txs) {
     if (tx.timestamp * 1000 < sinceMs) continue;

@@ -140,6 +140,7 @@ async function heartbeat() {
 async function main() {
   log.info({ capital: config.startingCapital, modes: strategies.map(s => s.name) }, "lantern starting");
   if (!kv.get("startedAt", 0)) kv.set("startedAt", Date.now());
+  try { kv.set("build", (await import("node:child_process")).execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim()); } catch { /* not a git checkout */ }
   feed.start();
   const publicUrl = process.env.PUBLIC_URL ?? "http://134.199.147.128:8787";
   ensureWebhook(publicUrl).catch(e => log.warn({ err: String(e) }, "webhook setup failed"));
