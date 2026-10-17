@@ -14,6 +14,7 @@ export interface TokenSnapshot {
   symbol: string;
   name: string;
   pairAddress?: string;
+  quoteSymbol?: string;
   priceUsd: number;
   liquidityUsd: number;
   mcapUsd: number;

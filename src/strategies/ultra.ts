@@ -5,7 +5,7 @@ import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import { account } from "../engine/broker.js";
-import { buySellRatio, candles5and15, dex, gate, logSignal, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, logLook, logSignal, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.ultra;
 
@@ -53,10 +53,10 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const { c5, c15 } = await candles5and15(s.pairAddress);
   if (c5.length < 30) return null;
   const dumpLow = lowestLow(c5, ctx.now - 12 * 3_600_000);
-  if (s.priceUsd < dumpLow * C.recoverFromLowX) return null;
+  if (s.priceUsd < dumpLow * C.recoverFromLowX) { logLook("ultra", s, `only ${(s.priceUsd / dumpLow).toFixed(2)}x off the dump low, need 1.8x`); return null; }
   const hl = higherLows(c5.slice(-40), C.higherLows, C.lowTolerance);
-  if (!hl.ok) return null;
-  if (hl.lows.at(-1)! < dumpLow * C.lastLowOverDumpX) return null;
+  if (!hl.ok) { logLook("ultra", s, `recovered, but only ${hl.lows.length} higher lows`); return null; }
+  if (hl.lows.at(-1)! < dumpLow * C.lastLowOverDumpX) { logLook("ultra", s, "last low too close to the dump low"); return null; }
 
   const range = c5.slice(-24, -1);
   const rangeTop = Math.max(...range.map(k => k.h));
@@ -65,12 +65,12 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const k = c5.at(-2)!;
   const avgV = range.reduce((a, b) => a + b.v, 0) / range.length;
   const volX = avgV ? k.v / avgV : 0;
-  if (!(k.c > rangeTop && volX >= C.breakoutVolX)) return null;
+  if (!(k.c > rangeTop && volX >= C.breakoutVolX)) { logLook("ultra", s, `structure forming, waiting for a 1.3x volume close above ${rangeTop.toPrecision(3)}`); return null; }
   const bs = buySellRatio(s);
-  if (bs < C.buySellMin || bs > C.buySellMax) return null;
+  if (bs < C.buySellMin || bs > C.buySellMax) { logLook("ultra", s, `buy/sell ratio ${bs.toFixed(1)} outside 1-3`); return null; }
   const above = s.priceUsd / rangeTop - 1;
   const maxAbove = volX >= C.hotVolX && s.liquidityUsd >= C.hotMinLiq ? C.maxAboveRangeTopHot : C.maxAboveRangeTop;
-  if (above > maxAbove) return null;
+  if (above > maxAbove) { logLook("ultra", s, `breakout already ${(above * 100).toFixed(0)}% above the range top, chasing`); return null; }
 
   const eq = account().cash; // sizing on cash is conservative; fine for paper
   const size = Math.min(C.maxSizeUsd, eq * C.sizePctEquity);

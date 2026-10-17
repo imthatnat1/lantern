@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { log } from "./log.js";
-import { positions, cooldowns, kv } from "./db.js";
+import { positions, cooldowns, kv, market, db } from "./db.js";
 import { PumpPortal } from "./data/pumpportal.js";
 import * as dex from "./data/dexscreener.js";
 import * as gecko from "./data/gecko.js";
@@ -40,6 +40,7 @@ async function exitLoop() {
       lastDexOk = now;
       if (read.confirmed) markPrices.set(p.mint, read.price);
       const snap = await dex.snapshot(p.mint);
+      if (snap) market.upsert(snap, p.meta.holders as number | undefined);
       let c15: Awaited<ReturnType<typeof gecko.candles>> = [];
       if (snap?.pairAddress) { try { c15 = await gecko.candles(snap.pairAddress, 15, 10); } catch { /* rate limited, judge on ticks only */ } }
       const lastClosed = c15.length >= 2 ? c15.at(-2) : undefined;
@@ -59,8 +60,28 @@ async function exitLoop() {
   broker.markPeakEquity(markPrices);
 }
 
+/**
+ * Missed-runner tracker: re-price every coin we looked at in the last 48h and keep its peak.
+ * The dashboard turns "skipped, then ran 26x" into a lesson. Runs every 20 minutes.
+ */
+let lastMissedAt = 0;
+async function missedRunnersLoop() {
+  const now = Date.now();
+  if (now - lastMissedAt < 20 * 60_000) return;
+  lastMissedAt = now;
+  const rows = db.prepare(`SELECT DISTINCT mint FROM signals_log WHERE at > ? AND taken=0 ORDER BY at DESC LIMIT 90`).all(now - 48 * 3_600_000) as { mint: string }[];
+  if (!rows.length) return;
+  const snaps = await dex.snapshots(rows.map(r => r.mint));
+  const upd = db.prepare(`UPDATE signals_log SET last_price=?, peak_price=MAX(peak_price, ?), peak_checked_at=? WHERE mint=? AND at > ?`);
+  for (const [mint, s] of snaps) {
+    upd.run(s.priceUsd, s.priceUsd, now, mint, now - 48 * 3_600_000);
+    market.upsert(s);
+  }
+}
+
 async function scanLoop() {
   const now = Date.now();
+  if (kv.get("paused", false)) return;
   const ctx: Context = { now, solPrice, migrations };
   const feedHealthy = now - lastDexOk < config.risk.feedStaleMs || positions.open().length === 0;
   for (const s of strategies) {
@@ -105,6 +126,7 @@ async function main() {
   const tick = async () => {
     try { await exitLoop(); } catch (e) { log.error({ err: String(e) }, "exitLoop crashed"); }
     try { await scanLoop(); } catch (e) { log.error({ err: String(e) }, "scanLoop crashed"); }
+    try { await missedRunnersLoop(); } catch (e) { log.warn({ err: String(e) }, "missedRunners failed"); }
     setTimeout(tick, 5000);
   };
   tick();

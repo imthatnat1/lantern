@@ -3,7 +3,7 @@ import { log } from "../log.js";
 import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, gate, logSignal, reclaim, type Context, type Strategy } from "./base.js";
+import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, logSignal, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.bounce;
 
@@ -38,12 +38,13 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   const hi = highestHigh(c5, migratedAt);
   const lo = lowestLow(c5, migratedAt);
   const dd = 1 - lo / hi;
-  if (dd > C.deadBelow) return null;
-  if (dd < C.drawdownMin || dd > C.drawdownMax) return null;
-  if (!baseHolds(c5, lo, C.baseHoldCandles5m)) return null;
-  if (!reclaim(c5, lo * 1.03, C.reclaimVolX)) return null;
-  if (buySellRatio(s) < 1.0) return null;
-  if (s.priceUsd > lo * C.maxAboveLowX) return null;
+  if (dd > C.deadBelow) { logLook("bounce", s, `down ${(dd * 100).toFixed(0)}% since migration, treated as dead`); return null; }
+  if (dd < C.drawdownMin) { logLook("bounce", s, `only ${(dd * 100).toFixed(0)}% off the post-migration high, no dip yet`); return null; }
+  if (dd > C.drawdownMax) { logLook("bounce", s, `down ${(dd * 100).toFixed(0)}%, deeper than the 70% limit`); return null; }
+  if (!baseHolds(c5, lo, C.baseHoldCandles5m)) { logLook("bounce", s, "low not held for 3 candles yet"); return null; }
+  if (!reclaim(c5, lo * 1.03, C.reclaimVolX)) { logLook("bounce", s, "base holding, waiting for a green reclaim on 1.5x volume"); return null; }
+  if (buySellRatio(s) < 1.0) { logLook("bounce", s, "more sells than buys in 5m"); return null; }
+  if (s.priceUsd > lo * C.maxAboveLowX) { logLook("bounce", s, "already 1.6x off the low, chasing"); return null; }
 
   const g = await gate(s, "bounce", C.sizeUsd);
   if ((g.holders ?? 0) < C.minHolders) return null;

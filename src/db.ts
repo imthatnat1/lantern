@@ -71,7 +71,19 @@ CREATE TABLE IF NOT EXISTS signals_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   mode TEXT NOT NULL, mint TEXT NOT NULL, symbol TEXT NOT NULL,
   score REAL NOT NULL, taken INTEGER NOT NULL, reason TEXT NOT NULL,
-  price REAL NOT NULL, at INTEGER NOT NULL
+  price REAL NOT NULL, at INTEGER NOT NULL,
+  mcap REAL NOT NULL DEFAULT 0, liquidity REAL NOT NULL DEFAULT 0,
+  peak_price REAL NOT NULL DEFAULT 0, last_price REAL NOT NULL DEFAULT 0, peak_checked_at INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS signals_at ON signals_log(at);
+
+-- Latest market snapshot per mint we care about (open positions, recent looks). Refreshed by the loops.
+CREATE TABLE IF NOT EXISTS market (
+  mint TEXT PRIMARY KEY, symbol TEXT, name TEXT, pair TEXT, quote TEXT,
+  price REAL, mcap REAL, liquidity REAL, vol24h REAL, vol1h REAL, vol5m REAL,
+  buys5m INTEGER, sells5m INTEGER, ch5m REAL, ch1h REAL, ch6h REAL, ch24h REAL,
+  created_at INTEGER, holders INTEGER, on_curve INTEGER, website TEXT, twitter TEXT,
+  labels TEXT NOT NULL DEFAULT '[]', updated_at INTEGER NOT NULL
 );
 `);
 
@@ -150,7 +162,26 @@ export const audit = {
   rejectedTick(mint: string, source: string, price: number, lastGood: number, note: string) {
     db.prepare("INSERT INTO rejected_ticks(mint,source,price,last_good,at,note) VALUES(?,?,?,?,?,?)").run(mint, source, price, lastGood, Date.now(), note);
   },
-  signal(mode: Mode, mint: string, symbol: string, score: number, taken: boolean, reason: string, price: number) {
-    db.prepare("INSERT INTO signals_log(mode,mint,symbol,score,taken,reason,price,at) VALUES(?,?,?,?,?,?,?,?)").run(mode, mint, symbol, score, taken ? 1 : 0, reason, price, Date.now());
+  signal(mode: Mode, mint: string, symbol: string, score: number, taken: boolean, reason: string, price: number, mcap = 0, liquidity = 0) {
+    db.prepare("INSERT INTO signals_log(mode,mint,symbol,score,taken,reason,price,at,mcap,liquidity,peak_price,last_price) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(mode, mint, symbol, score, taken ? 1 : 0, reason, price, Date.now(), mcap, liquidity, price, price);
+  },
+};
+
+export const market = {
+  upsert(s: import("./types.js").TokenSnapshot, holders?: number, labels?: string[]) {
+    db.prepare(`INSERT INTO market(mint,symbol,name,pair,quote,price,mcap,liquidity,vol24h,vol1h,vol5m,buys5m,sells5m,ch5m,ch1h,ch6h,ch24h,created_at,holders,on_curve,website,twitter,labels,updated_at)
+      VALUES(@mint,@symbol,@name,@pair,@quote,@price,@mcap,@liquidity,@vol24h,@vol1h,@vol5m,@buys5m,@sells5m,@ch5m,@ch1h,@ch6h,@ch24h,@created_at,@holders,@on_curve,@website,@twitter,@labels,@updated_at)
+      ON CONFLICT(mint) DO UPDATE SET symbol=excluded.symbol,name=excluded.name,pair=excluded.pair,quote=excluded.quote,price=excluded.price,mcap=excluded.mcap,liquidity=excluded.liquidity,
+        vol24h=excluded.vol24h,vol1h=excluded.vol1h,vol5m=excluded.vol5m,buys5m=excluded.buys5m,sells5m=excluded.sells5m,ch5m=excluded.ch5m,ch1h=excluded.ch1h,ch6h=excluded.ch6h,ch24h=excluded.ch24h,
+        created_at=excluded.created_at,holders=COALESCE(excluded.holders,market.holders),on_curve=excluded.on_curve,website=excluded.website,twitter=excluded.twitter,
+        labels=CASE WHEN excluded.labels='[]' THEN market.labels ELSE excluded.labels END,updated_at=excluded.updated_at`)
+      .run({
+        mint: s.mint, symbol: s.symbol, name: s.name, pair: s.pairAddress ?? null, quote: s.quoteSymbol ?? null,
+        price: s.priceUsd, mcap: s.mcapUsd, liquidity: s.liquidityUsd, vol24h: s.volume24h, vol1h: s.volume1h, vol5m: s.volume5m,
+        buys5m: s.buys5m, sells5m: s.sells5m, ch5m: s.change5m, ch1h: s.change1h, ch6h: s.change6h, ch24h: s.change24h,
+        created_at: s.createdAt, holders: holders ?? s.holders ?? null, on_curve: s.onCurve ? 1 : 0, website: s.website ?? null, twitter: s.twitter ?? null,
+        labels: JSON.stringify(labels ?? []), updated_at: Date.now(),
+      });
   },
 };

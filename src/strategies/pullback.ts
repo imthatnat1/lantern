@@ -4,7 +4,7 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, gate, logSignal, reclaim, type Context, type Strategy } from "./base.js";
+import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, logSignal, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.pullback;
 
@@ -45,11 +45,12 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const hi = highestHigh(c5, hour * 1 - 2 * 3_600_000);
   const lo = lowestLow(c5.slice(-12), ctx.now - 60 * 60_000);
   const retrace = 1 - lo / hi;
-  if (retrace < C.retraceMin || retrace > C.retraceMax) return null;
-  if (!baseHolds(c5, lo, C.holdCandles5m)) return null;
-  if (!reclaim(c5, lo * 1.03, C.reclaimVolX)) return null;
-  if (s.priceUsd > lo * C.maxAboveLowX) return null;
-  if (buySellRatio(s) < 1.0) return null;
+  if (retrace < C.retraceMin) { logLook("pullback", s, `watching: only ${(retrace * 100).toFixed(0)}% off the high, waiting for a 20-40% retrace`); return null; }
+  if (retrace > C.retraceMax) { logLook("pullback", s, `retraced ${(retrace * 100).toFixed(0)}%, too deep, likely dead`); return null; }
+  if (!baseHolds(c5, lo, C.holdCandles5m)) { logLook("pullback", s, "retrace low not held for 3 candles yet"); return null; }
+  if (!reclaim(c5, lo * 1.03, C.reclaimVolX)) { logLook("pullback", s, "base holding, waiting for a green reclaim on volume"); return null; }
+  if (s.priceUsd > lo * C.maxAboveLowX) { logLook("pullback", s, "reclaim already ran >25% off the low, chasing"); return null; }
+  if (buySellRatio(s) < 1.0) { logLook("pullback", s, "more sells than buys in 5m"); return null; }
 
   const g = await gate(s, "pullback", C.sizeUsd);
   if ((g.holders ?? 0) < C.minHolders) return null;

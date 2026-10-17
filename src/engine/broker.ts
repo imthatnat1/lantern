@@ -82,7 +82,7 @@ export function openPosition(sig: Signal, solPrice: number, now = Date.now()): P
     entryPrice: effPrice, entryAt: now, qty, remainingQty: qty, costUsd: size,
     peakPrice: effPrice, peakClose: effPrice, lastGoodPrice: snap.priceUsd, lastGoodAt: now,
     atr15, liquidityAtEntry: snap.liquidityUsd, plan, tpTaken: [], realizedUsd: 0, status: "open",
-    meta: { score: sig.score, reason: sig.reason, ...(sig.meta ?? {}) },
+    meta: { score: sig.score, reason: sig.reason, mcapAtEntry: snap.mcapUsd, ...(sig.meta ?? {}) },
   });
   const f: Fill = { side: "buy", mint: sig.mint, mode: sig.mode, qty, priceUsd: effPrice, grossUsd: size, feesUsd, netUsd: size, reason: sig.reason, at: now };
   fills.insert(f, p.id);

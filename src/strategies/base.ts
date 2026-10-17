@@ -5,7 +5,7 @@ import * as rug from "../data/rugcheck.js";
 import * as jup from "../data/jupiter.js";
 import { config } from "../config.js";
 import { isCopycat, isSlop } from "../engine/filters.js";
-import { cooldowns, audit } from "../db.js";
+import { cooldowns, audit, market } from "../db.js";
 
 export interface Context {
   now: number;
@@ -40,7 +40,20 @@ export async function gate(s: TokenSnapshot, mode: Signal["mode"], sizeUsd: numb
 }
 
 export function logSignal(sig: Signal, taken: boolean, why: string) {
-  audit.signal(sig.mode, sig.mint, sig.symbol, sig.score, taken, why, sig.snapshot.priceUsd);
+  audit.signal(sig.mode, sig.mint, sig.symbol, sig.score, taken, why, sig.snapshot.priceUsd, sig.snapshot.mcapUsd, sig.snapshot.liquidityUsd);
+  const labels: string[] = [];
+  if (sig.meta?.walletCount) labels.push(`${sig.meta.walletCount} trusted bought`);
+  market.upsert(sig.snapshot, sig.meta?.holders as number | undefined, labels);
+}
+
+/** Record a look that never became a signal (filtered before scoring). Shows up in "looked at but did not buy". */
+const lastLook = new Map<string, number>();
+export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, holders?: number) {
+  const k = `${mode}:${s.mint}`;
+  if (Date.now() - (lastLook.get(k) ?? 0) < 60 * 60_000) return;   // one look per coin per mode per hour
+  lastLook.set(k, Date.now());
+  audit.signal(mode, s.mint, s.symbol, 0, false, why, s.priceUsd, s.mcapUsd, s.liquidityUsd);
+  market.upsert(s, holders);
 }
 
 export async function candles5and15(pair: string): Promise<{ c5: Candle[]; c15: Candle[] }> {
