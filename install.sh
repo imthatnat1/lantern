@@ -10,7 +10,7 @@ say "1/5  Installing Node, git, sqlite, pm2"
 if ! command -v node >/dev/null || [ "$(node -v | cut -c2-3)" -lt 22 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
 fi
-apt-get install -y -qq nodejs git sqlite3 >/dev/null
+apt-get install -y -qq nodejs git sqlite3 build-essential python3 >/dev/null
 npm i -g pm2 >/dev/null 2>&1 || true
 
 say "2/5  Getting Lantern"
@@ -47,9 +47,18 @@ EOF
 fi
 
 say "4/5  Building and testing"
-npm install --silent
-npm test 2>&1 | grep -E "^# (pass|fail)"
-npm run build --silent
+echo "node $(node -v), npm $(npm -v)"
+npm install --no-audit --no-fund 2>&1 | tail -5
+set +e
+npm test 2>&1 | grep -vE "^\s*(duration_ms|type:|\.\.\.|---|location:|failureType:)" | tail -40
+TEST_RC=${PIPESTATUS[0]}
+set -e
+if [ "$TEST_RC" != "0" ]; then
+  echo
+  echo "Tests failed. Send Claude a screenshot of the lines above. Not starting the bot."
+  exit 1
+fi
+npm run build 2>&1 | tail -20
 
 say "5/5  Starting"
 pm2 delete lantern >/dev/null 2>&1 || true
