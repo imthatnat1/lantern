@@ -7,6 +7,22 @@ const num = (k: string, d: number) => {
   return Number.isFinite(v) ? v : d;
 };
 
+/** Coins Blossom Terminal (v1) treated as its quality universe on 17 Oct 2026. Always in scope. */
+const DEFAULT_PINNED = [
+  "HcRLc9VDgjLeK154xDawfb1dmVJ98DoSqcwTHGqiDeJR", // ZCAT (ZEC pair)
+  "8RNUw4N655VSrZKuhGdywhbSMDTrheguFPfxbpE2NZHQ", // PURR (HYPE pair)
+  "5tCju6YNxHq5zrA6tGndr6F7TK42mpUFmeE31cSFpump", // swordcat
+  "6GmAFSYs4gk3FDao5FzzySQpPZaWsa4rUJHacpMpUNgx", // STONK
+  "9CPfv7rc6vxBd3jtovmZtf5Zy8bdvssv8c4BwzbGk147", // NINJACAT (INJ pair)
+  "39HqgQ18g9R33sUfKq1TjX4sbKrgTb4YntnBCFhURJvy", // MONEROCHAN (wXMR pair)
+  "DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP", // SI (NVDAx pair)
+  "nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump", // Dacity (TTWO pair)
+  "6UtY9iTZMQQ5QZVrbzFnNaJntV7oySm9k97mvwnuZcxr", // NEARKAT (NEAR pair)
+  "AGi2s9zPRPHs3zEDPhPTroumTEXK5ufymYSfEFndCSSW", // LEVERCAT (xSOL pair)
+  "HTmQz7My6MehV7bjhJ6jde8nDND1yvsz68d24LP7YgUQ", // GP (GLDx pair)
+  "DFMt2FyLpB6ekPNAzVErLXgpSnJ9CRf1VnxBAkTLpump", // FTR
+];
+
 export const config = {
   keys: {
     helius: env("HELIUS_API_KEY"),
@@ -16,7 +32,7 @@ export const config = {
   },
   trustedWallets: env("TRUSTED_WALLETS").split(",").map(s => s.trim()).filter(Boolean),
   /** Mints Nat likes. Always in scope for dip and ultra, exempt from the copycat filter. */
-  pinned: env("PINNED_MINTS").split(",").map(s => s.trim()).filter(Boolean),
+  pinned: [...DEFAULT_PINNED, ...env("PINNED_MINTS").split(",").map(s => s.trim()).filter(Boolean)],
   startingCapital: num("STARTING_CAPITAL", 300),
   dbPath: env("DB_PATH", "./data/lantern.db"),
   logLevel: env("LOG_LEVEL", "info"),
