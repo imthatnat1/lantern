@@ -1,0 +1,28 @@
+{
+  "name": "memeterm-v2",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Paper-trading bot for Solana memecoins. Four modes, close-based stops, two-source price sanity.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "tsx src/main.ts",
+    "test": "tsx --test test/*.test.ts",
+    "replay": "tsx src/replay.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "pino": "^9.6.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
