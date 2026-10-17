@@ -222,6 +222,7 @@ export const market = {
 const insTick = db.prepare("INSERT OR IGNORE INTO ticks(mint,at,price,liquidity,mcap,vol5m,buys5m,sells5m) VALUES(?,?,?,?,?,?,?,?)");
 const insCandle = db.prepare("INSERT OR REPLACE INTO candles(pair,agg,t,o,h,l,c,v) VALUES(?,?,?,?,?,?,?,?)");
 const insHolders = db.prepare("INSERT OR IGNORE INTO holders_history(mint,at,holders) VALUES(?,?,?)");
+const updMarketHolders = db.prepare("UPDATE market SET holders=? WHERE mint=?");
 
 export const recorder = {
   tick(s: import("./types.js").TokenSnapshot) {
@@ -231,7 +232,7 @@ export const recorder = {
     const tx = db.transaction((rows: import("./types.js").Candle[]) => { for (const k of rows) insCandle.run(pair, agg, k.t, k.o, k.h, k.l, k.c, k.v); });
     tx(cs);
   },
-  holders(mint: string, holders: number, at = Date.now()) { insHolders.run(mint, at, holders); },
+  holders(mint: string, holders: number, at = Date.now()) { insHolders.run(mint, at, holders); updMarketHolders.run(holders, mint); },
   /** Holder growth over `windowMs`, as a fraction. null when we have fewer than two readings. */
   holderVelocity(mint: string, windowMs = 10 * 60_000, now = Date.now()): number | null {
     const latest = db.prepare("SELECT at, holders FROM holders_history WHERE mint=? ORDER BY at DESC LIMIT 1").get(mint) as { at: number; holders: number } | undefined;
