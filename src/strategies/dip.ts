@@ -35,7 +35,7 @@ export const dip: Strategy = {
       try {
         const sig = await check(s, ctx);
         if (sig) out.push(sig);
-      } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "dip check failed"); }
+      } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "dip check failed"); logLook("dip", s, `couldn't check: ${String(e).replace(/^Error:\s*/, "").slice(0, 70)}`); }
     }
     return out;
   },

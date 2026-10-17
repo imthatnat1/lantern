@@ -40,7 +40,7 @@ export const ride: Strategy = {
         if (r.leader) leaders.push(s.mint);
         if (r.sig) out.push(r.sig);
         if (leaders.length >= C.maxLeaders) break;
-      } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "ride check failed"); }
+      } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "ride check failed"); logLook("ride", s, `couldn't check: ${String(e).replace(/^Error:\s*/, "").slice(0, 70)}`); }
     }
     rideDb.setLeaders(leaders);
     return out;

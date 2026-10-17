@@ -65,7 +65,8 @@ export const config = {
     maxCapitalAtRiskUsd: 180,
     maxSingleTradeUsd: 40,
     vaultShare: 0.5,            // of realized profit
-    feedStaleMs: 60_000,
+    /** A scan can spend minutes waiting on GeckoTerminal; the DexScreener read that produced the signal is what matters. */
+    feedStaleMs: 5 * 60_000,
     priceStaleMs: 20_000,
     /** Price sanity: a tick this far from last good price needs confirmation. */
     sanityJumpPct: 0.40,
