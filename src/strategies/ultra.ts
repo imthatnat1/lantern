@@ -6,7 +6,7 @@ import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import { account } from "../engine/broker.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.ultra;
 
@@ -51,6 +51,8 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const [mcMin, mcMax, liqMin] = long
     ? [C.longWindowMcapMin, C.longWindowMcapMax, C.longWindowMinLiquidity]
     : [C.mcapMin, C.mcapMax, C.minLiquidity];
+  const pre = await prefilter(s, "ultra");
+  if (!pre.ok) { logLook("ultra", s, pre.why!, pre.holders); return null; }
   if (s.mcapUsd < mcMin || s.mcapUsd > mcMax || s.liquidityUsd < liqMin || !s.pairAddress) return null;
 
   const { c5, c15 } = await candles5and15(s.pairAddress);

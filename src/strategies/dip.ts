@@ -4,7 +4,7 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
 import { allCandidates, isPinned, isQuality, isStonkPair } from "../data/universe.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, reclaim, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.dip;
 
@@ -39,6 +39,8 @@ export const dip: Strategy = {
 
 async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   if (!isPinned(s.mint) && !isStonkPair(s) && !isQuality(s)) return null;
+  const pre = await prefilter(s, "dip");
+  if (!pre.ok) { logLook("dip", s, pre.why!, pre.holders); return null; }
   if (!s.pairAddress) return null;
   if (s.change24h > C.overheated24h) { logLook("dip", s, `up ${s.change24h.toFixed(0)}% in 24h, overheated`); return null; }
 

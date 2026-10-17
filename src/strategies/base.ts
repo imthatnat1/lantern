@@ -21,22 +21,45 @@ export interface Strategy {
 
 export interface Gate { ok: boolean; why?: string; holders?: number; top10?: number }
 
+/**
+ * Cheap rug guard, run BEFORE any candle fetch or pattern check. A coin that fails here never
+ * appears on the hot list and never costs us a GeckoTerminal call.
+ *   copycat ticker / brand clone, missing mcap or liquidity, RugCheck (mint/freeze authority, rugged,
+ *   danger flags, transfer fee, LP lock, creator history, creator balance, insiders, top-10),
+ *   slop (cheap domain, social-as-website, thin holders at size), fresh-coin rules (< 2h old needs
+ *   150+ holders and top-10 under 35%), honeypot smell (20+ buys and zero sells in 5m).
+ */
+export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise<Gate> {
+  const pinned = config.pinned.includes(s.mint);
+  const cc = pinned ? null : isCopycat(s);
+  if (cc) return { ok: false, why: `rejected: copycat ${cc}` };
+  if (!pinned && (!s.mcapUsd || s.mcapUsd <= 0)) return { ok: false, why: "rejected: no market cap reported" };
+  if (!s.onCurve && s.liquidityUsd <= 0) return { ok: false, why: "rejected: no liquidity reported" };
+  if (cooldowns.active(mode, s.mint)) return { ok: false, why: "cooldown after a recent stop-out" };
+  const safe = await rug.safety(s.mint, s.onCurve);
+  if (!safe.ok) return { ok: false, why: `rejected: ${safe.reasons.join(", ")}` };
+  const slop = pinned ? null : isSlop(s, safe.holders);
+  if (slop) return { ok: false, why: `rejected: slop, ${slop}` };
+  const ageH = (Date.now() - s.createdAt) / 3_600_000;
+  if (!pinned && ageH < 2) {
+    if ((safe.holders ?? 0) < 150) return { ok: false, why: `rejected: ${ageH.toFixed(1)}h old with only ${safe.holders ?? "?"} holders` };
+    if ((safe.top10Pct ?? 0) > 35) return { ok: false, why: `rejected: fresh coin, top 10 hold ${safe.top10Pct!.toFixed(0)}%` };
+  }
+  if (s.buys5m >= 20 && s.sells5m === 0) return { ok: false, why: "rejected: buys but no sells in 5m, possible honeypot" };
+  return { ok: true, holders: safe.holders, top10: safe.top10Pct };
+}
+
 /** Shared pre-entry gate: copycat, safety, slop, exit liquidity, test sell. */
 export async function gate(s: TokenSnapshot, mode: Signal["mode"], sizeUsd: number): Promise<Gate> {
-  const cc = config.pinned.includes(s.mint) ? null : isCopycat(s);
-  if (cc) return { ok: false, why: `copycat: ${cc}` };
-  if (cooldowns.active(mode, s.mint)) return { ok: false, why: "cooldown" };
-  const safe = await rug.safety(s.mint, s.onCurve);
-  if (!safe.ok) return { ok: false, why: `safety: ${safe.reasons.join(", ")}` };
-  const slop = isSlop(s, safe.holders);
-  if (slop) return { ok: false, why: `slop: ${slop}` };
+  const pre = await prefilter(s, mode);
+  if (!pre.ok) return pre;
   if (!s.onCurve) {
     const qty = sizeUsd / s.priceUsd;
     const ts = await jup.testSell(s.mint, qty);
     if (!ts.routable) return { ok: false, why: "no sell route" };
     if (ts.impactPct > config.fees.exitImpactWarnPct) return { ok: false, why: `exit impact ${(ts.impactPct * 100).toFixed(1)}%` };
   }
-  return { ok: true, holders: safe.holders, top10: safe.top10Pct };
+  return { ok: true, holders: pre.holders, top10: pre.top10 };
 }
 
 /** Holder growth over the last 10 minutes as a fraction, or null if unknown. */

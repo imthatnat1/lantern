@@ -177,6 +177,7 @@
 <div id="missed"></div>
 
 <h2>Looked at but didn't buy <small id="looksCount"></small></h2>
+<p class="dim" style="font-size:13px;margin:0 0 6px">Coral stripe means the rug guard rejected it. The rest were clean but the setup never completed.</p>
 <details><summary>Show the list</summary><div id="looks"></div></details>
 
 <h2>Guardrails</h2>
@@ -336,8 +337,9 @@ function openRows(open) {
 
 function hotRows(looks, open) {
   const held = new Set(open.map(o => o.mint));
-  const rows = looks.filter(l => l.market).sort((a, b) => (b.score || 0) - (a.score || 0) || b.at - a.at).slice(0, 10);
-  if (!rows.length) return `<div class="empty">Nothing on the radar yet.</div>`;
+  // Hot = passed every safety check and a setup is forming or scored. Rejected coins live in "Looked at" below.
+  const rows = looks.filter(l => l.market && !l.rejected).sort((a, b) => (b.score || 0) - (a.score || 0) || b.at - a.at).slice(0, 10);
+  if (!rows.length) return `<div class="empty">Nothing clean on the radar yet.</div>`;
   return rows.map(l => {
     const m = l.market;
     const labels = [...(m.labels || [])];
@@ -433,8 +435,8 @@ function reasonBucket(r) {
 function looksRows(looks) {
   $("looksCount").textContent = looks.length ? `(${looks.length})` : "";
   if (!looks.length) return `<div class="empty">No looks logged yet.</div>`;
-  return looks.map(l => `<div class="card fill">
-    <div class="head">${av(l.symbol)}<div class="sym">${esc(l.symbol)}<small class="dim">${l.mode}</small></div><div class="gain"><small>${ago(Date.now() - l.at)} ago${l.market ? " · " + big(l.market.mcap) : ""}</small></div>
+  return looks.map(l => `<div class="card fill ${l.rejected ? "loss" : ""}">
+    <div class="head">${av(l.symbol)}<div class="sym">${l.rejected ? '<div class="tag">Rejected</div>' : ""}${esc(l.symbol)}<small class="dim">${l.mode}</small></div><div class="gain"><small>${ago(Date.now() - l.at)} ago${l.market ? " · " + big(l.market.mcap) : ""}</small></div>
     <div class="reason">${esc(l.reason)}</div></div></div>`).join("");
 }
 

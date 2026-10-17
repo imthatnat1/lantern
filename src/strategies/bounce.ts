@@ -3,7 +3,7 @@ import { log } from "../log.js";
 import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, reclaim, type Context, type Strategy } from "./base.js";
+import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.bounce;
 
@@ -32,6 +32,8 @@ export const bounce: Strategy = {
 };
 
 async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promise<Signal | null> {
+  const pre = await prefilter(s, "bounce");
+  if (!pre.ok) { logLook("bounce", s, pre.why!, pre.holders); return null; }
   if (s.liquidityUsd < C.minLiquidity || !s.pairAddress) return null;
   const { c5, c15 } = await candles5and15(s.pairAddress);
   if (c5.length < 8) return null;

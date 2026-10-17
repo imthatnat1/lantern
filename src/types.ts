@@ -43,6 +43,7 @@ export interface SafetyResult {
   insiders?: number;
   holders?: number;
   lpLockedPct?: number;
+  creator?: string;
 }
 
 export interface ExitPlan {

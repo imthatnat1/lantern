@@ -5,7 +5,7 @@ import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import * as helius from "../data/helius.js";
 import { kv } from "../db.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.trusted;
 
@@ -57,6 +57,8 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number): Promi
   if (s.mcapUsd > C.mcapMax) { logLook("trusted", s, `${who}, but mcap $${(s.mcapUsd / 1000).toFixed(0)}k > $150k ceiling (copy latency: we'd buy their exit)`); return null; }
   if (s.change5m / 100 > C.maxPump5m) { logLook("trusted", s, `${who}, but already up ${s.change5m.toFixed(0)}% in 5m`); return null; }
   if (s.liquidityUsd < C.minLiquidity && !s.onCurve) { logLook("trusted", s, `${who}, but liquidity under $10k`); return null; }
+  const pre = await prefilter(s, "trusted");
+  if (!pre.ok) { logLook("trusted", s, pre.why!, pre.holders); return null; }
   const size = walletCount >= 2 ? C.sizeUsdTwoWallets : C.sizeUsd;
   const g = await gate(s, "trusted", size);
   if ((g.holders ?? 0) < C.minHolders) return null;

@@ -91,6 +91,9 @@ CREATE TABLE IF NOT EXISTS holders_history (
   mint TEXT NOT NULL, at INTEGER NOT NULL, holders INTEGER NOT NULL, PRIMARY KEY (mint, at)
 ) WITHOUT ROWID;
 
+-- Dev history: creators of anything RugCheck flagged as rugged. Blocks their next launch.
+CREATE TABLE IF NOT EXISTS rugged_creators (creator TEXT PRIMARY KEY, mint TEXT NOT NULL, at INTEGER NOT NULL);
+
 -- Latest market snapshot per mint we care about (open positions, recent looks). Refreshed by the loops.
 CREATE TABLE IF NOT EXISTS market (
   mint TEXT PRIMARY KEY, symbol TEXT, name TEXT, pair TEXT, quote TEXT,
@@ -225,5 +228,14 @@ export const recorder = {
     db.prepare("DELETE FROM ticks WHERE at < ?").run(cut);
     db.prepare("DELETE FROM candles WHERE t < ?").run(cut);
     db.prepare("DELETE FROM holders_history WHERE at < ?").run(cut);
+  },
+};
+
+export const creators = {
+  markRugged(creator: string, mint: string) {
+    db.prepare("INSERT OR IGNORE INTO rugged_creators(creator,mint,at) VALUES(?,?,?)").run(creator, mint, Date.now());
+  },
+  isRugger(creator: string): boolean {
+    return !!db.prepare("SELECT 1 FROM rugged_creators WHERE creator=?").get(creator);
   },
 };

@@ -5,7 +5,7 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, reclaim, type Context, type Strategy } from "./base.js";
+import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.pullback;
 
@@ -40,6 +40,8 @@ export const pullback: Strategy = {
 async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   if (s.change1h / 100 + 1 < C.minHourGainX && s.change6h / 100 + 1 < C.minHourGainX) return null;
   if (ageHours(s, ctx.now) > C.maxAgeH) return null;
+  const pre = await prefilter(s, "pullback");
+  if (!pre.ok) { logLook("pullback", s, pre.why!, pre.holders); return null; }
   if (s.liquidityUsd < C.minLiquidity || !s.pairAddress) return null;
 
   const { c5, c15 } = await candles5and15(s.pairAddress);
