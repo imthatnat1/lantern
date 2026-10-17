@@ -57,6 +57,19 @@ pm2 start dist/main.js --name lantern >/dev/null
 pm2 save >/dev/null
 pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
 command -v ufw >/dev/null && ufw allow 8787/tcp >/dev/null 2>&1 || true
+
+# Auto-update: every 10 minutes, pull from GitHub; rebuild and restart only if something changed.
+cat > /opt/lantern/update.sh <<'EOS'
+#!/usr/bin/env bash
+cd /opt/lantern || exit 0
+git fetch -q origin main || exit 0
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+  git pull -q origin main && npm install --silent && npm run build --silent && pm2 restart lantern >/dev/null
+  echo "$(date -u +%FT%TZ) updated to $(git rev-parse --short HEAD)" >> /opt/lantern/data/updates.log
+fi
+EOS
+chmod +x /opt/lantern/update.sh
+( crontab -l 2>/dev/null | grep -v lantern/update.sh; echo "*/10 * * * * /opt/lantern/update.sh" ) | crontab -
 sleep 4
 echo
 pm2 logs lantern --lines 15 --nostream
