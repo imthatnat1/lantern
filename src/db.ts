@@ -77,6 +77,20 @@ CREATE TABLE IF NOT EXISTS signals_log (
 );
 CREATE INDEX IF NOT EXISTS signals_at ON signals_log(at);
 
+-- Recording for replay. Every snapshot and every candle batch the bot sees. 14-day retention.
+CREATE TABLE IF NOT EXISTS ticks (
+  mint TEXT NOT NULL, at INTEGER NOT NULL, price REAL NOT NULL, liquidity REAL, mcap REAL,
+  vol5m REAL, buys5m INTEGER, sells5m INTEGER, PRIMARY KEY (mint, at)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS candles (
+  pair TEXT NOT NULL, agg INTEGER NOT NULL, t INTEGER NOT NULL,
+  o REAL NOT NULL, h REAL NOT NULL, l REAL NOT NULL, c REAL NOT NULL, v REAL NOT NULL,
+  PRIMARY KEY (pair, agg, t)
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS holders_history (
+  mint TEXT NOT NULL, at INTEGER NOT NULL, holders INTEGER NOT NULL, PRIMARY KEY (mint, at)
+) WITHOUT ROWID;
+
 -- Latest market snapshot per mint we care about (open positions, recent looks). Refreshed by the loops.
 CREATE TABLE IF NOT EXISTS market (
   mint TEXT PRIMARY KEY, symbol TEXT, name TEXT, pair TEXT, quote TEXT,
@@ -183,5 +197,33 @@ export const market = {
         created_at: s.createdAt, holders: holders ?? s.holders ?? null, on_curve: s.onCurve ? 1 : 0, website: s.website ?? null, twitter: s.twitter ?? null,
         labels: JSON.stringify(labels ?? []), updated_at: Date.now(),
       });
+  },
+};
+
+const insTick = db.prepare("INSERT OR IGNORE INTO ticks(mint,at,price,liquidity,mcap,vol5m,buys5m,sells5m) VALUES(?,?,?,?,?,?,?,?)");
+const insCandle = db.prepare("INSERT OR REPLACE INTO candles(pair,agg,t,o,h,l,c,v) VALUES(?,?,?,?,?,?,?,?)");
+const insHolders = db.prepare("INSERT OR IGNORE INTO holders_history(mint,at,holders) VALUES(?,?,?)");
+
+export const recorder = {
+  tick(s: import("./types.js").TokenSnapshot) {
+    insTick.run(s.mint, s.fetchedAt, s.priceUsd, s.liquidityUsd, s.mcapUsd, s.volume5m, s.buys5m, s.sells5m);
+  },
+  candles(pair: string, agg: number, cs: import("./types.js").Candle[]) {
+    const tx = db.transaction((rows: import("./types.js").Candle[]) => { for (const k of rows) insCandle.run(pair, agg, k.t, k.o, k.h, k.l, k.c, k.v); });
+    tx(cs);
+  },
+  holders(mint: string, holders: number, at = Date.now()) { insHolders.run(mint, at, holders); },
+  /** Holder growth over `windowMs`, as a fraction. null when we have fewer than two readings. */
+  holderVelocity(mint: string, windowMs = 10 * 60_000, now = Date.now()): number | null {
+    const latest = db.prepare("SELECT at, holders FROM holders_history WHERE mint=? ORDER BY at DESC LIMIT 1").get(mint) as { at: number; holders: number } | undefined;
+    const earlier = db.prepare("SELECT holders FROM holders_history WHERE mint=? AND at<=? ORDER BY at DESC LIMIT 1").get(mint, now - windowMs) as { holders: number } | undefined;
+    if (!latest || !earlier || !earlier.holders) return null;
+    return latest.holders / earlier.holders - 1;
+  },
+  prune(days = 14) {
+    const cut = Date.now() - days * 86_400_000;
+    db.prepare("DELETE FROM ticks WHERE at < ?").run(cut);
+    db.prepare("DELETE FROM candles WHERE t < ?").run(cut);
+    db.prepare("DELETE FROM holders_history WHERE at < ?").run(cut);
   },
 };

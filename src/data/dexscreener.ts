@@ -1,5 +1,6 @@
 import { getJson } from "./http.js";
 import type { TokenSnapshot } from "../types.js";
+import { recorder } from "../db.js";
 
 interface DsPair {
   chainId: string; dexId: string; pairAddress: string;
@@ -24,7 +25,7 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
   const p = pairs[0];
   const price = Number(p.priceUsd ?? 0);
   if (!price) return null;
-  return {
+  const snap: TokenSnapshot = {
     mint, symbol: p.baseToken.symbol, name: p.baseToken.name, pairAddress: p.pairAddress, quoteSymbol: p.quoteToken.symbol,
     priceUsd: price,
     liquidityUsd: p.liquidity?.usd ?? 0,
@@ -39,6 +40,8 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
     fetchedAt: Date.now(),
   };
+  try { recorder.tick(snap); } catch { /* recording is best effort */ }
+  return snap;
 }
 
 /** Batch of up to 30 mints in one call. */
@@ -65,7 +68,7 @@ export async function snapshots(mints: string[]): Promise<Map<string, TokenSnaps
 async function snapshotFromPair(mint: string, p: DsPair): Promise<TokenSnapshot | null> {
   const price = Number(p.priceUsd ?? 0);
   if (!price) return null;
-  return {
+  const snap: TokenSnapshot = {
     mint, symbol: p.baseToken.symbol, name: p.baseToken.name, pairAddress: p.pairAddress, quoteSymbol: p.quoteToken.symbol,
     priceUsd: price, liquidityUsd: p.liquidity?.usd ?? 0, mcapUsd: p.marketCap ?? p.fdv ?? 0,
     volume24h: p.volume?.h24 ?? 0, volume1h: p.volume?.h1 ?? 0, volume5m: p.volume?.m5 ?? 0,
@@ -77,6 +80,8 @@ async function snapshotFromPair(mint: string, p: DsPair): Promise<TokenSnapshot 
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
     fetchedAt: Date.now(),
   };
+  try { recorder.tick(snap); } catch { /* best effort */ }
+  return snap;
 }
 
 /** Recently boosted / trending Solana pairs. Used to seed the ultra and pullback universes. */

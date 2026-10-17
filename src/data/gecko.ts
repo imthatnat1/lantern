@@ -1,5 +1,6 @@
 import { getJson } from "./http.js";
 import type { Candle } from "../types.js";
+import { recorder } from "../db.js";
 
 type Tf = "minute" | "hour";
 
@@ -12,9 +13,11 @@ export async function candles(pairAddress: string, agg: 1 | 5 | 15, limit = 100)
   const url = `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddress}/ohlcv/${tf}?aggregate=${agg}&limit=${limit}&currency=usd`;
   const r = await getJson<{ data: { attributes: { ohlcv_list: number[][] } } }>(url, { ttlMs: agg * 60_000 * 0.8 });
   const list = r.data?.attributes?.ohlcv_list ?? [];
-  return list
+  const out = list
     .map(([t, o, h, l, c, v]) => ({ t: t * 1000, o, h, l, c, v }))
     .sort((a, b) => a.t - b.t);
+  if (out.length) { try { recorder.candles(pairAddress, agg, out); } catch { /* best effort */ } }
+  return out;
 }
 
 /** Average true range over the last n candles. */

@@ -1,6 +1,7 @@
 import { getJson } from "./http.js";
 import { config } from "../config.js";
 import type { SafetyResult } from "../types.js";
+import { recorder } from "../db.js";
 
 interface RcReport {
   rugged?: boolean;
@@ -41,6 +42,7 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
   const lp = rep.markets?.[0]?.lp?.lpLockedPct;
   if (!onCurve && lp !== undefined && lp < 90) reasons.push(`LP locked ${lp.toFixed(0)}%`);
 
+  if (rep.totalHolders) { try { recorder.holders(mint, rep.totalHolders); } catch { /* best effort */ } }
   const top10 = (rep.topHolders ?? []).slice(0, 10).reduce((a, h) => a + (h.pct ?? 0), 0);
   const insiders = (rep.topHolders ?? []).filter(h => h.insider).length;
 
