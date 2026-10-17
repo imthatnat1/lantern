@@ -6,6 +6,7 @@ import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import { account } from "../engine/broker.js";
+import { db, cooldowns } from "../db.js";
 import { buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.ultra;
@@ -44,7 +45,47 @@ function higherLows(c5: Candle[], n: number, tol: number): { ok: boolean; lows: 
   return { ok: true, lows: last };
 }
 
+/**
+ * Re-entry (Blossom §3.2): once per coin within 48h of an ultra stop-out, if price has reclaimed the
+ * stop level and printed a new 1h high on >= 2x volume. Bypasses the normal 6h cooldown.
+ */
+async function reentry(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
+  const last = db.prepare(`SELECT id, plan, closed_at, meta FROM positions WHERE mode='ultra' AND mint=? AND status='closed' AND closed_at > ?
+    AND (close_reason LIKE 'close stop%' OR close_reason LIKE 'hard floor%') ORDER BY closed_at DESC LIMIT 1`).get(s.mint, ctx.now - 48 * 3_600_000) as any;
+  if (!last) return null;
+  if (JSON.parse(last.meta || "{}").reentered) return null;
+  const stopLevel = JSON.parse(last.plan).closeStopPrice as number;
+  if (s.priceUsd < stopLevel * 1.02) { logLook("ultra", s, `stopped out ${((ctx.now - last.closed_at) / 3_600_000).toFixed(1)}h ago, waiting for a reclaim of ${stopLevel.toPrecision(3)}`, undefined, { need: `reclaim the stop at ${stopLevel.toPrecision(3)} and make a new 1h high on 2x volume`, level: stopLevel, distance: dist(s.priceUsd, stopLevel) }); return null; }
+  const { c5, c15 } = await candles5and15(s.pairAddress!);
+  if (c5.length < 24) return null;
+  const hourHigh = Math.max(...c5.slice(-13, -1).map(k => Math.max(k.o, k.c)));
+  const k = c5.at(-2)!;
+  const avgV = c5.slice(-14, -2).reduce((a, b) => a + b.v, 0) / 12;
+  if (!(k.c >= hourHigh && avgV > 0 && k.v >= 2 * avgV)) { logLook("ultra", s, "reclaimed the stop, waiting for a new 1h high on 2x volume", undefined, { need: `5m close above ${hourHigh.toPrecision(3)} on 2x volume`, level: hourHigh, distance: dist(s.priceUsd, hourHigh) }); return null; }
+  const size = Math.min(C.maxSizeUsd, account().cash * C.sizePctEquity);
+  const g = await gate(s, "ultra", size);
+  if (!g.ok) { logLook("ultra", s, g.why!, g.holders); return null; }
+  db.prepare("UPDATE positions SET meta=json_set(meta,'$.reentered',1) WHERE id=?").run(last.id);
+  cooldowns.set("ultra", s.mint, 0);
+  const a15 = atr(c15);
+  const sixHLow = lowestLow(c15, ctx.now - 6 * 3_600_000);
+  return {
+    mode: "ultra", mint: s.mint, symbol: s.symbol, sizeUsd: size, score: 72 + holderScore(s.mint) + pairScore(s) + walletScore(s.mint),
+    reason: `ultra re-entry after stop: reclaimed ${stopLevel.toPrecision(3)}, new 1h high on ${(k.v / avgV).toFixed(1)}x volume`,
+    snapshot: s, candles15: c15, meta: { atr15: a15, reentry: true, holders: g.holders },
+    plan: (entry, atr15) => ({
+      hardFloorPct: 0.55,
+      closeStopPrice: structuralStop(entry, Math.max(sixHLow, stopLevel * 0.97), atr15, 1, 0.50),
+      takeProfits: [{ gain: 1.0, sell: 0.33 }],
+      trailPct: 0.30, trailAfterGain: 0.50,
+      trailLadder: [{ peakGain: 1.0, trailPct: 0.35 }, { peakGain: 3.0, trailPct: Math.min(0.55, Math.max(0.40, (3 * atr15) / entry)) }],
+      maxHoldMs: 0,
+    }),
+  };
+}
+
 async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
+  if (s.pairAddress && cooldowns.active("ultra", s.mint)) { const r = await reentry(s, ctx); if (r) return r; }
   const age = ageHours(s, ctx.now);
   const long = age > C.maxAgeH;
   if (age < C.minAgeH || age > C.longWindowMaxAgeH) return null;
