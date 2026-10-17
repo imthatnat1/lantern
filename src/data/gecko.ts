@@ -1,0 +1,48 @@
+import { getJson } from "./http.js";
+import type { Candle } from "../types.js";
+
+type Tf = "minute" | "hour";
+
+/**
+ * GeckoTerminal OHLCV. aggregate: 1/5/15 for minute. Returns oldest -> newest.
+ * Cached for most of the candle length so we don't hammer their 30/min limit.
+ */
+export async function candles(pairAddress: string, agg: 1 | 5 | 15, limit = 100): Promise<Candle[]> {
+  const tf: Tf = "minute";
+  const url = `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddress}/ohlcv/${tf}?aggregate=${agg}&limit=${limit}&currency=usd`;
+  const r = await getJson<{ data: { attributes: { ohlcv_list: number[][] } } }>(url, { ttlMs: agg * 60_000 * 0.6 });
+  const list = r.data?.attributes?.ohlcv_list ?? [];
+  return list
+    .map(([t, o, h, l, c, v]) => ({ t: t * 1000, o, h, l, c, v }))
+    .sort((a, b) => a.t - b.t);
+}
+
+/** Average true range over the last n candles. */
+export function atr(c: Candle[], n = 14): number {
+  if (c.length < 2) return 0;
+  const trs: number[] = [];
+  for (let i = 1; i < c.length; i++) {
+    const prev = c[i - 1].c;
+    trs.push(Math.max(c[i].h - c[i].l, Math.abs(c[i].h - prev), Math.abs(c[i].l - prev)));
+  }
+  const slice = trs.slice(-n);
+  return slice.reduce((a, b) => a + b, 0) / slice.length;
+}
+
+export function lowestLow(c: Candle[], sinceMs: number): number {
+  let lo = Infinity;
+  for (const k of c) if (k.t >= sinceMs) lo = Math.min(lo, k.l);
+  return lo === Infinity ? (c.at(-1)?.l ?? 0) : lo;
+}
+
+export function highestHigh(c: Candle[], sinceMs: number): number {
+  let hi = 0;
+  for (const k of c) if (k.t >= sinceMs) hi = Math.max(hi, k.h);
+  return hi || (c.at(-1)?.h ?? 0);
+}
+
+export function vwap(c: Candle[], sinceMs: number): number {
+  let pv = 0, v = 0;
+  for (const k of c) if (k.t >= sinceMs) { const tp = (k.h + k.l + k.c) / 3; pv += tp * k.v; v += k.v; }
+  return v ? pv / v : (c.at(-1)?.c ?? 0);
+}
