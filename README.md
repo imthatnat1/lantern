@@ -64,6 +64,18 @@ sqlite3 data/lantern.db "select mode, symbol, score, taken, reason from signals_
 
 `rejected_ticks` is the receipt for every junk price the sanity check refused. `signals_log` shows every signal and why it was or wasn't taken.
 
+## Replay (test exit ideas against last night, offline)
+
+Everything the bot sees is recorded (ticks, candles, holder counts, 14 days). Replay re-runs the exit engine over every signal it logged, with different settings:
+
+```
+npm run replay -- --hours 24                      # default exits, all modes
+npm run replay -- --hours 24 --mode pullback --trades
+npm run replay -- --hours 48 --variant '{"trailPct":0.2}' --variant '{"maxLoss":0.5,"hardFloorPct":0.6}'
+```
+
+Overrides: hardFloorPct, trailPct, trailAfterGain, tpGain, tpSell, maxLoss, sizeUsd. Entry rules can't be replayed yet (next step: run detectors on recorded candles).
+
 ## Rules
 
 - Nothing fills on an unconfirmed tick.
