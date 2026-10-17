@@ -6,6 +6,7 @@ import * as jup from "../data/jupiter.js";
 import { config } from "../config.js";
 import { isCopycat, isSlop } from "../engine/filters.js";
 import { cooldowns, audit, market, recorder, type Setup } from "../db.js";
+import { isCreativePair } from "../data/universe.js";
 
 export interface Context {
   now: number;
@@ -67,6 +68,9 @@ export async function gate(s: TokenSnapshot, mode: Signal["mode"], sizeUsd: numb
   }
   return { ok: true, holders: pre.holders, top10: pre.top10 };
 }
+
+/** Creative pair (paired with something other than SOL/USDC/USDT): +8 in every mode. */
+export function pairScore(s: TokenSnapshot): number { return isCreativePair(s) ? 8 : 0; }
 
 /** Holder growth over the last 10 minutes as a fraction, or null if unknown. */
 export function holderVelocity(mint: string): number | null {

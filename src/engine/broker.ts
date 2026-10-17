@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { kv, positions, fills } from "../db.js";
 import { log } from "../log.js";
+import { isCreativePair } from "../data/universe.js";
 import type { Fill, Mode, Position, Signal } from "../types.js";
 
 /** Paper account: cash, vault, peak equity, daily P&L. */
@@ -68,6 +69,7 @@ export function openPosition(sig: Signal, solPrice: number, now = Date.now()): P
   const snap = sig.snapshot;
   let size = sig.sizeUsd;
   if (snap.liquidityUsd < config.risk.thinPoolUsd) size = size / 2;   // thin pool: half size
+  if (isCreativePair(snap) && sig.mode !== "ride") size = size / 1.5;  // wider stop, same dollar risk
   // Size by exit, not by dollars: a sell of `size` into a pool moves price by about size / (liq/2).
   // Cap so that estimated exit impact stays under maxExitImpactPct. Floor at $2 so tiny pools get a token position, not nothing.
   if (snap.liquidityUsd > 0) size = Math.max(2, Math.min(size, snap.liquidityUsd * config.risk.maxExitImpactPct / 2));
@@ -76,6 +78,14 @@ export function openPosition(sig: Signal, solPrice: number, now = Date.now()): P
   const atr15 = sig.meta?.atr15 as number ?? 0;
   const plan = sig.plan(effPrice, atr15);
   if (snap.liquidityUsd < config.risk.thinPoolUsd) plan.hardFloorPct = Math.min(plan.hardFloorPct, 0.4); // thin pool: tick floor only at -60%
+  // Creative pairs (paired with ZEC, NEAR, an xStock...) pay holders and chop more. Wider stops, looser trail, smaller size.
+  if (isCreativePair(snap) && sig.mode !== "ride") {
+    const loss = 1 - plan.closeStopPrice / effPrice;
+    plan.closeStopPrice = effPrice * (1 - Math.min(0.45, loss * 1.5));
+    plan.hardFloorPct = Math.min(0.6, plan.hardFloorPct + 0.1);
+    plan.trailPct = Math.min(0.6, plan.trailPct + 0.10);
+    for (const step of plan.trailLadder ?? []) step.trailPct = Math.min(0.6, step.trailPct + 0.10);
+  }
 
   const a = account();
   a.cash -= size;

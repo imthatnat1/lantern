@@ -5,7 +5,7 @@ import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import * as helius from "../data/helius.js";
 import { kv } from "../db.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.trusted;
 
@@ -72,7 +72,7 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names:
   score += (g.holders ?? 0) >= 150 ? 10 : (g.holders ?? 0) >= 50 ? 5 : 0;
   score += (g.top10 ?? 100) > 40 ? -15 : (g.top10 ?? 100) > 25 ? -5 : 5;
   score += s.liquidityUsd >= 25_000 ? 10 : 0;
-  score += holderScore(s.mint);
+  score += holderScore(s.mint) + pairScore(s);
   if (score < C.minScore) { logSignal({ mode: "trusted", mint: s.mint, symbol: s.symbol, sizeUsd: size, score, reason: "score floor", snapshot: s, candles15: [], plan: () => null as any }, false, "score below floor"); return null; }
 
   let c15 = [] as Awaited<ReturnType<typeof candles5and15>>["c15"];

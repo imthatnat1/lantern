@@ -217,7 +217,7 @@ const hourB = () => Number(new Date().toLocaleString("en-AU", { hour: "numeric",
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const short = m => m ? m.slice(0, 4) + "…" + m.slice(-4) : "";
 const av = sym => `<div class="av">${esc(String(sym || "??").replace(/^\$/, "").slice(0, 2).toUpperCase())}</div>`;
-const REWARD_QUOTES = /^(ZEC|HYPE|GLDx|SLVx|NVDAx|TSLAx|xSOL|wXMR)$/i;
+const STANDARD_QUOTES = /^(SOL|WSOL|USDC|USDT|USD1|PYUSD)$/i;
 
 let S = null, modeFilter = "all", tradeFilter = "all", rangeH = 24;
 
@@ -313,7 +313,7 @@ function links(mint, m) {
   return `<div class="links"><span class="cp" data-cp="${mint}" title="copy mint">${short(mint)} ⧉</span><a href="${dex}" target="_blank" rel="noopener">chart ↗</a>${quote}</div>`;
 }
 
-function rewardFlag(m) { return m && m.quote && REWARD_QUOTES.test(m.quote) ? `<span class="rw" title="Pairs with a reward-style token. Wider stops and smaller size apply.">💰?</span>` : ""; }
+function rewardFlag(m) { return m && m.quote && !STANDARD_QUOTES.test(m.quote) ? `<span class="rw" title="Creative pair: holders earn ${esc(m.quote)}. Wider stops and smaller size apply.">💰 ${esc(m.quote)}</span>` : ""; }
 
 function openRows(open) {
   const rows = modeFilter === "all" ? open : open.filter(o => o.mode === modeFilter);

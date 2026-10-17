@@ -1,6 +1,7 @@
 import { getJson } from "./http.js";
 import type { TokenSnapshot } from "../types.js";
 import { recorder } from "../db.js";
+import { learnQuote } from "./universe.js";
 
 /** Last time DexScreener answered with usable data. Read by the health check. */
 export let lastOkAt = 0;
@@ -44,7 +45,7 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
     fetchedAt: Date.now(),
   };
   lastOkAt = Date.now();
-  try { recorder.tick(snap); } catch { /* recording is best effort */ }
+  try { recorder.tick(snap); learnQuote(snap.quoteSymbol); } catch { /* best effort */ }
   return snap;
 }
 
@@ -85,7 +86,7 @@ async function snapshotFromPair(mint: string, p: DsPair): Promise<TokenSnapshot 
     fetchedAt: Date.now(),
   };
   lastOkAt = Date.now();
-  try { recorder.tick(snap); } catch { /* best effort */ }
+  try { recorder.tick(snap); learnQuote(snap.quoteSymbol); } catch { /* best effort */ }
   return snap;
 }
 
