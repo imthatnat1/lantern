@@ -4,7 +4,7 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
 import { allCandidates, isPinned, isQuality, isStonkPair } from "../data/universe.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, dist, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.dip;
 
@@ -49,12 +49,12 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const hi = highestHigh(c5, ctx.now - 24 * 3_600_000);
   const lo = lowestLow(c5.slice(-36), ctx.now - 3 * 3_600_000);
   const depth = 1 - s.priceUsd / hi;
-  if (depth < C.dipMin) { logLook("dip", s, `only ${(depth * 100).toFixed(1)}% off the 24h high`); return null; }
+  if (depth < C.dipMin) { logLook("dip", s, `only ${(depth * 100).toFixed(1)}% off the 24h high`, undefined, { need: `dip to ${(hi * (1 - C.dipMin)).toPrecision(3)} (6% off the 24h high)`, level: hi * (1 - C.dipMin), distance: dist(s.priceUsd, hi * (1 - C.dipMin)) }); return null; }
   if (depth > C.dipMax) { logLook("dip", s, `${(depth * 100).toFixed(0)}% off the 24h high, more than a dip`); return null; }
   // The last closed 5m candle must not be a new low: the dip has to have stopped.
   const last = c5.at(-2)!;
   if (last.l <= lo * 1.001 && last.c < last.o) { logLook("dip", s, "still making new lows"); return null; }
-  if (!reclaim(c5, lo * 1.01, 1.0)) { logLook("dip", s, "dip found, waiting for a green 5m reclaim"); return null; }
+  if (!reclaim(c5, lo * 1.01, 1.0)) { logLook("dip", s, "dip found, waiting for a green 5m reclaim", undefined, { need: `green 5m close above ${(lo * 1.01).toPrecision(3)}`, level: lo * 1.01, distance: dist(s.priceUsd, lo * 1.01) }); return null; }
   const bs = buySellRatio(s);
   if (bs < 1.0) { logLook("dip", s, "more sells than buys in 5m"); return null; }
 

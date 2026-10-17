@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS signals_log (
   score REAL NOT NULL, taken INTEGER NOT NULL, reason TEXT NOT NULL,
   price REAL NOT NULL, at INTEGER NOT NULL,
   mcap REAL NOT NULL DEFAULT 0, liquidity REAL NOT NULL DEFAULT 0,
-  peak_price REAL NOT NULL DEFAULT 0, last_price REAL NOT NULL DEFAULT 0, peak_checked_at INTEGER NOT NULL DEFAULT 0
+  peak_price REAL NOT NULL DEFAULT 0, last_price REAL NOT NULL DEFAULT 0, peak_checked_at INTEGER NOT NULL DEFAULT 0,
+  setup TEXT
 );
 CREATE INDEX IF NOT EXISTS signals_at ON signals_log(at);
 
@@ -175,13 +176,27 @@ export const cooldowns = {
   },
 };
 
+// Migration for databases created before the setup column existed.
+try { db.exec("ALTER TABLE signals_log ADD COLUMN setup TEXT"); } catch { /* already there */ }
+
+export interface Setup {
+  /** What has to happen, in plain words. */
+  need: string;
+  /** Price level the trigger sits at, if there is one. */
+  level?: number;
+  /** How far price is from the level, as a fraction (0.08 = 8% away). 0 means "at it". */
+  distance?: number;
+  /** Progress through a count-based wait, e.g. candles held. */
+  progress?: { done: number; of: number };
+}
+
 export const audit = {
   rejectedTick(mint: string, source: string, price: number, lastGood: number, note: string) {
     db.prepare("INSERT INTO rejected_ticks(mint,source,price,last_good,at,note) VALUES(?,?,?,?,?,?)").run(mint, source, price, lastGood, Date.now(), note);
   },
-  signal(mode: Mode, mint: string, symbol: string, score: number, taken: boolean, reason: string, price: number, mcap = 0, liquidity = 0) {
-    db.prepare("INSERT INTO signals_log(mode,mint,symbol,score,taken,reason,price,at,mcap,liquidity,peak_price,last_price) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-      .run(mode, mint, symbol, score, taken ? 1 : 0, reason, price, Date.now(), mcap, liquidity, price, price);
+  signal(mode: Mode, mint: string, symbol: string, score: number, taken: boolean, reason: string, price: number, mcap = 0, liquidity = 0, setup?: Setup) {
+    db.prepare("INSERT INTO signals_log(mode,mint,symbol,score,taken,reason,price,at,mcap,liquidity,peak_price,last_price,setup) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(mode, mint, symbol, score, taken ? 1 : 0, reason, price, Date.now(), mcap, liquidity, price, price, setup ? JSON.stringify(setup) : null);
   },
 };
 

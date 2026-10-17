@@ -85,6 +85,13 @@
   .labels span { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ivory-dim); }
   .labels span.hot { border-color: var(--blossom); color: var(--blossom); }
   .score { font-family: var(--serif); font-size: 24px; font-weight: 500; color: var(--blossom); }
+  .setup { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--night); border: 1px solid var(--line); }
+  .setup .need { font-size: 14px; color: var(--ivory); }
+  .setup .need b { color: var(--blossom); font-weight: 500; }
+  .setup .track { height: 6px; background: var(--line); border-radius: 3px; margin: 8px 0 4px; position: relative; overflow: hidden; }
+  .setup .track b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--blossom); border-radius: 3px; }
+  .setup .track.far b { background: var(--line-2); }
+  .setup .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--ivory-dim); }
   .fill { padding: 12px 16px 12px 14px; border-left: 4px solid var(--line-2); }
   .fill.buy { border-left-color: var(--blossom); }
   .fill.win { border-left-color: var(--sage); }
@@ -161,7 +168,8 @@
 <h2>Open positions <small id="openCount"></small></h2>
 <div id="open"></div>
 
-<h2>Hot right now <small id="hotCount"></small></h2>
+<h2>Watching <small id="hotCount"></small></h2>
+<p class="dim" style="font-size:13px;margin:0 0 6px">Clean coins with a setup forming. The bar shows how close price is to the trigger. Closest first.</p>
 <div id="hot"></div>
 
 <h2>Today's trades <small id="tradesSummary"></small></h2>
@@ -335,10 +343,25 @@ function openRows(open) {
   }).join("");
 }
 
+function setupBlock(l) {
+  const st = l.setup;
+  if (!st) return `<div class="note">Our last look (${l.mode}, ${ago(Date.now() - l.at)} ago): ${esc(l.reason)}</div>`;
+  let pct = null, label = "";
+  if (st.progress) { pct = st.progress.done / st.progress.of; label = `${st.progress.done} of ${st.progress.of} candles`; }
+  else if (st.distance != null) { pct = Math.max(0, 1 - Math.min(1, st.distance / 0.3)); label = st.distance < 0.005 ? "at the level now" : `${(st.distance * 100).toFixed(1)}% away`; }
+  const far = pct != null && pct < 0.4;
+  return `<div class="setup">
+    <div class="need"><b>${l.mode}</b> needs: ${esc(st.need)}</div>
+    ${pct != null ? `<div class="track ${far ? "far" : ""}"><b style="width:${Math.round(pct * 100)}%"></b></div>` : ""}
+    <div class="meta"><span>${label}</span><span>watching ${ago(Date.now() - (l.watchedSince || l.at))} · checked ${ago(Date.now() - l.at)} ago</span></div>
+  </div>`;
+}
+
 function hotRows(looks, open) {
   const held = new Set(open.map(o => o.mint));
-  // Hot = passed every safety check and a setup is forming or scored. Rejected coins live in "Looked at" below.
-  const rows = looks.filter(l => l.market && !l.rejected).sort((a, b) => (b.score || 0) - (a.score || 0) || b.at - a.at).slice(0, 10);
+  // Watching = passed every safety check and a setup is forming. Rejected coins live in "Looked at" below.
+  const closeness = l => l.setup ? (l.setup.progress ? l.setup.progress.done / l.setup.progress.of : l.setup.distance != null ? 1 - Math.min(1, l.setup.distance / 0.3) : 0) : -1;
+  const rows = looks.filter(l => l.market && !l.rejected).sort((a, b) => closeness(b) - closeness(a) || b.at - a.at).slice(0, 12);
   if (!rows.length) return `<div class="empty">Nothing clean on the radar yet.</div>`;
   return rows.map(l => {
     const m = l.market;
@@ -347,13 +370,13 @@ function hotRows(looks, open) {
     return `<div class="card">
       <div class="head">
         ${av(l.symbol)}
-        <div class="sym">${esc(l.symbol)}<small class="${held.has(l.mint) ? "" : "dim"}">${held.has(l.mint) ? "held" : "not held"}</small>${rewardFlag(m)}</div>
+        <div class="sym">${esc(l.symbol)}<small class="${held.has(l.mint) ? "" : "dim"}">${held.has(l.mint) ? "held" : l.mode}</small>${rewardFlag(m)}</div>
         <div class="gain"><span class="score">${l.score ? Math.round(l.score) : "·"}</span><small>${big(m.mcap)}</small></div>
         ${links(l.mint, m)}
       </div>
-      ${labels.length ? `<div class="labels">${labels.map(x => `<span class="${/trusted|KOL/i.test(x) ? "hot" : ""}">${esc(x)}</span>`).join("")}</div>` : ""}
+      ${setupBlock(l)}
+      ${labels.length ? `<div class="labels">${labels.map(x => `<span class="${/trusted|KOL|holders \+/i.test(x) ? "hot" : ""}">${esc(x)}</span>`).join("")}</div>` : ""}
       ${marketGrid(m, `<div><span>market cap</span>${big(m.mcap)}</div>`)}
-      <div class="note">Our last look (${l.mode}, ${ago(Date.now() - l.at)} ago): ${esc(l.reason)}</div>
     </div>`;
   }).join("");
 }
@@ -548,8 +571,8 @@ function demo() {
     byMode: [{ mode: "pullback", n: 6, wins: 3, pnl: 14.2, open: 1 }, { mode: "ultra", n: 4, wins: 2, pnl: 3.1, open: 1 }, { mode: "bounce", n: 5, wins: 2, pnl: -2.6, open: 0 }, { mode: "trusted", n: 3, wins: 2, pnl: 1.9, open: 1 }],
     looks: [
       { mode: "trusted", mint: "6VsnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpGjm", symbol: "SOUVENIR", score: 0, reason: "1 trusted wallet bought, but mcap $246k > $150k ceiling (copy latency: we'd buy their exit)", at: now - 2.4 * 3600e3, market: mk("SOUVENIR", "SOL", 0.000273, 265000, 45400, [3.4, 20, 59], 1200, 13 * 24, 220000, ["1 trusted bought"]) },
-      { mode: "pullback", mint: "Hmqnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxfart", symbol: "SEXCOIN", score: 0, reason: "watching: only 9% off the high, waiting for a 20-40% retrace", at: now - 12 * 60e3, market: mk("SEXCOIN", "SOL", 0.000233, 228000, 43100, [11, 434, 434], 800, 1.7, 1.49e6, ["1 KOL buy"]) },
-      { mode: "ultra", mint: "2kuYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "dev/null", score: 0, reason: "recovered, but only 2 higher lows", at: now - 30 * 60e3, market: mk("dev/null", "SOL", 0.0000942, 87800, 27000, [-24, 123, 123], 600, 5.3, 1.93e6) },
+      { mode: "pullback", mint: "Hmqnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxfart", symbol: "SEXCOIN", score: 0, reason: "watching: only 9% off the high, waiting for a 20-40% retrace", at: now - 12 * 60e3, watchedSince: now - 95 * 60e3, setup: { need: "pull back to 0.000212 (20% off the 1h high)", level: 0.000212, distance: 0.11 }, market: mk("SEXCOIN", "SOL", 0.000233, 228000, 43100, [11, 434, 434], 800, 1.7, 1.49e6, ["1 KOL buy"]) },
+      { mode: "ultra", mint: "2kuYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "dev/null", score: 0, reason: "recovered, but only 2 higher lows", at: now - 30 * 60e3, watchedSince: now - 4 * 3600e3, setup: { need: "print 3 higher lows", progress: { done: 2, of: 3 } }, market: mk("dev/null", "SOL", 0.0000942, 87800, 27000, [-24, 123, 123], 600, 5.3, 1.93e6) },
     ],
     missed: [
       { mode: "pullback", mint: "3rF2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "XTO", reason: "watching: only 12% off the high, waiting for a 20-40% retrace", at: now - 13 * 3600e3, price: 1, peak_price: 39.4, last_price: 39.1, mcap: 7e6, peakX: 39.4, nowX: 39.1, market: mk("XTO", "SOL", 0.27, 273800000, 4e6, [1, 30, 2900], 90000, 14, 60e6) },

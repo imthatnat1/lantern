@@ -3,7 +3,7 @@ import { log } from "../log.js";
 import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
+import { baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.bounce;
 
@@ -41,10 +41,10 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   const lo = lowestLow(c5, migratedAt);
   const dd = 1 - lo / hi;
   if (dd > C.deadBelow) { logLook("bounce", s, `down ${(dd * 100).toFixed(0)}% since migration, treated as dead`); return null; }
-  if (dd < C.drawdownMin) { logLook("bounce", s, `only ${(dd * 100).toFixed(0)}% off the post-migration high, no dip yet`); return null; }
+  if (dd < C.drawdownMin) { logLook("bounce", s, `only ${(dd * 100).toFixed(0)}% off the post-migration high, no dip yet`, undefined, { need: `dip to ${(hi * (1 - C.drawdownMin)).toPrecision(3)} (35% off the high)`, level: hi * (1 - C.drawdownMin), distance: dist(s.priceUsd, hi * (1 - C.drawdownMin)) }); return null; }
   if (dd > C.drawdownMax) { logLook("bounce", s, `down ${(dd * 100).toFixed(0)}%, deeper than the 70% limit`); return null; }
-  if (!baseHolds(c5, lo, C.baseHoldCandles5m)) { logLook("bounce", s, "low not held for 3 candles yet"); return null; }
-  if (!reclaim(c5, lo * 1.03, C.reclaimVolX)) { logLook("bounce", s, "base holding, waiting for a green reclaim on 1.5x volume"); return null; }
+  if (!baseHolds(c5, lo, C.baseHoldCandles5m)) { logLook("bounce", s, "low not held for 3 candles yet", undefined, { need: `hold above ${lo.toPrecision(3)} for 3 closed 5m candles`, level: lo, distance: dist(s.priceUsd, lo), progress: { done: heldCount(c5, lo), of: C.baseHoldCandles5m } }); return null; }
+  if (!reclaim(c5, lo * 1.03, C.reclaimVolX)) { logLook("bounce", s, "base holding, waiting for a green reclaim on 1.5x volume", undefined, { need: `green 5m close above ${(lo * 1.03).toPrecision(3)} on 1.5x volume`, level: lo * 1.03, distance: dist(s.priceUsd, lo * 1.03) }); return null; }
   if (buySellRatio(s) < 1.0) { logLook("bounce", s, "more sells than buys in 5m"); return null; }
   if (s.priceUsd > lo * C.maxAboveLowX) { logLook("bounce", s, "already 1.6x off the low, chasing"); return null; }
 

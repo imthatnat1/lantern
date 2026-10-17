@@ -5,7 +5,7 @@ import * as rug from "../data/rugcheck.js";
 import * as jup from "../data/jupiter.js";
 import { config } from "../config.js";
 import { isCopycat, isSlop } from "../engine/filters.js";
-import { cooldowns, audit, market, recorder } from "../db.js";
+import { cooldowns, audit, market, recorder, type Setup } from "../db.js";
 
 export interface Context {
   now: number;
@@ -92,13 +92,17 @@ export function logSignal(sig: Signal, taken: boolean, why: string) {
 
 /** Record a look that never became a signal (filtered before scoring). Shows up in "looked at but did not buy". */
 const lastLook = new Map<string, number>();
-export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, holders?: number) {
+export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, holders?: number, setup?: Setup) {
   const k = `${mode}:${s.mint}`;
-  if (Date.now() - (lastLook.get(k) ?? 0) < 60 * 60_000) return;   // one look per coin per mode per hour
+  const gap = setup ? 10 * 60_000 : 60 * 60_000;   // setups refresh every 10 min so the distance bar moves; rejections hourly
+  if (Date.now() - (lastLook.get(k) ?? 0) < gap) return;
   lastLook.set(k, Date.now());
-  audit.signal(mode, s.mint, s.symbol, 0, false, why, s.priceUsd, s.mcapUsd, s.liquidityUsd);
+  audit.signal(mode, s.mint, s.symbol, 0, false, why, s.priceUsd, s.mcapUsd, s.liquidityUsd, setup);
   market.upsert(s, holders, velocityLabel(s.mint));
 }
+
+/** Distance helper: how far price must move to reach `level`, as a positive fraction. */
+export function dist(price: number, level: number): number { return Math.abs(level - price) / price; }
 
 export async function candles5and15(pair: string): Promise<{ c5: Candle[]; c15: Candle[] }> {
   const [c5, c15] = await Promise.all([gecko.candles(pair, 5, 100), gecko.candles(pair, 15, 60)]);
@@ -113,6 +117,13 @@ export function buySellRatio(s: TokenSnapshot): number {
 export function baseHolds(c5: Candle[], low: number, n: number, tol = 0.05): boolean {
   const last = c5.slice(-n - 1, -1);   // exclude the forming candle
   return last.length === n && last.every(k => k.l >= low * (1 - tol));
+}
+
+/** How many of the last n closed 5m candles have held above `low`, counting back from the most recent. */
+export function heldCount(c5: Candle[], low: number, tol = 0.05): number {
+  let n = 0;
+  for (let i = c5.length - 2; i >= 0 && n < 10; i--) { if (c5[i].l >= low * (1 - tol)) n++; else break; }
+  return n;
 }
 
 /** Green close above `level` on volume >= x times the average of the previous n candles. */

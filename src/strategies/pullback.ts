@@ -5,7 +5,7 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, gate, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
+import { baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.pullback;
 
@@ -50,10 +50,10 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const hi = highestHigh(c5, hour * 1 - 2 * 3_600_000);
   const lo = lowestLow(c5.slice(-12), ctx.now - 60 * 60_000);
   const retrace = 1 - lo / hi;
-  if (retrace < C.retraceMin) { logLook("pullback", s, `watching: only ${(retrace * 100).toFixed(0)}% off the high, waiting for a 20-40% retrace`); return null; }
+  if (retrace < C.retraceMin) { logLook("pullback", s, `watching: only ${(retrace * 100).toFixed(0)}% off the high, waiting for a 20-40% retrace`, undefined, { need: `pull back to ${(hi * (1 - C.retraceMin)).toPrecision(3)} (20% off the 1h high)`, level: hi * (1 - C.retraceMin), distance: dist(s.priceUsd, hi * (1 - C.retraceMin)) }); return null; }
   if (retrace > C.retraceMax) { logLook("pullback", s, `retraced ${(retrace * 100).toFixed(0)}%, too deep, likely dead`); return null; }
-  if (!baseHolds(c5, lo, C.holdCandles5m)) { logLook("pullback", s, "retrace low not held for 3 candles yet"); return null; }
-  if (!reclaim(c5, lo * 1.03, C.reclaimVolX)) { logLook("pullback", s, "base holding, waiting for a green reclaim on volume"); return null; }
+  if (!baseHolds(c5, lo, C.holdCandles5m)) { logLook("pullback", s, "retrace low not held for 3 candles yet", undefined, { need: `hold above ${lo.toPrecision(3)} for 3 closed 5m candles`, level: lo, distance: dist(s.priceUsd, lo), progress: { done: heldCount(c5, lo), of: C.holdCandles5m } }); return null; }
+  if (!reclaim(c5, lo * 1.03, C.reclaimVolX)) { logLook("pullback", s, "base holding, waiting for a green reclaim on volume", undefined, { need: `green 5m close above ${(lo * 1.03).toPrecision(3)} on 1.3x volume`, level: lo * 1.03, distance: dist(s.priceUsd, lo * 1.03) }); return null; }
   if (s.priceUsd > lo * C.maxAboveLowX) { logLook("pullback", s, "reclaim already ran >25% off the low, chasing"); return null; }
   if (buySellRatio(s) < 1.0) { logLook("pullback", s, "more sells than buys in 5m"); return null; }
 
