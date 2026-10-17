@@ -28,7 +28,7 @@ export const trusted: Strategy = {
     const buys = (await Promise.all(wallets.map(w => helius.recentBuys(w, since, C.heliusDailyCredits)))).flat();
 
     // Group by mint; count distinct wallets within the window.
-    const byMint = new Map<string, Set<string>>();
+    const byMint = new Map<string, Set<string>>();   // mint -> wallet addresses
     for (const b of buys) {
       if (seen[b.signature]) continue;
       seen[b.signature] = b.at;
@@ -44,7 +44,7 @@ export const trusted: Strategy = {
       const s = snaps.get(mint);
       if (!s) continue;
       try {
-        const sig = await check(s, ctx, ws.size);
+        const sig = await check(s, ctx, ws.size, [...ws].map(config.walletName));
         if (sig) out.push(sig);
       } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "trusted check failed"); }
     }
@@ -52,8 +52,8 @@ export const trusted: Strategy = {
   },
 };
 
-async function check(s: TokenSnapshot, ctx: Context, walletCount: number): Promise<Signal | null> {
-  const who = `${walletCount} trusted wallet${walletCount > 1 ? "s" : ""} bought`;
+async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names: string[] = []): Promise<Signal | null> {
+  const who = `${names.join(" + ") || walletCount + " trusted"} bought`;
   if (s.mcapUsd > C.mcapMax) { logLook("trusted", s, `${who}, but mcap $${(s.mcapUsd / 1000).toFixed(0)}k > $150k ceiling (copy latency: we'd buy their exit)`); return null; }
   if (s.change5m / 100 > C.maxPump5m) { logLook("trusted", s, `${who}, but already up ${s.change5m.toFixed(0)}% in 5m`); return null; }
   if (s.liquidityUsd < C.minLiquidity && !s.onCurve) { logLook("trusted", s, `${who}, but liquidity under $10k`); return null; }
@@ -83,9 +83,9 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number): Promi
 
   const sig: Signal = {
     mode: "trusted", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
-    reason: `${walletCount} trusted wallet${walletCount > 1 ? "s" : ""} bought`,
+    reason: `trusted copy: ${names.join(" + ") || walletCount + " wallets"} bought`,
     snapshot: s, candles15: c15,
-    meta: { atr15: a15, walletCount, holders: g.holders },
+    meta: { atr15: a15, walletCount, wallets: names, holders: g.holders },
     plan: (entry, atr15) => ({
       hardFloorPct: 0.45,
       closeStopPrice: structuralStop(entry, low, atr15, 1, 0.30),

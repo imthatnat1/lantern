@@ -86,7 +86,8 @@ function velocityLabel(mint: string): string[] {
 export function logSignal(sig: Signal, taken: boolean, why: string) {
   audit.signal(sig.mode, sig.mint, sig.symbol, sig.score, taken, why, sig.snapshot.priceUsd, sig.snapshot.mcapUsd, sig.snapshot.liquidityUsd);
   const labels: string[] = [...velocityLabel(sig.mint)];
-  if (sig.meta?.walletCount) labels.push(`${sig.meta.walletCount} trusted bought`);
+  if (sig.meta?.wallets && (sig.meta.wallets as string[]).length) labels.push(`${(sig.meta.wallets as string[]).join(" + ")} bought`);
+  else if (sig.meta?.walletCount) labels.push(`${sig.meta.walletCount} trusted bought`);
   market.upsert(sig.snapshot, sig.meta?.holders as number | undefined, labels);
 }
 

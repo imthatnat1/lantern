@@ -23,6 +23,13 @@ const DEFAULT_PINNED = [
   "DFMt2FyLpB6ekPNAzVErLXgpSnJ9CRf1VnxBAkTLpump", // FTR
 ];
 
+/** Trusted wallets Nat follows on pump.fun. Public addresses; TRUSTED_WALLETS in .env adds to these. */
+export const DEFAULT_TRUSTED: { name: string; address: string }[] = [
+  { name: "wirelyss", address: "AvGiSdrkwtGYhrrFXZPtdhNhV4pASUR67TmRjfaKGdMP" },
+  { name: "hexi", address: "21rgbFW6sujQovCw3qt6R2EdE97Yzzvk8sSc37Bb72Cm" },
+  { name: "sapphy", address: "B5TrL7PsRUwCTL5bVcueieht5QchTw4TWLQDKqEaxEzi" },
+];
+
 export const config = {
   keys: {
     helius: env("HELIUS_API_KEY"),
@@ -30,7 +37,8 @@ export const config = {
     xBearer: env("X_BEARER_TOKEN"),
     anthropic: env("ANTHROPIC_API_KEY"),
   },
-  trustedWallets: env("TRUSTED_WALLETS").split(",").map(s => s.trim()).filter(Boolean),
+  trustedWallets: [...new Set([...DEFAULT_TRUSTED.map(w => w.address), ...env("TRUSTED_WALLETS").split(",").map(s => s.trim()).filter(Boolean)])],
+  walletName: (address: string) => DEFAULT_TRUSTED.find(w => w.address === address)?.name ?? address.slice(0, 4) + "…" + address.slice(-4),
   /** Mints Nat likes. Always in scope for dip and ultra, exempt from the copycat filter. */
   pinned: [...DEFAULT_PINNED, ...env("PINNED_MINTS").split(",").map(s => s.trim()).filter(Boolean)],
   startingCapital: num("STARTING_CAPITAL", 300),
