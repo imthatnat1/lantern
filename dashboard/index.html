@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#161a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Lantern</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #161a2e;
+    --night-2: #1d2238;
+    --line: #2b3150;
+    --ivory: #efe9df;
+    --ivory-dim: #a9a69d;
+    --blossom: #f0a7bb;
+    --sage: #9fcf9a;
+    --coral: #ef8a7a;
+    --gold: #e6c27a;
+    --serif: "Fraunces", Georgia, serif;
+    --sans: "Instrument Sans", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--night); }
+  body {
+    margin: 0; background: var(--night); color: var(--ivory);
+    font-family: var(--sans); font-size: 16px; line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    padding: calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 40px);
+    max-width: 640px; margin-inline: auto;
+  }
+  a { color: inherit; }
+  h2 {
+    font: 500 15px/1.3 var(--sans); color: var(--ivory-dim); letter-spacing: .01em;
+    margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line);
+  }
+
+  /* Hero: the verdict */
+  .top { display: flex; justify-content: space-between; align-items: baseline; color: var(--ivory-dim); font-size: 14px; }
+  .top b { color: var(--ivory); font-weight: 500; }
+  .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--sage); margin-right: 7px; vertical-align: 1px; }
+  .pulse.down { background: var(--coral); }
+  .pulse.stale { background: var(--gold); }
+  .verdict {
+    font-family: var(--serif); font-weight: 300; font-size: clamp(30px, 8.5vw, 44px); line-height: 1.12;
+    margin: 28px 0 10px; letter-spacing: -.01em; font-variation-settings: "opsz" 144;
+  }
+  .verdict .amt { font-weight: 500; }
+  .verdict.up .amt { color: var(--sage); }
+  .verdict.down .amt { color: var(--coral); }
+  .verdict.flat .amt { color: var(--blossom); }
+  .sub { color: var(--ivory-dim); font-size: 15px; margin: 0 0 22px; }
+
+  /* Equity line */
+  .chart { position: relative; height: 120px; margin: 0 -4px; }
+  .chart svg { width: 100%; height: 100%; overflow: visible; display: block; }
+  .chart .axis { position: absolute; left: 4px; right: 4px; bottom: -18px; display: flex; justify-content: space-between; font-size: 12px; color: var(--ivory-dim); }
+
+  /* Stats row */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 36px; }
+  .stat { padding: 12px 0; border-top: 1px solid var(--line); }
+  .stat .v { font-size: 21px; font-weight: 500; }
+  .stat .k { font-size: 13px; color: var(--ivory-dim); margin-top: 2px; }
+  .stat .v.vault { color: var(--gold); }
+
+  /* Position rows */
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; padding: 14px 0; border-bottom: 1px solid var(--line); align-items: center; }
+  .row:last-child { border-bottom: 0; }
+  .row .sym { font-weight: 600; font-size: 17px; }
+  .row .sym small { font-weight: 400; color: var(--ivory-dim); margin-left: 8px; font-size: 13px; }
+  .row .gain { font-size: 19px; font-weight: 500; text-align: right; }
+  .row .meta { grid-column: 1 / -1; font-size: 13px; color: var(--ivory-dim); }
+  .up { color: var(--sage); } .down { color: var(--coral); }
+  /* Stop-to-peak bar: where price sits between the stop and the peak */
+  .bar { grid-column: 1 / -1; height: 4px; background: var(--line); border-radius: 2px; position: relative; margin-top: 4px; }
+  .bar i { position: absolute; top: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--ivory); transform: translateX(-50%); }
+  .bar b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--sage); border-radius: 2px; opacity: .55; }
+
+  .empty { color: var(--ivory-dim); padding: 18px 0; font-size: 15px; }
+  .empty.err { color: var(--coral); }
+
+  /* Mode table */
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  td, th { text-align: left; padding: 9px 0; border-bottom: 1px solid var(--line); font-weight: 400; }
+  th { color: var(--ivory-dim); font-weight: 500; font-size: 13px; }
+  td:last-child, th:last-child { text-align: right; }
+  td:nth-child(2), th:nth-child(2) { text-align: right; }
+
+  .guard { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; font-size: 15px; }
+  .guard span:nth-child(even) { text-align: right; }
+  .guard .dim { color: var(--ivory-dim); }
+  .foot { margin-top: 44px; font-size: 13px; color: var(--ivory-dim); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .verdict { animation: in .6s ease-out both; }
+    @keyframes in { from { opacity: 0; transform: translateY(6px); } }
+  }
+  :focus-visible { outline: 2px solid var(--blossom); outline-offset: 3px; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <span><i class="pulse" id="pulse"></i><b id="status">Connecting</b></span>
+  <span id="clock"></span>
+</div>
+
+<p class="verdict flat" id="verdict">Reading the book.</p>
+<p class="sub" id="sub"></p>
+
+<div class="chart" id="chart"><svg viewBox="0 0 600 120" preserveAspectRatio="none" aria-label="Equity over the last 48 hours"></svg><div class="axis"><span id="ax0"></span><span id="ax1"></span></div></div>
+
+<div class="stats">
+  <div class="stat"><div class="v" id="equity">–</div><div class="k">equity</div></div>
+  <div class="stat"><div class="v vault" id="vault">–</div><div class="k">locked in vault</div></div>
+  <div class="stat"><div class="v" id="sinceStart">–</div><div class="k">since start</div></div>
+</div>
+
+<h2>Open right now</h2>
+<div id="open"></div>
+
+<h2>Closed in the last 24 hours</h2>
+<div id="closed"></div>
+
+<h2>By mode, all time</h2>
+<div id="modes"></div>
+
+<h2>Guardrails</h2>
+<div class="guard" id="guard"></div>
+
+<p class="foot" id="foot"></p>
+
+<script>
+const $ = id => document.getElementById(id);
+const usd = (n, sign = false) => (sign && n > 0 ? "+" : "") + (n < 0 ? "−" : "") + "$" + Math.abs(n).toFixed(2);
+const pct = n => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n * 100).toFixed(0) + "%";
+const ago = ms => { const m = Math.round(ms / 60000); if (m < 60) return m + "m"; const h = Math.floor(m / 60); return h < 48 ? h + "h " + (m % 60) + "m" : Math.floor(h / 24) + "d"; };
+const hhmm = t => new Date(t).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit", timeZone: "Australia/Brisbane" });
+const hourB = () => Number(new Date().toLocaleString("en-AU", { hour: "numeric", hour12: false, timeZone: "Australia/Brisbane" }));
+
+// "Since you went to bed" = since 9pm Brisbane if it's before noon, otherwise since Brisbane midnight.
+function bedtime(now) {
+  const h = hourB();
+  const d = new Date(now);
+  const bris = new Date(d.getTime() + 10 * 3600e3);
+  bris.setUTCHours(0, 0, 0, 0);
+  const midnight = bris.getTime() - 10 * 3600e3;
+  return h < 12 ? midnight - 3 * 3600e3 : midnight;
+}
+
+function verdict(s) {
+  const now = s.at, since = bedtime(now);
+  const night = s.closed.filter(c => c.closed_at >= since);
+  const nightPnl = night.reduce((a, c) => a + c.realized_usd, 0);
+  const openPnl = s.open.reduce((a, p) => a + (p.valueUsd - p.costUsd), 0);
+  const total = nightPnl + openPnl;
+  const wins = night.filter(c => c.realized_usd > 0).length;
+  const morning = hourB() < 12;
+  const window = morning ? "since you went to bed" : "so far today";
+  const v = $("verdict");
+  v.className = "verdict " + (total > 0.5 ? "up" : total < -0.5 ? "down" : "flat");
+  const word = total > 0.5 ? "Up" : total < -0.5 ? "Down" : "Flat";
+  v.innerHTML = word === "Flat"
+    ? `<span class="amt">Flat</span> ${window}.`
+    : `${word} <span class="amt">${usd(Math.abs(total))}</span> ${window}.`;
+  const parts = [];
+  if (night.length) parts.push(`${night.length} closed, ${wins} won`);
+  if (s.open.length) parts.push(`${s.open.length} still running ${openPnl >= 0 ? "up" : "down"} ${usd(Math.abs(openPnl))}`);
+  if (!night.length && !s.open.length) parts.push("Nothing traded yet. Watching.");
+  $("sub").textContent = parts.join(". ") + ".";
+}
+
+function chart(eq) {
+  const svg = document.querySelector("#chart svg");
+  if (eq.length < 2) { svg.innerHTML = ""; $("ax0").textContent = ""; $("ax1").textContent = "not enough history yet"; return; }
+  const xs = eq.map(e => e.at), ys = eq.map(e => e.equity);
+  const x0 = xs[0], x1 = xs[xs.length - 1], lo = Math.min(...ys), hi = Math.max(...ys), pad = (hi - lo) * 0.15 || 1;
+  const X = t => 600 * (t - x0) / (x1 - x0 || 1), Y = v => 110 - 100 * (v - (lo - pad)) / (hi - lo + 2 * pad);
+  const d = eq.map((e, i) => (i ? "L" : "M") + X(e.at).toFixed(1) + " " + Y(e.equity).toFixed(1)).join(" ");
+  const start = ys[0], end = ys[ys.length - 1];
+  const col = end >= start ? "var(--sage)" : "var(--coral)";
+  svg.innerHTML = `
+    <line x1="0" x2="600" y1="${Y(start).toFixed(1)}" y2="${Y(start).toFixed(1)}" stroke="var(--line)" stroke-dasharray="3 5" vector-effect="non-scaling-stroke"/>
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+    <circle cx="${X(x1).toFixed(1)}" cy="${Y(end).toFixed(1)}" r="3.5" fill="${col}"/>`;
+  $("ax0").textContent = hhmm(x0); $("ax1").textContent = "now · " + usd(end);
+}
+
+function openRows(open) {
+  if (!open.length) return `<div class="empty">No open positions. The scanners are watching.</div>`;
+  return open.map(p => {
+    const span = p.peakPct - p.stopPct || 1;
+    const pos = Math.max(0, Math.min(1, (p.gainPct - p.stopPct) / span));
+    return `<div class="row">
+      <div class="sym">${p.symbol}<small>${p.mode}</small></div>
+      <div class="gain ${p.gainPct >= 0 ? "up" : "down"}">${pct(p.gainPct)}</div>
+      <div class="meta">${usd(p.costUsd)} in · ${ago(Date.now() - p.openedAt)} · stop at ${pct(p.stopPct)} · peak ${pct(p.peakPct)}</div>
+      <div class="bar" title="where price sits between the stop and the peak"><b style="width:${(pos * 100).toFixed(0)}%"></b><i style="left:${(pos * 100).toFixed(0)}%"></i></div>
+    </div>`;
+  }).join("");
+}
+
+function closedRows(closed) {
+  const since = Date.now() - 24 * 3600e3;
+  const rows = closed.filter(c => c.closed_at >= since);
+  if (!rows.length) return `<div class="empty">Nothing closed in the last day.</div>`;
+  return rows.map(c => `<div class="row">
+    <div class="sym">${c.symbol}<small>${c.mode}</small></div>
+    <div class="gain ${c.realized_usd >= 0 ? "up" : "down"}">${usd(c.realized_usd, true)}</div>
+    <div class="meta">${hhmm(c.closed_at)} · ${c.close_reason || ""} · held ${ago(c.closed_at - c.entry_at)}</div>
+  </div>`).join("");
+}
+
+function modeTable(byMode) {
+  if (!byMode.length) return `<div class="empty">No closed trades yet.</div>`;
+  const rows = byMode.sort((a, b) => b.pnl - a.pnl).map(m =>
+    `<tr><td>${m.mode}</td><td>${m.wins} / ${m.n}</td><td class="${m.pnl >= 0 ? "up" : "down"}">${usd(m.pnl, true)}</td></tr>`).join("");
+  return `<table><tr><th>mode</th><th>won / closed</th><th>P&amp;L</th></tr>${rows}</table>`;
+}
+
+function guard(s) {
+  const g = s.guardrails, a = s.account, h = s.health;
+  const lossLeft = g.dailyLossStopUsd + Math.min(0, a.realizedToday);
+  const ddRoom = a.equity - g.drawdownHaltAt;
+  return `
+    <span>Daily loss room</span><span class="${lossLeft <= 10 ? "down" : ""}">${usd(Math.max(0, lossLeft))} of ${usd(g.dailyLossStopUsd)}</span>
+    <span>Room above drawdown halt</span><span class="${ddRoom <= 15 ? "down" : ""}">${usd(ddRoom)}</span>
+    <span>Capital at risk</span><span>${usd(g.capitalAtRisk)} of ${usd(g.maxCapitalAtRisk)}</span>
+    <span>Launch feed</span><span class="${h.feedDownS > 120 ? "down" : ""}">${h.feedDownS > 120 ? "down " + ago(h.feedDownS * 1000) : "live"}</span>
+    <span>Price feed</span><span class="${h.dexStaleS > 60 ? "down" : ""}">${h.dexStaleS > 60 ? "stale " + ago(h.dexStaleS * 1000) : "live"}</span>
+    <span>Junk ticks refused, 24h</span><span>${h.rejectedTicks24h}</span>`;
+}
+
+function render(s) {
+  const stale = Date.now() - s.at > 120e3;
+  $("pulse").className = "pulse" + (stale ? " stale" : s.health.feedDownS > 120 || s.health.dexStaleS > 60 ? " down" : "");
+  $("status").textContent = stale ? "Last heard " + ago(Date.now() - s.at) + " ago" : "Running";
+  $("clock").textContent = hhmm(Date.now()) + " Brisbane";
+  verdict(s);
+  chart(s.equity);
+  $("equity").textContent = usd(s.account.equity);
+  $("vault").textContent = usd(s.account.vault);
+  const d = s.account.equity + s.account.vault - s.account.startingCapital;
+  $("sinceStart").textContent = usd(d, true);
+  $("sinceStart").className = "v " + (d >= 0 ? "up" : "down");
+  $("open").innerHTML = openRows(s.open);
+  $("closed").innerHTML = closedRows(s.closed);
+  $("modes").innerHTML = modeTable(s.byMode);
+  $("guard").innerHTML = guard(s);
+  $("foot").textContent = `Paper trading since ${new Date(s.health.startedAt).toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "Australia/Brisbane" })}. Refreshes every 30 seconds.`;
+}
+
+function fail(msg) {
+  $("pulse").className = "pulse down";
+  $("status").textContent = "Not connected";
+  $("verdict").className = "verdict flat";
+  $("verdict").innerHTML = `Can't reach the bot.`;
+  $("sub").textContent = msg;
+  for (const id of ["open", "closed", "modes"]) $(id).innerHTML = "";
+  $("guard").innerHTML = "";
+}
+
+async function load() {
+  if (location.search.includes("demo")) return render(demo());
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    const s = await r.json();
+    if (!r.ok) return fail(s.error || "Unknown error");
+    render(s);
+  } catch (e) { fail("Network error. Pull down to retry."); }
+}
+
+function demo() {
+  const now = Date.now();
+  const eq = []; let v = 300;
+  for (let i = 96; i >= 0; i--) { v += (Math.random() - 0.47) * 2.2; eq.push({ at: now - i * 30 * 60e3, equity: v, cash: v - 20, vault: 4.1 }); }
+  return {
+    at: now,
+    account: { cash: 281.3, vault: 6.2, equity: 309.9, peakEquity: 312, startingCapital: 300, realizedToday: 7.4 },
+    guardrails: { dailyLossStopUsd: 30, drawdownHaltAt: 249.6, capitalAtRisk: 21.5, maxCapitalAtRisk: 180 },
+    health: { feedDownS: 0, dexStaleS: 4, rejectedTicks24h: 3, startedAt: now - 2 * 86400e3 },
+    open: [
+      { symbol: "KURP", mode: "pullback", costUsd: 5, valueUsd: 9.4, gainPct: 0.88, stopPct: -0.31, peakPct: 1.1, openedAt: now - 4.2 * 3600e3 },
+      { symbol: "FTR", mode: "ultra", costUsd: 8, valueUsd: 7.1, gainPct: -0.11, stopPct: -0.42, peakPct: 0.14, openedAt: now - 1.1 * 3600e3 },
+      { symbol: "ZCAT", mode: "trusted", costUsd: 4, valueUsd: 4.6, gainPct: 0.15, stopPct: -0.28, peakPct: 0.22, openedAt: now - 40 * 60e3 },
+    ],
+    closed: [
+      { symbol: "OPTIMA", mode: "pullback", realized_usd: 6.8, closed_at: now - 3 * 3600e3, entry_at: now - 9 * 3600e3, close_reason: "TP +60%" },
+      { symbol: "GHOSTCAT", mode: "bounce", realized_usd: -1.9, closed_at: now - 5 * 3600e3, entry_at: now - 7 * 3600e3, close_reason: "close stop" },
+      { symbol: "Irene", mode: "ultra", realized_usd: 2.5, closed_at: now - 8 * 3600e3, entry_at: now - 14 * 3600e3, close_reason: "trail 35% from peak close" },
+    ],
+    equity: eq,
+    byMode: [
+      { mode: "pullback", n: 6, wins: 3, pnl: 14.2 }, { mode: "ultra", n: 4, wins: 2, pnl: 3.1 },
+      { mode: "bounce", n: 5, wins: 2, pnl: -2.6 }, { mode: "trusted", n: 3, wins: 2, pnl: 1.9 },
+    ],
+  };
+}
+
+load();
+setInterval(load, 30e3);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
+</script>
+</body>
+</html>

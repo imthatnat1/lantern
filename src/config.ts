@@ -16,7 +16,7 @@ export const config = {
   },
   trustedWallets: env("TRUSTED_WALLETS").split(",").map(s => s.trim()).filter(Boolean),
   startingCapital: num("STARTING_CAPITAL", 300),
-  dbPath: env("DB_PATH", "./data/memeterm.db"),
+  dbPath: env("DB_PATH", "./data/lantern.db"),
   logLevel: env("LOG_LEVEL", "info"),
   timezone: "Australia/Brisbane",
 

@@ -13,6 +13,7 @@ import { ultra } from "./strategies/ultra.js";
 import { bounce } from "./strategies/bounce.js";
 import { pullback } from "./strategies/pullback.js";
 import { trusted } from "./strategies/trusted.js";
+import { startServer, snapshotEquity } from "./server.js";
 
 const strategies: Strategy[] = [ultra, bounce, pullback, trusted];
 const lastRun = new Map<string, number>();
@@ -88,11 +89,17 @@ async function heartbeat() {
     open: positions.open().length, today: broker.realizedToday().toFixed(2),
     feedDownS: Math.round(feed.downForMs / 1000),
   }, "heartbeat");
+  snapshotEquity(markPrices);
 }
 
 async function main() {
-  log.info({ capital: config.startingCapital, modes: strategies.map(s => s.name) }, "memeterm-v2 starting");
+  log.info({ capital: config.startingCapital, modes: strategies.map(s => s.name) }, "lantern starting");
+  if (!kv.get("startedAt", 0)) kv.set("startedAt", Date.now());
   feed.start();
+  startServer(() => markPrices, () => ({
+    feedDownS: Math.round(Math.min(feed.downForMs, 99_999_000) / 1000),
+    dexStaleS: Math.round((Date.now() - lastDexOk) / 1000),
+  }));
   solPrice = await jup.solPrice();
   setInterval(async () => { solPrice = await jup.solPrice(); }, 60_000);
   const tick = async () => {

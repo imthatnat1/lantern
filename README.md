@@ -1,6 +1,6 @@
-# memeterm-v2
+# Lantern
 
-Paper-trading bot for Solana memecoins. Built 17 Oct 2026 to replace the 14-mode v1 after its first night lost $77, two thirds of it to junk price ticks.
+Paper-trading bot for Solana memecoins. It runs while you sleep. Built 17 Oct 2026 to replace the 14-mode v1 after its first night lost $77, two thirds of it to junk price ticks.
 
 ## What's different from v1
 
@@ -48,17 +48,17 @@ Deploy on the droplet with pm2 so it survives reboots:
 
 ```
 npm i -g pm2
-pm2 start dist/main.js --name memeterm-v2
+pm2 start dist/main.js --name lantern
 pm2 save && pm2 startup
-pm2 logs memeterm-v2
+pm2 logs lantern
 ```
 
 ## Reading results
 
 ```
-sqlite3 data/memeterm.db "select mode, count(*), sum(net_usd) from fills where side='sell' group by mode"
-sqlite3 data/memeterm.db "select * from rejected_ticks order by at desc limit 20"
-sqlite3 data/memeterm.db "select mode, symbol, score, taken, reason from signals_log order by at desc limit 30"
+sqlite3 data/lantern.db "select mode, count(*), sum(net_usd) from fills where side='sell' group by mode"
+sqlite3 data/lantern.db "select * from rejected_ticks order by at desc limit 20"
+sqlite3 data/lantern.db "select mode, symbol, score, taken, reason from signals_log order by at desc limit 30"
 ```
 
 `rejected_ticks` is the receipt for every junk price the sanity check refused. `signals_log` shows every signal and why it was or wasn't taken.
