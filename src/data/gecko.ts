@@ -38,10 +38,18 @@ export function lowestLow(c: Candle[], sinceMs: number): number {
   return lo === Infinity ? (c.at(-1)?.l ?? 0) : lo;
 }
 
+/** Highest CLOSE since `sinceMs`. Wicks on thin pools and data glitches make raw highs useless as a reference. */
 export function highestHigh(c: Candle[], sinceMs: number): number {
   let hi = 0;
-  for (const k of c) if (k.t >= sinceMs) hi = Math.max(hi, k.h);
-  return hi || (c.at(-1)?.h ?? 0);
+  for (const k of c) if (k.t >= sinceMs) hi = Math.max(hi, Math.max(k.o, k.c));
+  return hi || (c.at(-1)?.c ?? 0);
+}
+
+/** Lowest CLOSE since `sinceMs`, for the same reason. Stops still use true lows via lowestLow. */
+export function lowestClose(c: Candle[], sinceMs: number): number {
+  let lo = Infinity;
+  for (const k of c) if (k.t >= sinceMs) lo = Math.min(lo, Math.min(k.o, k.c));
+  return lo === Infinity ? (c.at(-1)?.c ?? 0) : lo;
 }
 
 export function vwap(c: Candle[], sinceMs: number): number {

@@ -100,7 +100,7 @@ async function scanLoop() {
   const now = Date.now();
   if (kv.get("paused", false)) return;
   const ctx: Context = { now, solPrice, migrations };
-  const feedHealthy = now - lastDexOk < config.risk.feedStaleMs || positions.open().length === 0;
+  const feedHealthy = now - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs;
   for (const s of strategies) {
     if (now - (lastRun.get(s.name) ?? 0) < s.everyMs) continue;
     lastRun.set(s.name, now);
@@ -136,7 +136,7 @@ async function main() {
   feed.start();
   startServer(() => markPrices, () => ({
     feedDownS: Math.round(Math.min(feed.downForMs, 99_999_000) / 1000),
-    dexStaleS: Math.round((Date.now() - lastDexOk) / 1000),
+    dexStaleS: Math.round((Date.now() - Math.max(lastDexOk, dex.lastOkAt)) / 1000),
   }));
   solPrice = await jup.solPrice();
   setInterval(async () => { solPrice = await jup.solPrice(); }, 60_000);

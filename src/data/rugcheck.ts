@@ -31,7 +31,7 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
       headers: config.keys.rugcheck ? { authorization: `Bearer ${config.keys.rugcheck}` } : {},
     });
   } catch (e) {
-    return { ok: false, reasons: ["rugcheck unavailable"] };
+    return fallbackOnChain(mint, onCurve);
   }
 
   if (rep.rugged) {
@@ -59,4 +59,29 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
   if (top10 > 60) reasons.push(`top 10 hold ${top10.toFixed(0)}%`);
 
   return { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator };
+}
+
+/**
+ * When RugCheck is down or has no report, check the two things that matter most straight from the chain:
+ * mint authority and freeze authority. Everything else (LP, holders) is unknown, so we pass with a note
+ * and let the strategies' own liquidity/holder rules do the rest. Fails closed if the chain call also fails.
+ */
+async function fallbackOnChain(mint: string, onCurve: boolean): Promise<SafetyResult> {
+  if (!config.keys.helius) return { ok: false, reasons: ["rugcheck unavailable, no helius key for fallback"] };
+  try {
+    const res = await fetch(`https://mainnet.helius-rpc.com/?api-key=${config.keys.helius}`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [mint, { encoding: "jsonParsed" }] }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const j = await res.json() as any;
+    const info = j?.result?.value?.data?.parsed?.info;
+    if (!info) return { ok: false, reasons: ["rugcheck unavailable, mint not readable on chain"] };
+    const reasons: string[] = [];
+    if (info.mintAuthority) reasons.push("mint authority active (on-chain)");
+    if (info.freezeAuthority) reasons.push("freeze authority active (on-chain)");
+    return { ok: reasons.length === 0, reasons: reasons.length ? reasons : [], holders: undefined };
+  } catch {
+    return { ok: false, reasons: ["rugcheck unavailable and chain check failed"] };
+  }
 }

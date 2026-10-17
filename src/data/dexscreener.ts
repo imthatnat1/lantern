@@ -2,6 +2,9 @@ import { getJson } from "./http.js";
 import type { TokenSnapshot } from "../types.js";
 import { recorder } from "../db.js";
 
+/** Last time DexScreener answered with usable data. Read by the health check. */
+export let lastOkAt = 0;
+
 interface DsPair {
   chainId: string; dexId: string; pairAddress: string;
   baseToken: { address: string; name: string; symbol: string };
@@ -40,6 +43,7 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
     fetchedAt: Date.now(),
   };
+  lastOkAt = Date.now();
   try { recorder.tick(snap); } catch { /* recording is best effort */ }
   return snap;
 }
@@ -80,6 +84,7 @@ async function snapshotFromPair(mint: string, p: DsPair): Promise<TokenSnapshot 
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
     fetchedAt: Date.now(),
   };
+  lastOkAt = Date.now();
   try { recorder.tick(snap); } catch { /* best effort */ }
   return snap;
 }
