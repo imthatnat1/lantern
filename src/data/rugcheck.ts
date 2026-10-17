@@ -1,7 +1,7 @@
 import { getJson } from "./http.js";
 import { config } from "../config.js";
 import type { SafetyResult } from "../types.js";
-import { recorder, creators } from "../db.js";
+import { recorder, creators, kv } from "../db.js";
 
 interface RcReport {
   rugged?: boolean;
@@ -32,8 +32,10 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
       headers: config.keys.rugcheck ? { authorization: `Bearer ${config.keys.rugcheck}` } : {},
     });
   } catch (e) {
+    kv.set("rugcheck:lastErr", String(e).slice(0, 60));
     return fallbackOnChain(mint, onCurve);
   }
+  kv.set("rugcheck:lastOkAt", Date.now());
 
   if (rep.rugged) {
     reasons.push("flagged rugged");

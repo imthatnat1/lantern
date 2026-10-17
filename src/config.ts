@@ -1,7 +1,8 @@
 import "dotenv/config";
 import type { Mode } from "./types.js";
 
-const env = (k: string, d = "") => process.env[k] ?? d;
+// A value like "$HELIUS" is an unexpanded placeholder copied from the old bot's files, not a key. Treat it as unset.
+const env = (k: string, d = "") => { const v = (process.env[k] ?? "").trim(); return !v || v.startsWith("$") ? d : v; };
 const num = (k: string, d: number) => {
   const v = Number(process.env[k]);
   return Number.isFinite(v) ? v : d;

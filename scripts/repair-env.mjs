@@ -13,6 +13,9 @@ function note(msg) {
 
 if (!existsSync(ENV)) process.exit(0);
 let env = readFileSync(ENV, "utf8");
+// Blank any other "$PLACEHOLDER" values (RugCheck works without a key; a bogus Bearer token makes it fail).
+const cleaned = env.replace(/^([A-Z_]+)=\$[A-Za-z_]*$/gm, "$1=");
+if (cleaned !== env) { env = cleaned; writeFileSync(ENV, env, { mode: 0o600 }); note("blanked unexpanded $PLACEHOLDER values in .env"); }
 const cur = (env.match(/^HELIUS_API_KEY=(.*)$/m)?.[1] ?? "").trim().replace(/^['"]|['"]$/g, "");
 if (UUID.test(cur)) process.exit(0);
 
