@@ -61,11 +61,13 @@ fi
 npm run build 2>&1 | tail -20
 
 say "5/5  Starting"
-pm2 delete lantern >/dev/null 2>&1 || true
-pm2 start dist/main.js --name lantern >/dev/null
-pm2 save >/dev/null
-pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
-command -v ufw >/dev/null && ufw allow 8787/tcp >/dev/null 2>&1 || true
+set +e
+pm2 delete lantern >/dev/null 2>&1
+pm2 start dist/main.js --name lantern --time || { echo "pm2 start failed"; pm2 list; }
+pm2 save
+pm2 startup systemd -u root --hp /root >/dev/null 2>&1
+command -v ufw >/dev/null && ufw allow 8787/tcp >/dev/null 2>&1
+set -e
 
 # Auto-update: every 10 minutes, pull from GitHub; rebuild and restart only if something changed.
 cat > /opt/lantern/update.sh <<'EOS'
