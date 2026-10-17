@@ -48,7 +48,7 @@ fi
 
 say "4/5  Building and testing"
 echo "node $(node -v), npm $(npm -v)"
-npm install --no-audit --no-fund 2>&1 | tail -5
+npm install --include=dev --no-audit --no-fund 2>&1 | tail -5
 set +e
 npm test 2>&1 | grep -vE "^\s*(duration_ms|type:|\.\.\.|---|location:|failureType:)" | tail -40
 TEST_RC=${PIPESTATUS[0]}
@@ -73,7 +73,7 @@ cat > /opt/lantern/update.sh <<'EOS'
 cd /opt/lantern || exit 0
 git fetch -q origin main || exit 0
 if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
-  git pull -q origin main && npm install --silent && npm run build --silent && pm2 restart lantern >/dev/null
+  git pull -q origin main && npm install --include=dev --silent && npm run build --silent && pm2 restart lantern >/dev/null
   echo "$(date -u +%FT%TZ) updated to $(git rev-parse --short HEAD)" >> /opt/lantern/data/updates.log
 fi
 EOS
