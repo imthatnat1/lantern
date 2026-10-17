@@ -78,13 +78,26 @@ async function missedRunnersLoop() {
   const now = Date.now();
   if (now - lastMissedAt < 20 * 60_000) return;
   lastMissedAt = now;
-  const rows = db.prepare(`SELECT DISTINCT mint FROM signals_log WHERE at > ? AND taken=0 ORDER BY at DESC LIMIT 90`).all(now - 48 * 3_600_000) as { mint: string }[];
+  const since = now - 48 * 3_600_000;
+  const rows = db.prepare(`SELECT DISTINCT mint, COALESCE(pair, '') AS pair FROM signals_log WHERE at > ? AND taken=0 ORDER BY at DESC LIMIT 120`).all(since) as { mint: string; pair: string }[];
   if (!rows.length) return;
-  const snaps = await dex.snapshots(rows.map(r => r.mint));
-  const upd = db.prepare(`UPDATE signals_log SET last_price=?, peak_price=MAX(peak_price, ?), peak_checked_at=? WHERE mint=? AND at > ?`);
-  for (const [mint, s] of snaps) {
-    upd.run(s.priceUsd, s.priceUsd, now, mint, now - 48 * 3_600_000);
-    market.upsert(s);
+  const byMint = await dex.pairsByMint([...new Set(rows.map(r => r.mint))].slice(0, 90));
+  const upd = db.prepare(`UPDATE signals_log SET last_price=?, peak_price=MAX(peak_price, ?), peak_checked_at=? WHERE mint=? AND COALESCE(pair, '')=? AND at > ?`);
+  for (const r of rows) {
+    const pairs = byMint.get(r.mint);
+    if (!pairs?.length) continue;
+    // Re-price the pair we looked at, as long as it still trades. If it stopped (curve finished, pool drained),
+    // follow the coin to its best live pair. Never a dust pool: that's how wibet showed a fake 783x.
+    const traded = dex.tradedPairs(pairs);
+    const p = traded.find(x => x.pairAddress === r.pair) ?? dex.bestPair(pairs);
+    const price = Number(p?.priceUsd ?? 0);
+    if (!price) continue;
+    upd.run(price, price, now, r.mint, r.pair, since);
+  }
+  for (const [mint, pairs] of byMint) {
+    const p = dex.bestPair(pairs);
+    const s = p ? await dex.snapshotFromPair(mint, p) : null;
+    if (s) market.upsert(s);
   }
 }
 

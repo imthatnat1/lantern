@@ -178,6 +178,7 @@ export const cooldowns = {
 
 // Migration for databases created before the setup column existed.
 try { db.exec("ALTER TABLE signals_log ADD COLUMN setup TEXT"); } catch { /* already there */ }
+try { db.exec("ALTER TABLE signals_log ADD COLUMN pair TEXT"); } catch { /* already there */ }
 try { db.exec("ALTER TABLE market ADD COLUMN image TEXT"); } catch { /* already there */ }
 
 export interface Setup {
@@ -195,9 +196,9 @@ export const audit = {
   rejectedTick(mint: string, source: string, price: number, lastGood: number, note: string) {
     db.prepare("INSERT INTO rejected_ticks(mint,source,price,last_good,at,note) VALUES(?,?,?,?,?,?)").run(mint, source, price, lastGood, Date.now(), note);
   },
-  signal(mode: Mode, mint: string, symbol: string, score: number, taken: boolean, reason: string, price: number, mcap = 0, liquidity = 0, setup?: Setup) {
-    db.prepare("INSERT INTO signals_log(mode,mint,symbol,score,taken,reason,price,at,mcap,liquidity,peak_price,last_price,setup) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      .run(mode, mint, symbol, score, taken ? 1 : 0, reason, price, Date.now(), mcap, liquidity, price, price, setup ? JSON.stringify(setup) : null);
+  signal(mode: Mode, mint: string, symbol: string, score: number, taken: boolean, reason: string, price: number, mcap = 0, liquidity = 0, setup?: Setup, pair?: string) {
+    db.prepare("INSERT INTO signals_log(mode,mint,symbol,score,taken,reason,price,at,mcap,liquidity,peak_price,last_price,setup,pair) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .run(mode, mint, symbol, score, taken ? 1 : 0, reason, price, Date.now(), mcap, liquidity, price, price, setup ? JSON.stringify(setup) : null, pair ?? null);
   },
 };
 
@@ -273,3 +274,10 @@ export const ride = {
   leaders(): string[] { return kv.get<string[]>("ride:leaders", []); },
   setLeaders(m: string[]) { kv.set("ride:leaders", m); },
 };
+
+// One-time cleanup (18 Oct): missed-runner peaks before this date were priced off whichever pair claimed the most
+// liquidity, including dust pools (wibet "783x", ApeMaxxing "25x"). Reset them; the tracker rebuilds from live pairs.
+if (!kv.get("fix:dustPeaks", false)) {
+  db.prepare("UPDATE signals_log SET peak_price=price, last_price=price, peak_checked_at=0 WHERE taken=0 AND peak_price >= price * 2").run();
+  kv.set("fix:dustPeaks", true);
+}
