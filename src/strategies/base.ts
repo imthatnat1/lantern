@@ -23,7 +23,7 @@ export interface Gate { ok: boolean; why?: string; holders?: number; top10?: num
 
 /** Shared pre-entry gate: copycat, safety, slop, exit liquidity, test sell. */
 export async function gate(s: TokenSnapshot, mode: Signal["mode"], sizeUsd: number): Promise<Gate> {
-  const cc = isCopycat(s);
+  const cc = config.pinned.includes(s.mint) ? null : isCopycat(s);
   if (cc) return { ok: false, why: `copycat: ${cc}` };
   if (cooldowns.active(mode, s.mint)) return { ok: false, why: "cooldown" };
   const safe = await rug.safety(s.mint, s.onCurve);

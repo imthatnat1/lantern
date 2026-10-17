@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { allCandidates } from "../data/universe.js";
 import { log } from "../log.js";
 import type { Candle, Signal, TokenSnapshot } from "../types.js";
 import { ageHours } from "../engine/filters.js";
@@ -19,8 +20,8 @@ export const ultra: Strategy = {
   everyMs: C.scanEveryMs,
   async scan(ctx: Context): Promise<Signal[]> {
     const out: Signal[] = [];
-    const mints = await dex.trendingSolana();
-    const snaps = await dex.snapshots(mints.slice(0, 60));
+    const mints = await allCandidates();
+    const snaps = await dex.snapshots(mints.slice(0, 90));
     for (const s of snaps.values()) {
       try {
         const sig = await check(s, ctx);

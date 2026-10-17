@@ -275,7 +275,7 @@ function stats(s) {
 }
 
 function chips(s) {
-  const modes = ["ultra", "bounce", "pullback", "trusted"];
+  const modes = ["dip", "ultra", "bounce", "pullback", "trusted"];
   const counts = { all: s.open.length };
   for (const m of modes) counts[m] = s.open.filter(o => o.mode === m).length;
   $("chips").innerHTML = ["all", ...modes].map(m => `<button data-m="${m}" class="${modeFilter === m ? "on" : ""}">${m === "all" ? "All" : m}<span>${counts[m] || ""}</span></button>`).join("");

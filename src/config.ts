@@ -15,6 +15,8 @@ export const config = {
     anthropic: env("ANTHROPIC_API_KEY"),
   },
   trustedWallets: env("TRUSTED_WALLETS").split(",").map(s => s.trim()).filter(Boolean),
+  /** Mints Nat likes. Always in scope for dip and ultra, exempt from the copycat filter. */
+  pinned: env("PINNED_MINTS").split(",").map(s => s.trim()).filter(Boolean),
   startingCapital: num("STARTING_CAPITAL", 300),
   dbPath: env("DB_PATH", "./data/lantern.db"),
   logLevel: env("LOG_LEVEL", "info"),
@@ -49,10 +51,11 @@ export const config = {
   },
 
   allocation: <Record<Mode, number>>{
-    ultra: 0.40,
-    bounce: 0.20,
-    pullback: 0.25,
-    trusted: 0.15,
+    ultra: 0.25,
+    bounce: 0.15,
+    pullback: 0.20,
+    trusted: 0.10,
+    dip: 0.30,
   },
 
   minExitLiquidityUsd: <Record<Mode, number>>{
@@ -60,6 +63,7 @@ export const config = {
     bounce: 8_000,
     pullback: 8_000,
     trusted: 8_000,
+    dip: 20_000,
   },
 
   modes: {
@@ -107,6 +111,17 @@ export const config = {
       holdCandles5m: 3,
       reclaimVolX: 1.3,
       maxAboveLowX: 1.25,
+    },
+    dip: {
+      scanEveryMs: 5 * 60_000,
+      cooldownMs: 12 * 3_600_000,
+      maxOpen: 5,
+      sizeUsd: 8,
+      /** Pullback depth from the 24h high, judged on 5m candles. */
+      dipMin: 0.06, dipMax: 0.30,
+      /** Skip if the 24h move is still > +150% (overheated). */
+      overheated24h: 150,
+      minScore: 55,
     },
     trusted: {
       pollEveryMs: 100_000,

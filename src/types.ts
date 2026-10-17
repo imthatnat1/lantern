@@ -1,4 +1,4 @@
-export type Mode = "ultra" | "bounce" | "pullback" | "trusted";
+export type Mode = "ultra" | "bounce" | "pullback" | "trusted" | "dip";
 
 export interface Candle {
   t: number;      // unix ms, candle open
