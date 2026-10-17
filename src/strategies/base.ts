@@ -7,6 +7,7 @@ import { config } from "../config.js";
 import { isCopycat, isSlop } from "../engine/filters.js";
 import { cooldowns, audit, market, recorder, type Setup } from "../db.js";
 import { isCreativePair } from "../data/universe.js";
+import { buyersOf } from "../data/wallets.js";
 
 export interface Context {
   now: number;
@@ -20,7 +21,9 @@ export interface Strategy {
   scan(ctx: Context): Promise<Signal[]>;
 }
 
-export interface Gate { ok: boolean; why?: string; holders?: number; top10?: number }
+export interface Gate { ok: boolean; why?: string; holders?: number; top10?: number; sniperPct?: number }
+/** Score penalty for sniper/bundle concentration: -1 per percent, max -20. */
+export function sniperPenalty(g: Gate): number { return -Math.min(20, Math.round(g.sniperPct ?? 0)); }
 
 /**
  * Cheap rug guard, run BEFORE any candle fetch or pattern check. A coin that fails here never
@@ -66,7 +69,21 @@ export async function gate(s: TokenSnapshot, mode: Signal["mode"], sizeUsd: numb
     if (!ts.routable) return { ok: false, why: "no sell route" };
     if (ts.impactPct > config.fees.exitImpactWarnPct) return { ok: false, why: `exit impact ${(ts.impactPct * 100).toFixed(1)}%` };
   }
-  return { ok: true, holders: pre.holders, top10: pre.top10 };
+  return { ok: true, holders: pre.holders, top10: pre.top10, sniperPct: pre.sniperPct };
+}
+
+/** Wallet flow in the last hour: +10 per trusted wallet, +5 per KOL (max +15). Every mode. */
+export function walletScore(mint: string): number {
+  const t = buyersOf(mint, 60 * 60_000, "trusted").length;
+  const k = buyersOf(mint, 60 * 60_000, "kol").length;
+  return t * 10 + Math.min(15, k * 5);
+}
+export function walletLabels(mint: string): string[] {
+  const t = buyersOf(mint, 60 * 60_000, "trusted"), k = buyersOf(mint, 60 * 60_000, "kol");
+  const out: string[] = [];
+  if (t.length) out.push(`${t.join(" + ")} bought`);
+  if (k.length) out.push(`KOL: ${k.join(", ")}`);
+  return out;
 }
 
 /** Creative pair (paired with something other than SOL/USDC/USDT): +8 in every mode. */
@@ -95,9 +112,8 @@ function velocityLabel(mint: string): string[] {
 
 export function logSignal(sig: Signal, taken: boolean, why: string) {
   audit.signal(sig.mode, sig.mint, sig.symbol, sig.score, taken, why, sig.snapshot.priceUsd, sig.snapshot.mcapUsd, sig.snapshot.liquidityUsd);
-  const labels: string[] = [...velocityLabel(sig.mint)];
-  if (sig.meta?.wallets && (sig.meta.wallets as string[]).length) labels.push(`${(sig.meta.wallets as string[]).join(" + ")} bought`);
-  else if (sig.meta?.walletCount) labels.push(`${sig.meta.walletCount} trusted bought`);
+  const labels: string[] = [...velocityLabel(sig.mint), ...walletLabels(sig.mint)];
+  if (!labels.some(l => /bought/.test(l)) && sig.meta?.wallets && (sig.meta.wallets as string[]).length) labels.push(`${(sig.meta.wallets as string[]).join(" + ")} bought`);
   market.upsert(sig.snapshot, sig.meta?.holders as number | undefined, labels);
 }
 
@@ -109,7 +125,7 @@ export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, hol
   if (Date.now() - (lastLook.get(k) ?? 0) < gap) return;
   lastLook.set(k, Date.now());
   audit.signal(mode, s.mint, s.symbol, 0, false, why, s.priceUsd, s.mcapUsd, s.liquidityUsd, setup);
-  market.upsert(s, holders, velocityLabel(s.mint));
+  market.upsert(s, holders, [...velocityLabel(s.mint), ...walletLabels(s.mint)]);
 }
 
 /** Distance helper: how far price must move to reach `level`, as a positive fraction. */

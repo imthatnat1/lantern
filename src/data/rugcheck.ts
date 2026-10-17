@@ -10,7 +10,8 @@ interface RcReport {
   transferFee?: { pct?: number };
   risks?: { name: string; level: string; description?: string }[];
   markets?: { lp?: { lpLockedPct?: number } }[];
-  topHolders?: { pct: number; insider?: boolean }[];
+  topHolders?: { pct: number; insider?: boolean; owner?: string }[];
+  knownAccounts?: Record<string, { name?: string; type?: string }>;
   totalHolders?: number;
   token?: { mintAuthority?: string | null; freezeAuthority?: string | null };
   creator?: string;
@@ -55,10 +56,17 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
   const top10 = (rep.topHolders ?? []).slice(0, 10).reduce((a, h) => a + (h.pct ?? 0), 0);
   const insiders = (rep.topHolders ?? []).filter(h => h.insider).length;
   const insiderPct = (rep.topHolders ?? []).filter(h => h.insider).reduce((a, h) => a + (h.pct ?? 0), 0);
+  // Sniper and bundle wallets among the top holders (RugCheck labels them when it can). Hard reject at 30%, otherwise the strategies see the pct.
+  let sniperPct = 0;
+  for (const h of rep.topHolders ?? []) {
+    const k = h.owner ? rep.knownAccounts?.[h.owner] : undefined;
+    if (k && /sniper|bundle|bundler|fresh/i.test(`${k.name ?? ""} ${k.type ?? ""}`)) sniperPct += h.pct ?? 0;
+  }
+  if (sniperPct > 30) reasons.push(`snipers/bundles hold ${sniperPct.toFixed(0)}%`);
   if (insiderPct > 20) reasons.push(`insiders hold ${insiderPct.toFixed(0)}%`);
   if (top10 > 60) reasons.push(`top 10 hold ${top10.toFixed(0)}%`);
 
-  return { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator };
+  return { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator, sniperPct };
 }
 
 /**

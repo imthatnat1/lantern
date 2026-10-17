@@ -6,7 +6,7 @@ import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import { account } from "../engine/broker.js";
-import { buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.ultra;
 
@@ -83,7 +83,7 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   if ((g.holders ?? 0) < C.minHolders) return null;
   const a15 = atr(c15);
   const sixHLow = lowestLow(c15, ctx.now - 6 * 3_600_000);
-  const score = 65 + Math.min(15, volX * 3) + (bs > 1.5 ? 10 : 0) + (long ? 5 : 10) + holderScore(s.mint) + pairScore(s);
+  const score = 65 + Math.min(15, volX * 3) + (bs > 1.5 ? 10 : 0) + (long ? 5 : 10) + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
 
   const sig: Signal = {
     mode: "ultra", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,

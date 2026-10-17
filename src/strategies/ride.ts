@@ -6,7 +6,7 @@ import { atr, lowestLow, vwap } from "../data/gecko.js";
 import { allCandidates, isPinned, isStonkPair } from "../data/universe.js";
 import { ride as rideDb } from "../db.js";
 import { brisbaneDayStart } from "../engine/broker.js";
-import { buySellRatio, candles5and15, dex, dist, gate, holderScore, logLook, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, dist, gate, holderScore, walletScore, logLook, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.ride;
 
@@ -88,7 +88,7 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<{ leader: boolean;
   if (!hasCore) {
     const g = await gate(s, "ride", C.coreSizeUsd);
     if (!g.ok) { logLook("ride", s, g.why!, g.holders); return { leader: true, sig: null }; }
-    const score = 70 + (isPinned(s.mint) ? 10 : 0) + (isStonkPair(s) ? 5 : 0) + holderScore(s.mint);
+    const score = 70 + (isPinned(s.mint) ? 10 : 0) + (isStonkPair(s) ? 5 : 0) + holderScore(s.mint) + walletScore(s.mint);
     return { leader: true, sig: {
       mode: "ride", mint: s.mint, symbol: s.symbol, sizeUsd: C.coreSizeUsd, score,
       reason: `ride core: leader with $${(s.volume24h / 1e6).toFixed(1)}M 24h volume, rising 1h structure`,
@@ -121,7 +121,7 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<{ leader: boolean;
   if (!g.ok) { logLook("ride", s, g.why!, g.holders); return { leader: true, sig: null }; }
   const swingLow = lowestLow(c5.slice(-6), 0);
   const target = st.priorHigh;
-  const score = 65 + Math.min(15, pullback * 60) + holderScore(s.mint);
+  const score = 65 + Math.min(15, pullback * 60) + holderScore(s.mint) + walletScore(s.mint);
   return { leader: true, sig: {
     mode: "ride", mint: s.mint, symbol: s.symbol, sizeUsd: C.sleeveSizeUsd, score,
     reason: `ride sleeve: pullback ${(pullback * 100).toFixed(0)}% to ${ref.toPrecision(3)}, target ${target.toPrecision(3)}`,

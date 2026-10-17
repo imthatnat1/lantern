@@ -17,6 +17,7 @@ import { trusted } from "./strategies/trusted.js";
 import { dip } from "./strategies/dip.js";
 import { ride } from "./strategies/ride.js";
 import { startServer, snapshotEquity } from "./server.js";
+import { ensureWebhook, soldSince } from "./data/wallets.js";
 
 const strategies: Strategy[] = [ride, dip, ultra, bounce, pullback, trusted];
 const lastRun = new Map<string, number>();
@@ -48,6 +49,11 @@ async function exitLoop() {
       if (snap?.pairAddress) { try { c15 = await gecko.candles(snap.pairAddress, 15, 10); } catch { /* rate limited, judge on ticks only */ } }
       const lastClosed = c15.length >= 2 ? c15.at(-2) : undefined;
       const actions = evaluate(p, read, lastClosed, now);
+      // Trusted copies mirror the wallet's exit: if any wallet that bought it has sold since we entered, we sell too.
+      if (p.mode === "trusted" && read.confirmed && !actions.length) {
+        const ws = (p.meta.walletAddrs as string[] | undefined) ?? [];
+        if (soldSince(p.mint, p.entryAt, ws)) actions.push({ fraction: 1, reason: "mirror: trusted wallet sold" });
+      }
       for (const a of actions) {
         if ((p.status as string) !== "open") break;
         broker.sell(p, a.fraction, read.price, snap?.liquidityUsd ?? p.liquidityAtEntry, snap?.onCurve ?? false, solPrice, a.reason, now);
@@ -135,6 +141,7 @@ async function main() {
   log.info({ capital: config.startingCapital, modes: strategies.map(s => s.name) }, "lantern starting");
   if (!kv.get("startedAt", 0)) kv.set("startedAt", Date.now());
   feed.start();
+  ensureWebhook(process.env.PUBLIC_URL ?? "http://134.199.147.128:8787").catch(e => log.warn({ err: String(e) }, "webhook setup failed"));
   startServer(() => markPrices, () => ({
     feedDownS: Math.round(Math.min(feed.downForMs, 99_999_000) / 1000),
     dexStaleS: Math.round((Date.now() - Math.max(lastDexOk, dex.lastOkAt)) / 1000),

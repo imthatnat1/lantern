@@ -44,6 +44,8 @@ export interface SafetyResult {
   holders?: number;
   lpLockedPct?: number;
   creator?: string;
+  /** Share held by wallets RugCheck labels as snipers, bundles or fresh. Strategies take up to 20 points off. */
+  sniperPct?: number;
 }
 
 export interface ExitPlan {

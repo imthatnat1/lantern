@@ -177,6 +177,10 @@
 <div class="chips" id="tradeChips" style="margin-top:6px"></div>
 <div id="trades"></div>
 
+<h2>Wallets we follow <small>last 7 days</small></h2>
+<p class="dim" style="font-size:13px;margin:0 0 6px">Trusted wallets can trigger buys (after our own checks). KOLs only add score. Both are audited here: of the coins each wallet bought, how many went 2x within 6 hours, and how many halved.</p>
+<div id="wallets"></div>
+
 <h2>By strategy <small>all time</small></h2>
 <div id="modes"></div>
 
@@ -412,6 +416,13 @@ function reasonTitle(r) {
   return "Sold";
 }
 
+function walletTable(ws) {
+  if (!ws || !ws.length) return `<div class="empty">No wallet buys recorded yet. The Helius feed fills this in as they trade.</div>`;
+  const rows = ws.sort((a, b) => (b.up2x / (b.n || 1)) - (a.up2x / (a.n || 1))).map(w =>
+    `<tr><td>${esc(w.name)} <span class="dim">${w.tier}</span></td><td>${w.n}</td><td class="${w.up2x ? "up" : ""}">${w.n ? Math.round(w.up2x / w.n * 100) + "%" : "—"}</td><td class="${w.down50 ? "down" : ""}">${w.n ? Math.round(w.down50 / w.n * 100) + "%" : "—"}</td><td class="${w.medianRet >= 0 ? "up" : "down"}">${pct(w.medianRet)}</td></tr>`).join("");
+  return `<table><tr><th>wallet</th><th>buys</th><th>hit 2x</th><th>halved</th><th>median now</th></tr>${rows}</table>`;
+}
+
 function modeTable(byMode) {
   const rows = byMode.sort((a, b) => b.pnl - a.pnl).map(m =>
     `<tr><td>${m.mode}</td><td>${m.open}</td><td>${m.n}</td><td>${m.n ? Math.round(m.wins / m.n * 100) + "%" : "—"}</td><td class="${m.pnl > 0 ? "up" : m.pnl < 0 ? "down" : ""}">${usd(m.pnl, true)}</td></tr>`).join("");
@@ -499,6 +510,7 @@ function render(s) {
   $("hot").innerHTML = hotRows(s.looks, s.open);
   $("trades").innerHTML = tradeRows(s.fills);
   $("modes").innerHTML = modeTable(s.byMode);
+  $("wallets").innerHTML = walletTable(s.wallets || []);
   $("missed").innerHTML = missedRows(s.missed);
   $("looks").innerHTML = looksRows(s.looks);
   $("guard").innerHTML = guard(s);

@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { db, positions, kv } from "./db.js";
 import * as broker from "./engine/broker.js";
 import { config } from "./config.js";
+import { ingest, scorecard } from "./data/wallets.js";
 import { log } from "./log.js";
 
 /**
@@ -20,6 +21,15 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
     if (req.method === "GET" && req.url === "/api/state") {
       try { res.end(JSON.stringify(state(getMarks(), getHealth()))); }
       catch (e) { res.statusCode = 500; res.end(JSON.stringify({ error: String(e) })); }
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/wallet-events") {
+      let body = "";
+      req.on("data", c => body += c);
+      req.on("end", () => {
+        try { const arr = JSON.parse(body || "[]"); let n = 0; for (const tx of Array.isArray(arr) ? arr : [arr]) n += ingest(tx); res.end(JSON.stringify({ ok: true, n })); }
+        catch (e) { res.statusCode = 400; res.end(JSON.stringify({ error: String(e) })); }
+      });
       return;
     }
     if (req.method === "POST" && req.url === "/api/control") {
@@ -127,5 +137,6 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     health: { ...health, rejectedTicks24h: rejected.n, rejected: rejectedRows, startedAt: kv.get("startedAt", now), uptimeMs: now - kv.get("startedAt", now) },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
     open, closed, fills, equity, byMode, looks, missed: [...missed, ...stoppedThenRan],
+    wallets: scorecard(7),
   };
 }

@@ -4,7 +4,7 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
 import { allCandidates, isPinned, isQuality, isStonkPair } from "../data/universe.js";
-import { buySellRatio, candles5and15, dex, gate, dist, logLook, holderScore, pairScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, dist, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.dip;
 
@@ -63,7 +63,7 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const dayLow = lowestLow(c15, ctx.now - 24 * 3_600_000);
   let score = 40 + Math.min(30, depth * 100 * 1.5) + (bs > 1.3 ? 10 : 5);
   if (isPinned(s.mint)) score += 10;
-  score += pairScore(s);
+  score += pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
   if (s.liquidityUsd >= 500_000) score += 5;
   score += holderScore(s.mint);
   if (score < C.minScore) { logLook("dip", s, `score ${score.toFixed(0)} below ${C.minScore}`); return null; }

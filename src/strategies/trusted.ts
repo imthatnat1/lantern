@@ -4,8 +4,9 @@ import type { Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import * as helius from "../data/helius.js";
+import { recentBuys as pushedBuys } from "../data/wallets.js";
 import { kv } from "../db.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, sniperPenalty, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
 
 const C = config.modes.trusted;
 
@@ -25,7 +26,12 @@ export const trusted: Strategy = {
     if (!wallets.length) return out;
     const seen = kv.get<Seen>("trusted:seen", {});
     const since = ctx.now - 30 * 60_000;
-    const buys = (await Promise.all(wallets.map(w => helius.recentBuys(w, since, C.heliusDailyCredits)))).flat();
+    // Pushed by the Helius webhook when it's working; poll as a fallback when nothing has arrived in the last hour.
+    const pushed = pushedBuys(since, "trusted");
+    const anyPushRecently = pushedBuys(ctx.now - 60 * 60_000).length > 0;
+    const buys = pushed.length || anyPushRecently
+      ? pushed.map(b => ({ wallet: b.wallet, mint: b.mint, signature: `${b.wallet}:${b.mint}:${b.at}`, at: b.at, solSpent: b.sol }))
+      : (await Promise.all(wallets.map(w => helius.recentBuys(w, since, C.heliusDailyCredits)))).flat();
 
     // Group by mint; count distinct wallets within the window.
     const byMint = new Map<string, Set<string>>();   // mint -> wallet addresses
@@ -44,7 +50,7 @@ export const trusted: Strategy = {
       const s = snaps.get(mint);
       if (!s) continue;
       try {
-        const sig = await check(s, ctx, ws.size, [...ws].map(config.walletName));
+        const sig = await check(s, ctx, ws.size, [...ws].map(config.walletName), [...ws]);
         if (sig) out.push(sig);
       } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "trusted check failed"); }
     }
@@ -52,7 +58,7 @@ export const trusted: Strategy = {
   },
 };
 
-async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names: string[] = []): Promise<Signal | null> {
+async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names: string[] = [], addrs: string[] = []): Promise<Signal | null> {
   const who = `${names.join(" + ") || walletCount + " trusted"} bought`;
   if (s.mcapUsd > C.mcapMax) { logLook("trusted", s, `${who}, but mcap $${(s.mcapUsd / 1000).toFixed(0)}k > $150k ceiling (copy latency: we'd buy their exit)`); return null; }
   if (s.change5m / 100 > C.maxPump5m) { logLook("trusted", s, `${who}, but already up ${s.change5m.toFixed(0)}% in 5m`); return null; }
@@ -72,7 +78,7 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names:
   score += (g.holders ?? 0) >= 150 ? 10 : (g.holders ?? 0) >= 50 ? 5 : 0;
   score += (g.top10 ?? 100) > 40 ? -15 : (g.top10 ?? 100) > 25 ? -5 : 5;
   score += s.liquidityUsd >= 25_000 ? 10 : 0;
-  score += holderScore(s.mint) + pairScore(s);
+  score += holderScore(s.mint) + pairScore(s) + sniperPenalty(g);
   if (score < C.minScore) { logSignal({ mode: "trusted", mint: s.mint, symbol: s.symbol, sizeUsd: size, score, reason: "score floor", snapshot: s, candles15: [], plan: () => null as any }, false, "score below floor"); return null; }
 
   let c15 = [] as Awaited<ReturnType<typeof candles5and15>>["c15"];
@@ -85,7 +91,7 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names:
     mode: "trusted", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
     reason: `trusted copy: ${names.join(" + ") || walletCount + " wallets"} bought`,
     snapshot: s, candles15: c15,
-    meta: { atr15: a15, walletCount, wallets: names, holders: g.holders },
+    meta: { atr15: a15, walletCount, wallets: names, walletAddrs: addrs, holders: g.holders },
     plan: (entry, atr15) => ({
       hardFloorPct: 0.45,
       closeStopPrice: structuralStop(entry, low, atr15, 1, 0.30),
