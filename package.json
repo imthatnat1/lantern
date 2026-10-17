@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Paper-trading bot for Solana memecoins. Four modes, close-based stops, two-source price sanity.",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/repair-env.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/main.js",
     "dev": "tsx src/main.ts",
