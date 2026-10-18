@@ -45,6 +45,7 @@ export const dip: Strategy = {
 export function dipPattern(m: Mkt, c5: Candle[], now: number, C: ModeCfg<"dip">): Pattern<{ base: number; depth: number; lo: number; bs: number }> {
   if (m.change24h > C.overheated24h) return { ok: false, why: `up ${m.change24h.toFixed(0)}% in 24h, overheated` };
   if (c5.length < 24) return { ok: false };
+  if (m.change1h < C.maxDrop1h) return { ok: false, why: `down ${Math.abs(m.change1h).toFixed(0)}% in the hour, falling knife` };
   const hi = highestHigh(c5, now - 24 * 3_600_000);
   const lo = lowestLow(c5.slice(-36), now - 3 * 3_600_000);
   const depth = 1 - m.priceUsd / hi;
@@ -53,7 +54,8 @@ export function dipPattern(m: Mkt, c5: Candle[], now: number, C: ModeCfg<"dip">)
   // The last closed 5m candle must not be a new low: the dip has to have stopped.
   const last = c5.at(-2)!;
   if (last.l <= lo * 1.001 && last.c < last.o) return { ok: false, why: "still making new lows" };
-  if (!reclaim(c5, lo * 1.01, 1.0)) return { ok: false, why: "dip found, waiting for a green 5m reclaim", setup: { need: `green 5m close above ${(lo * 1.01).toPrecision(3)}`, level: lo * 1.01, distance: dist(m.priceUsd, lo * 1.01) } };
+  const lvl = lo * C.reclaimAboveLow;
+  if (!reclaim(c5, lvl, C.reclaimVolX)) return { ok: false, why: "dip found, waiting for a green 5m reclaim", setup: { need: `green 5m close above ${lvl.toPrecision(3)}`, level: lvl, distance: dist(m.priceUsd, lvl) } };
   const bs = buySellRatio(m);
   if (bs < 1.0) return { ok: false, why: "more sells than buys in 5m" };
   const base = 40 + Math.min(30, depth * 100 * 1.5) + (bs > 1.3 ? 10 : 5) + (m.liquidityUsd >= 500_000 ? 5 : 0);

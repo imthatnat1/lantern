@@ -182,6 +182,8 @@ try { db.exec("ALTER TABLE signals_log ADD COLUMN pair TEXT"); } catch { /* alre
 // Recorded for the replay lab: which pair a tick came from (dust pools can be filtered out), when coins
 // migrated (bounce needs it), and what the safety gate saw (so gate rules can be replayed later).
 try { db.exec("ALTER TABLE ticks ADD COLUMN pair TEXT"); } catch { /* already there */ }
+// DexScreener's own % changes, so the lab sees the same "up 215% in 24h" the bot saw.
+for (const c of ["ch1h", "ch6h", "ch24h"]) { try { db.exec(`ALTER TABLE ticks ADD COLUMN ${c} REAL`); } catch { /* already there */ } }
 db.exec(`CREATE TABLE IF NOT EXISTS migrations (mint TEXT PRIMARY KEY, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS safety_history (
   mint TEXT NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL, top10 REAL, holders INTEGER, sniper REAL, reasons TEXT,
@@ -228,7 +230,7 @@ export const market = {
   },
 };
 
-const insTick = db.prepare("INSERT OR IGNORE INTO ticks(mint,at,price,liquidity,mcap,vol5m,buys5m,sells5m,pair) VALUES(?,?,?,?,?,?,?,?,?)");
+const insTick = db.prepare("INSERT OR IGNORE INTO ticks(mint,at,price,liquidity,mcap,vol5m,buys5m,sells5m,pair,ch1h,ch6h,ch24h) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)");
 const insMigration = db.prepare("INSERT OR IGNORE INTO migrations(mint,at) VALUES(?,?)");
 const insSafety = db.prepare("INSERT OR IGNORE INTO safety_history(mint,at,ok,top10,holders,sniper,reasons) VALUES(?,?,?,?,?,?,?)");
 const lastSafetyAt = new Map<string, number>();
@@ -238,7 +240,7 @@ const updMarketHolders = db.prepare("UPDATE market SET holders=? WHERE mint=?");
 
 export const recorder = {
   tick(s: import("./types.js").TokenSnapshot) {
-    insTick.run(s.mint, s.fetchedAt, s.priceUsd, s.liquidityUsd, s.mcapUsd, s.volume5m, s.buys5m, s.sells5m, s.pairAddress ?? null);
+    insTick.run(s.mint, s.fetchedAt, s.priceUsd, s.liquidityUsd, s.mcapUsd, s.volume5m, s.buys5m, s.sells5m, s.pairAddress ?? null, s.change1h, s.change6h, s.change24h);
   },
   candles(pair: string, agg: number, cs: import("./types.js").Candle[]) {
     const tx = db.transaction((rows: import("./types.js").Candle[]) => { for (const k of rows) insCandle.run(pair, agg, k.t, k.o, k.h, k.l, k.c, k.v); });

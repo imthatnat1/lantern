@@ -12,7 +12,7 @@ import { db } from "../db.js";
 import type { Candle } from "../types.js";
 import type { Mkt } from "../strategies/base.js";
 
-export interface Tick { at: number; price: number; liquidity: number; mcap: number; vol5m: number; buys5m: number; sells5m: number; pair: string | null }
+export interface Tick { at: number; price: number; liquidity: number; mcap: number; vol5m: number; buys5m: number; sells5m: number; pair: string | null; ch1h?: number | null; ch6h?: number | null; ch24h?: number | null }
 
 export interface CoinInfo { mint: string; symbol: string; pair: string | null; quote: string | null; onCurve: boolean; createdAt: number }
 
@@ -74,7 +74,7 @@ export class CoinHistory {
   private rejections: number[];
 
   constructor(readonly info: CoinInfo, from: number, to: number) {
-    const raw = db.prepare("SELECT at, price, COALESCE(liquidity,0) AS liquidity, COALESCE(mcap,0) AS mcap, COALESCE(vol5m,0) AS vol5m, COALESCE(buys5m,0) AS buys5m, COALESCE(sells5m,0) AS sells5m, pair FROM ticks WHERE mint=? AND at BETWEEN ? AND ? ORDER BY at")
+    const raw = db.prepare("SELECT at, price, COALESCE(liquidity,0) AS liquidity, COALESCE(mcap,0) AS mcap, COALESCE(vol5m,0) AS vol5m, COALESCE(buys5m,0) AS buys5m, COALESCE(sells5m,0) AS sells5m, pair, ch1h, ch6h, ch24h FROM ticks WHERE mint=? AND at BETWEEN ? AND ? ORDER BY at")
       .all(info.mint, from, to) as Tick[];
     this.ticks = cleanTicks(raw, info.pair);
     const q = db.prepare("SELECT t,o,h,l,c,v FROM candles WHERE pair=? AND agg=? AND t BETWEEN ? AND ? ORDER BY t");
@@ -146,13 +146,14 @@ export class CoinHistory {
   mktAt(now: number): (Mkt & { change5m: number; onCurve: boolean }) | null {
     const t = this.tickAt(now);
     if (!t) return null;
-    const ch = (ms: number) => { const c = this.closeAt(now - ms); return c ? (t.price / c - 1) * 100 : 0; };
+    // DexScreener's own figure when recorded (from 18 Oct), else worked out from our candles.
+    const ch = (ms: number, rec?: number | null) => { if (rec != null) return rec; const c = this.closeAt(now - ms); return c ? (t.price / c - 1) * 100 : 0; };
     let vol24 = 0;
     const i0 = CoinHistory.idx(this.c5, now - 24 * 3_600_000, x => x.t), i1 = CoinHistory.idx(this.c5, now - M5, x => x.t);
     for (let i = Math.max(0, i0); i <= i1; i++) vol24 += this.c5[i].v;
     return {
       priceUsd: t.price, buys5m: t.buys5m, sells5m: t.sells5m, liquidityUsd: t.liquidity, mcapUsd: t.mcap,
-      change5m: ch(5 * 60_000), change1h: ch(3_600_000), change6h: ch(6 * 3_600_000), change24h: ch(24 * 3_600_000),
+      change5m: ch(5 * 60_000), change1h: ch(3_600_000, t.ch1h), change6h: ch(6 * 3_600_000, t.ch6h), change24h: ch(24 * 3_600_000, t.ch24h),
       volume24h: vol24, onCurve: this.info.onCurve,
     };
   }

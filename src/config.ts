@@ -41,6 +41,13 @@ export const config = {
   trustedWallets: [...new Set([...DEFAULT_TRUSTED.map(w => w.address), ...env("TRUSTED_WALLETS").split(",").map(s => s.trim()).filter(Boolean)])],
   walletName: (address: string) => DEFAULT_TRUSTED.find(w => w.address === address)?.name ?? address.slice(0, 4) + "…" + address.slice(-4),
   /** Mints Nat likes. Always in scope for dip and ultra, exempt from the copycat filter. */
+  /**
+   * Modes switched off for new buys. Their scans don't run either, which frees GeckoTerminal
+   * budget for the other modes. Open positions keep being managed. PAUSED_MODES in .env adds more.
+   * dip (18 Oct): the lab replayed 12 dip trades, 2 winners, -$11.31; the live bot only avoided
+   * them because it was rate-limited or not checking those coins.
+   */
+  pausedModes: ["dip", ...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
   /** Never trade or watch these. BLOCKED_MINTS in .env adds more. */
   blocked: [
     "3NxfWMHmfQg8NJFW5AG1ti2xACdczWz24e9SKyk1pump", // Minter: cent-sized bot buys, 2.3 buys per sell while price fell 25% (18 Oct)
@@ -157,6 +164,10 @@ export const config = {
       /** Skip if the 24h move is still > +150% (overheated). */
       overheated24h: 150,
       minScore: 55,
+      /** Reclaim candle: close at least this far above the dip low, on this multiple of average volume. */
+      reclaimAboveLow: 1.01, reclaimVolX: 1.0,
+      /** Skip a falling knife: down more than this % in the last hour (-100 = off). */
+      maxDrop1h: -100,
     },
     ride: {
       scanEveryMs: 3 * 60_000,

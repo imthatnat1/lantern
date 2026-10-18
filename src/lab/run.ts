@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { db } from "../db.js";
+import { config } from "../config.js";
 import { Lab, modesFor, summarize, type Experiment, type LabTrade, type ModeSummary } from "./entries.js";
 import type { Mode } from "../types.js";
 
@@ -44,6 +45,8 @@ export interface LiveCheck {
 }
 
 export interface LabReport {
+  /** Modes switched off in the live bot. The lab still replays them, but they don't count in the trust check. */
+  paused?: string[];
   ranAt: number; from: number; to: number; hours: number; coins: number; secs: number;
   baseline: { summary: Partial<Record<Mode, ModeSummary>>; trades: LabTrade[] };
   check?: LiveCheck;
@@ -119,7 +122,8 @@ export function runLab(hours: number, experiments: Experiment[], now = Date.now(
   return {
     ranAt: now, from, to: now, hours, coins: lab.coins.size, secs: Math.round((Date.now() - t0) / 1000),
     baseline: { summary: baseSummary, trades: [...base.trades].sort((x, y) => y.at - x.at).slice(0, 60) },
-    check: liveCheck(from, now, base.trades),
+    check: liveCheck(from, now, base.trades.filter(t => !config.pausedModes.includes(t.mode))),
+    paused: config.pausedModes,
     experiments: out,
   };
 }

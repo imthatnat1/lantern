@@ -124,6 +124,7 @@ async function scanLoop() {
   const ctx: Context = { now, solPrice, migrations };
   const feedHealthy = now - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs;
   for (const s of strategies) {
+    if (config.pausedModes.includes(s.name)) continue;
     if (now - (lastRun.get(s.name) ?? 0) < s.everyMs) continue;
     lastRun.set(s.name, now);
     let sigs;

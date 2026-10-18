@@ -593,8 +593,8 @@ function renderLab(L) {
   $("labMeta").textContent = plural(rep.experiments.length, "test");
 
   // 1. Can we trust it? The replay of today's rules should copy what the real bot did.
-  const b = rep.baseline.summary || {}, c = rep.check;
-  const replayN = Object.values(b).reduce((a, x) => a + x.trades, 0);
+  const b = rep.baseline.summary || {}, c = rep.check, paused = rep.paused || [];
+  const replayN = Object.entries(b).filter(([m]) => !paused.includes(m)).reduce((a, [, x]) => a + x.trades, 0);
   let trust;
   if (!c) trust = `<div class="trust"><div class="q">Can we trust these results?</div><div class="a">Checking…</div><p>Run it again once the bot has updated.</p></div>`;
   else if (!c.liveTrades) trust = `<div class="trust"><div class="q">Can we trust these results?</div><div class="a">Not yet</div><p>Your bot hasn't traded in the recorded window, so there's nothing to check the replay against.</p></div>`;
@@ -603,12 +603,13 @@ function renderLab(L) {
     const good = c.matched / c.liveTrades >= 0.7 && extra <= Math.max(3, c.liveTrades);
     const lv = c.live || {};
     const byMode = MODE_ORDER.filter(m => b[m] || lv[m]);
-    const worst = byMode.map(m => ({ m, gap: (b[m]?.trades || 0) - (lv[m]?.trades || 0) })).sort((x, y) => y.gap - x.gap)[0];
+    const worst = byMode.filter(m => !paused.includes(m)).map(m => ({ m, gap: (b[m]?.trades || 0) - (lv[m]?.trades || 0) })).sort((x, y) => y.gap - x.gap)[0];
     const hrs = Math.max(1, Math.round((rep.to - c.dataFrom) / 3600e3));
     trust = `<div class="trust ${good ? "ok" : ""}"><div class="q">Can we trust these results?</div><div class="a">${good ? "Yes" : "Not yet"}</div>
       <p>To check, the lab replays the bot's current rules. In the last ${hrs}h it copied <b>${c.matched} of your bot's ${c.liveTrades}</b> real trades${extra > 0 ? `, but also took <b>${extra}</b> your bot didn't${worst && worst.gap > 2 ? `, mostly in ${worst.m} (${b[worst.m].trades} vs ${lv[worst.m]?.trades || 0})` : ""}` : ""}.</p>
       <details><summary>See the difference</summary>
-        <table class="mini"><tr><th>Mode</th><th>Lab</th><th>Your bot</th></tr>${byMode.map(m => `<tr><td>${m}</td><td>${b[m]?.trades || 0} <span class="${(b[m]?.pnl || 0) >= 0 ? "up" : "down"}" style="font-size:12px">${usd(b[m]?.pnl || 0, true)}</span></td><td>${lv[m]?.trades || 0} <span class="${(lv[m]?.pnl || 0) >= 0 ? "up" : "down"}" style="font-size:12px">${usd(lv[m]?.pnl || 0, true)}</span></td></tr>`).join("")}</table>
+        <table class="mini"><tr><th>Mode</th><th>Lab</th><th>Your bot</th></tr>${byMode.map(m => `<tr><td>${m}</td><td>${b[m]?.trades || 0} <span class="${(b[m]?.pnl || 0) >= 0 ? "up" : "down"}" style="font-size:12px">${usd(b[m]?.pnl || 0, true)}</span></td><td>${paused.includes(m) && !lv[m] ? `<span class="faint">paused</span>` : `${lv[m]?.trades || 0} <span class="${(lv[m]?.pnl || 0) >= 0 ? "up" : "down"}" style="font-size:12px">${usd(lv[m]?.pnl || 0, true)}</span>`}</td></tr>`).join("")}</table>
+        ${paused.length ? `<p class="faint" style="font-size:13px;margin:6px 0 0">Paused modes (${paused.join(", ")}) are still tested here but left out of the trust check.</p>` : ""}
         ${(c.extraByReplay || []).length ? `<div class="chg"><div class="k" style="border:0">Trades the lab took that your bot didn't, and what your bot said at the time</div>${c.extraByReplay.map(x => `<div class="said"><div class="top"><span>${esc(x.symbol)} <span class="faint">${esc(x.mode)}</span></span><span class="nw ${x.pnl >= 0 ? "up" : "down"}">${usd(x.pnl, true)}</span></div><div class="why">Your bot: ${esc(x.liveSaid)}</div></div>`).join("")}</div>` : ""}
         ${(c.missedByReplay || []).length ? `<div class="chg"><div class="k" style="border:0">Real trades the lab missed</div>${c.missedByReplay.map(x => `<div><span>${esc(x.symbol)} <span class="faint">${esc(x.mode)}</span></span><span class="${(x.pnl ?? 0) >= 0 ? "up" : "down"}">${x.pnl == null ? "still open" : usd(x.pnl, true)}</span></div>`).join("")}</div>` : ""}
         ${c.byCandles ? `<p class="faint" style="font-size:13px;margin-top:10px">Some old prices had to be rebuilt from rough data. Trades on good data: ${c.byCandles.real.trades} (${usd(c.byCandles.real.pnl, true)}). On rebuilt data: ${c.byCandles.rebuilt.trades} (${usd(c.byCandles.rebuilt.pnl, true)}).</p>` : ""}
