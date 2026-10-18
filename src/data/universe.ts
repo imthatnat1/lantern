@@ -4,6 +4,7 @@ import type { TokenSnapshot } from "../types.js";
 import { config } from "../config.js";
 import { log } from "../log.js";
 import { kv } from "../db.js";
+import { isStonkReward, stonkfunMints } from "./stonkfun.js";
 
 /**
  * Where candidate coins come from. v1 found good coins (ZCAT, PURR, swordcat, the Stonk.fun
@@ -12,6 +13,7 @@ import { kv } from "../db.js";
  *  - pinned:    coins Nat likes, from config. Always in scope.
  *  - stonk:     Stonk.fun ecosystem, found by searching DexScreener for pairs whose quote token
  *               is ZEC, HYPE or an xStock (TSLAx, NVDAx, GLDx...). Refreshed every 10 min.
+ *  - stonkfun:  Stonk.fun's own list (busiest and biggest launches), from its public API.
  *  - trending:  DexScreener boosted Solana tokens.
  *  - quality:   anything in the above that is established: >= 3 days old, liquidity >= $100k,
  *               24h volume >= $50k, >= 2,000 holders when known.
@@ -72,8 +74,8 @@ export async function trendingMints(): Promise<string[]> {
 
 /** Union of all sources, deduped, pinned first. */
 export async function allCandidates(): Promise<string[]> {
-  const [stonk, trend] = await Promise.all([stonkMints(), trendingMints()]);
-  return [...new Set([...config.pinned, ...stonk, ...trend])];
+  const [stonk, sf, trend] = await Promise.all([stonkMints(), stonkfunMints().catch(() => [] as string[]), trendingMints()]);
+  return [...new Set([...config.pinned, ...sf, ...stonk, ...trend])];
 }
 
 export function isQuality(s: TokenSnapshot, holders?: number): boolean {
@@ -87,7 +89,7 @@ export function isQuality(s: TokenSnapshot, holders?: number): boolean {
 
 export function isPinned(mint: string): boolean { return config.pinned.includes(mint); }
 /** Paired with anything other than SOL/USDC/USDT. The name is kept for the old call sites. */
-export function isStonkPair(s: TokenSnapshot): boolean {
-  return !!s.quoteSymbol && !STANDARD_QUOTES.has(s.quoteSymbol.toUpperCase());
+export function isStonkPair(s: Pick<TokenSnapshot, "mint" | "quoteSymbol">): boolean {
+  return (!!s.quoteSymbol && !STANDARD_QUOTES.has(s.quoteSymbol.toUpperCase())) || isStonkReward(s.mint);
 }
 export const isCreativePair = isStonkPair;

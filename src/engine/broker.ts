@@ -1,3 +1,4 @@
+import { taxPct } from "../data/tax.js";
 import { config } from "../config.js";
 import { kv, positions, fills } from "../db.js";
 import { log } from "../log.js";
@@ -32,13 +33,14 @@ export function realizedToday(): number {
 }
 
 /** Fee + slippage model. Returns effective price and fee in USD. */
-export function fillModel(side: "buy" | "sell", priceUsd: number, usdSize: number, liquidityUsd: number, onCurve: boolean, solPrice: number) {
+export function fillModel(side: "buy" | "sell", priceUsd: number, usdSize: number, liquidityUsd: number, onCurve: boolean, solPrice: number, transferTaxPct = 0) {
   const f = config.fees;
   const txFeeUsd = (f.baseSol + f.prioritySol + f.tipSol) * solPrice;
   const dexFeePct = onCurve ? f.curveFeePct : f.poolFeePct;
   // Constant-product impact estimate: trade / (liquidity/2) gives roughly the price move.
   const impact = liquidityUsd > 0 ? usdSize / (liquidityUsd / 2) : 1;
-  const slip = f.baseSlippagePct + impact;
+  // Token-2022 transfer tax (Stonk.fun reward coins): fewer tokens in on a buy, fewer dollars out on a sell.
+  const slip = f.baseSlippagePct + impact + transferTaxPct / 100;
   const effPrice = side === "buy" ? priceUsd * (1 + slip) : priceUsd * (1 - slip);
   const feesUsd = txFeeUsd + usdSize * dexFeePct;
   return { effPrice, feesUsd, impact };
@@ -73,7 +75,7 @@ export function openPosition(sig: Signal, solPrice: number, now = Date.now()): P
   // Size by exit, not by dollars: a sell of `size` into a pool moves price by about size / (liq/2).
   // Cap so that estimated exit impact stays under maxExitImpactPct. Floor at $2 so tiny pools get a token position, not nothing.
   if (snap.liquidityUsd > 0) size = Math.max(2, Math.min(size, snap.liquidityUsd * config.risk.maxExitImpactPct / 2));
-  const { effPrice, feesUsd } = fillModel("buy", snap.priceUsd, size, snap.liquidityUsd, snap.onCurve, solPrice);
+  const { effPrice, feesUsd } = fillModel("buy", snap.priceUsd, size, snap.liquidityUsd, snap.onCurve, solPrice, taxPct(sig.mint));
   const qty = (size - feesUsd) / effPrice;
   const atr15 = sig.meta?.atr15 as number ?? 0;
   const plan = sig.plan(effPrice, atr15);
@@ -108,7 +110,7 @@ export function sell(p: Position, fraction: number, priceUsd: number, liquidityU
   const qty = Math.min(p.remainingQty, p.remainingQty * fraction);
   if (qty <= 0) return;
   const gross = qty * priceUsd;
-  const { effPrice, feesUsd } = fillModel("sell", priceUsd, gross, liquidityUsd, onCurve, solPrice);
+  const { effPrice, feesUsd } = fillModel("sell", priceUsd, gross, liquidityUsd, onCurve, solPrice, taxPct(p.mint));
   const net = qty * effPrice - feesUsd;
   const costShare = p.costUsd * (qty / p.qty);
   const pnl = net - costShare;

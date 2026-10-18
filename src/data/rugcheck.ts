@@ -2,6 +2,8 @@ import { getJson } from "./http.js";
 import { config } from "../config.js";
 import type { SafetyResult } from "../types.js";
 import { recorder, creators, kv } from "../db.js";
+import { setTax } from "./tax.js";
+import { isStonkReward } from "./stonkfun.js";
 
 interface RcReport {
   rugged?: boolean;
@@ -109,7 +111,10 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
   const freezeAuth = rep.freezeAuthority ?? rep.token?.freezeAuthority;
   if (mintAuth) reasons.push("mint authority active");
   if (freezeAuth) reasons.push("freeze authority active");
-  if ((rep.transferFee?.pct ?? 0) > 2) reasons.push(`transfer fee ${rep.transferFee?.pct}%`);
+  const fee = rep.transferFee?.pct ?? 0;
+  if (fee > 0) setTax(mint, fee);
+  // A Stonk.fun reward coin's tax goes to holders in the paired token, not to the dev: allow up to 3%.
+  if (fee > (isStonkReward(mint) ? 3 : 2)) reasons.push(`transfer fee ${fee}%`);
   for (const r of rep.risks ?? []) {
     if (TRAP_RISKS.test(r.name)) reasons.push(`honeypot: ${r.name}`);
     else if (r.level === "danger" && !LIQ_HOLDER_RISKS.test(r.name)) reasons.push(`danger: ${r.name}`);

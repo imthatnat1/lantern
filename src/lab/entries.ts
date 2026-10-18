@@ -16,6 +16,7 @@ import { db } from "../db.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import type { Mode } from "../types.js";
 import { pairScore } from "../strategies/base.js";
+import { isStonkPair } from "../data/universe.js";
 import { pullbackPattern, pullbackQualifies } from "../strategies/pullback.js";
 import { bouncePattern } from "../strategies/bounce.js";
 import { dipPattern, dipPlan } from "../strategies/dip.js";
@@ -144,14 +145,14 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
     } else if (mode === "dip") {
       const C = cfg("dip", o);
       const pinned = config.pinned.includes(h.info.mint);
-      const stonk = !!h.info.quote && !["SOL", "WSOL", "USDC", "USDT"].includes(h.info.quote.toUpperCase());
+      const stonk = isStonkPair({ mint: h.info.mint, quoteSymbol: h.info.quote ?? undefined });
       const quality = ageH >= 72 && m.liquidityUsd >= 100_000 && m.volume24h >= 50_000;
       if (!pinned && !stonk && !quality) continue;
       if (!pinned && !passesGate(h, now, ageH, m.change1h, m.change6h, g)) continue;
       const { c5, realShare } = h.c5At(now);
       const p = dipPattern(m, c5, now, C);
       if (!p.ok) continue;
-      const score = p.base + (pinned ? 10 : 0) + pairScore({ quoteSymbol: h.info.quote ?? undefined } as never);
+      const score = p.base + (pinned ? 10 : 0) + pairScore({ mint: h.info.mint, quoteSymbol: h.info.quote ?? undefined } as never);
       if (score < C.minScore) continue;
       const dayLow = lowestLow(h.c15Before(now), now - 24 * 3_600_000);
       const c = enter(h, mode, now, `dip ${(p.depth * 100).toFixed(1)}% off 24h high`, dipPlan(p.lo, dayLow), realShare, exp);
@@ -182,7 +183,7 @@ function rideTrades(coins: Map<string, CoinHistory>, from: number, to: number, e
   const C = cfg("ride", exp.config);
   const out: Candidate[] = [];
   const st = new Map<string, { coreUntil: number; blockedUntil: number; day: Map<number, number> }>();
-  const stonk = (h: CoinHistory) => !!h.info.quote && !["SOL", "WSOL", "USDC", "USDT"].includes(h.info.quote.toUpperCase());
+  const stonk = (h: CoinHistory) => isStonkPair({ mint: h.info.mint, quoteSymbol: h.info.quote ?? undefined });
   for (let bucket = Math.ceil(from / STEP) * STEP; bucket < to; bucket += STEP) {
     const now = bucket + SCAN_OFFSET;
     const cands: { h: CoinHistory; m: NonNullable<ReturnType<CoinHistory["mktAt"]>>; pref: number }[] = [];

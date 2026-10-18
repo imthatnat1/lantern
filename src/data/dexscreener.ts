@@ -20,6 +20,9 @@ export interface DsPair {
   info?: { imageUrl?: string; websites?: { url: string }[]; socials?: { type: string; url: string }[] };
 }
 
+/** Still on a launch curve (pump.fun, or Raydium LaunchLab, which Stonk.fun launches on): no pool liquidity yet. */
+export function isCurve(dexId: string): boolean { return dexId === "pumpfun" || /launchlab/i.test(dexId); }
+
 /** A pair's real trading, by its busiest window. */
 function activity(p: { volume?: { h1?: number; h6?: number; h24?: number } }): number {
   return Math.max(p.volume?.h24 ?? 0, p.volume?.h6 ?? 0, p.volume?.h1 ?? 0);
@@ -74,7 +77,7 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
     change5m: p.priceChange?.m5 ?? 0, change1h: p.priceChange?.h1 ?? 0,
     change6h: p.priceChange?.h6 ?? 0, change24h: p.priceChange?.h24 ?? 0,
     createdAt: p.pairCreatedAt ?? Date.now(),
-    onCurve: p.dexId === "pumpfun",
+    onCurve: isCurve(p.dexId),
     website: p.info?.websites?.[0]?.url,
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
     imageUrl: p.info?.imageUrl,
@@ -106,7 +109,7 @@ export async function snapshotFromPair(mint: string, p: DsPair): Promise<TokenSn
     buys5m: p.txns?.m5?.buys ?? 0, sells5m: p.txns?.m5?.sells ?? 0, buys1h: p.txns?.h1?.buys, sells1h: p.txns?.h1?.sells,
     change5m: p.priceChange?.m5 ?? 0, change1h: p.priceChange?.h1 ?? 0,
     change6h: p.priceChange?.h6 ?? 0, change24h: p.priceChange?.h24 ?? 0,
-    createdAt: p.pairCreatedAt ?? Date.now(), onCurve: p.dexId === "pumpfun",
+    createdAt: p.pairCreatedAt ?? Date.now(), onCurve: isCurve(p.dexId),
     website: p.info?.websites?.[0]?.url,
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
     imageUrl: p.info?.imageUrl,

@@ -4,6 +4,7 @@
  */
 import { evaluate } from "../engine/exits.js";
 import { fillModel } from "../engine/broker.js";
+import { taxPct } from "../data/tax.js";
 import type { Candle, ExitPlan, Mode, Position } from "../types.js";
 
 export const SOL_USD = 150;
@@ -49,7 +50,8 @@ export interface SimResult { pnl: number; pct: number; reason: string; exitAt: n
 export function simulate(x: SimInput): SimResult | null {
   if (x.ticks.length < 2) return null;
   const liq0 = x.liquidity || 50_000;
-  const { effPrice, feesUsd } = fillModel("buy", x.price, x.sizeUsd, liq0, x.onCurve, SOL_USD);
+  const tax = taxPct(x.mint);
+  const { effPrice, feesUsd } = fillModel("buy", x.price, x.sizeUsd, liq0, x.onCurve, SOL_USD, tax);
   const qty = (x.sizeUsd - feesUsd) / effPrice;
   const plan = applyVariant(x.plan(effPrice, x.atr15 || effPrice * 0.05), x.variant, effPrice);
   const p: Position = {
@@ -71,7 +73,7 @@ export function simulate(x: SimInput): SimResult | null {
     const actions = evaluate(p, { price: t.price, at: t.at, confirmed, source: "replay" }, lastClosed, t.at);
     for (const a of actions) {
       const q = p.remainingQty * a.fraction;
-      const { effPrice: sp, feesUsd: sf } = fillModel("sell", t.price, q * t.price, t.liquidity || liq0, x.onCurve, SOL_USD);
+      const { effPrice: sp, feesUsd: sf } = fillModel("sell", t.price, q * t.price, t.liquidity || liq0, x.onCurve, SOL_USD, tax);
       net += q * sp - sf; p.remainingQty -= q; reason = a.reason; exitAt = t.at;
       if (p.remainingQty <= p.qty * 0.001) { p.remainingQty = 0; p.status = "closed"; break; }
     }
