@@ -13,6 +13,7 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { db } from "../db.js";
 import { Lab, modesFor, summarize, type Experiment, type LabTrade, type ModeSummary } from "./entries.js";
 import type { Mode } from "../types.js";
 
@@ -26,9 +27,22 @@ export interface ExperimentResult {
   error?: string;
 }
 
+/** How well the replay of the live rules matches what the live bot actually did in the same window. */
+export interface LiveCheck {
+  /** When recorded data actually starts; can be later than `from`. */
+  dataFrom: number;
+  live: Partial<Record<Mode, { trades: number; wins: number; pnl: number; open: number }>>;
+  /** Live trades the replay also took (same coin and mode, within 30 minutes). */
+  matched: number; liveTrades: number;
+  missedByReplay: { mode: Mode; symbol: string; at: number; pnl: number | null }[];
+  /** Baseline split by whether the entry saw real candles or ones rebuilt from ticks. */
+  byCandles: { real: { trades: number; wins: number; pnl: number }; rebuilt: { trades: number; wins: number; pnl: number } };
+}
+
 export interface LabReport {
   ranAt: number; from: number; to: number; hours: number; coins: number; secs: number;
   baseline: { summary: Partial<Record<Mode, ModeSummary>>; trades: LabTrade[] };
+  check?: LiveCheck;
   experiments: ExperimentResult[];
 }
 
@@ -44,6 +58,28 @@ const key = (t: LabTrade) => `${t.mode}:${t.mint}:${t.leg ?? ""}:${Math.round(t.
 const tot = (s: Partial<Record<Mode, ModeSummary>>, modes: Mode[]) => modes.reduce((a, m) => {
   const x = s[m]; if (x) { a.trades += x.trades; a.wins += x.wins; a.pnl += x.pnl; } return a;
 }, { trades: 0, wins: 0, pnl: 0 });
+
+export function liveCheck(from: number, to: number, base: LabTrade[]): LiveCheck {
+  const firstTick = (db.prepare("SELECT MIN(at) AS t FROM ticks WHERE at BETWEEN ? AND ?").get(from, to) as { t: number | null }).t ?? to;
+  const rows = db.prepare("SELECT mode, symbol, mint, entry_at, realized_usd, status FROM positions WHERE entry_at BETWEEN ? AND ? ORDER BY entry_at").all(Math.max(from, firstTick), to) as
+    { mode: Mode; symbol: string; mint: string; entry_at: number; realized_usd: number; status: string }[];
+  const live: LiveCheck["live"] = {};
+  let matched = 0;
+  const missed: LiveCheck["missedByReplay"] = [];
+  for (const r of rows) {
+    const l = live[r.mode] ?? { trades: 0, wins: 0, pnl: 0, open: 0 };
+    l.trades++;
+    if (r.status === "closed") { l.pnl += r.realized_usd; if (r.realized_usd > 0) l.wins++; } else l.open++;
+    live[r.mode] = l;
+    if (base.some(t => t.mode === r.mode && t.mint === r.mint && Math.abs(t.at - r.entry_at) <= 30 * 60_000)) matched++;
+    else missed.push({ mode: r.mode, symbol: r.symbol, at: r.entry_at, pnl: r.status === "closed" ? r.realized_usd : null });
+  }
+  const split = (f: (t: LabTrade) => boolean) => base.filter(f).reduce((a, t) => ({ trades: a.trades + 1, wins: a.wins + (t.pnl > 0 ? 1 : 0), pnl: a.pnl + t.pnl }), { trades: 0, wins: 0, pnl: 0 });
+  return {
+    dataFrom: firstTick, live, matched, liveTrades: rows.length, missedByReplay: missed.slice(-10),
+    byCandles: { real: split(t => t.candles === "real"), rebuilt: split(t => t.candles !== "real") },
+  };
+}
 
 export function runLab(hours: number, experiments: Experiment[], now = Date.now()): LabReport {
   const t0 = Date.now();
@@ -73,6 +109,7 @@ export function runLab(hours: number, experiments: Experiment[], now = Date.now(
   return {
     ranAt: now, from, to: now, hours, coins: lab.coins.size, secs: Math.round((Date.now() - t0) / 1000),
     baseline: { summary: baseSummary, trades: [...base.trades].sort((x, y) => y.at - x.at).slice(0, 60) },
+    check: liveCheck(from, now, base.trades),
     experiments: out,
   };
 }
@@ -89,6 +126,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const rep = runLab(hours, exps);
   if (args.includes("--json")) { process.stdout.write(JSON.stringify(rep)); process.exit(0); }
   console.log(`Lab: ${rep.coins} coins, last ${hours}h, ${rep.secs}s\n`);
+  const c = rep.check!;
+  console.log(`Data from ${new Date(c.dataFrom).toISOString()}. Live bot: ${c.liveTrades} trades, replay matched ${c.matched}.`);
+  console.log(`Replay entries on real candles: ${c.byCandles.real.trades} (${money(c.byCandles.real.pnl)}), rebuilt: ${c.byCandles.rebuilt.trades} (${money(c.byCandles.rebuilt.pnl)})\n`);
   console.log("Live rules:");
   for (const [m, s] of Object.entries(rep.baseline.summary)) console.log(`  ${m.padEnd(9)} ${String(s!.trades).padStart(3)} trades ${String(s!.wins).padStart(3)} wins  ${money(s!.pnl)}`);
   for (const e of rep.experiments) {

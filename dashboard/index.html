@@ -550,9 +550,22 @@ function renderLab(L) {
   const b = rep.baseline.summary || {};
   const modes = MODE_ORDER.filter(m => b[m]);
   const tot = modes.reduce((a, m) => ({ n: a.n + b[m].trades, w: a.w + b[m].wins, p: a.p + b[m].pnl, r: a.r + b[m].realCandleShare * b[m].trades }), { n: 0, w: 0, p: 0, r: 0 });
+  const c = rep.check;
+  const lv = (c && c.live) || {};
+  const allModes = MODE_ORDER.filter(m => b[m] || lv[m]);
+  const hrs = c ? Math.max(1, Math.round((rep.to - c.dataFrom) / 3600e3)) : rep.hours;
+  const liveTot = Object.values(lv).reduce((a, x) => ({ n: a.n + x.trades, p: a.p + x.pnl, o: a.o + x.open }), { n: 0, p: 0, o: 0 });
+  const trust = !c || !c.liveTrades ? "" : c.matched / c.liveTrades >= 0.7 && Math.abs(tot.n - c.liveTrades) <= Math.max(3, c.liveTrades * 0.5)
+    ? `<p class="note up">The replay reproduced ${c.matched} of the bot's ${c.liveTrades} real trades. Close enough to read the tests.</p>`
+    : `<p class="note" style="color:var(--gold)">The replay reproduced ${c.matched} of the bot's ${c.liveTrades} real trades and took ${tot.n} itself. Too far apart to trust the tests yet.</p>`;
+  const bc = c && c.byCandles;
   $("labBase").innerHTML = `<div class="card lab"><div class="head"><div class="sym">Live rules, replayed <small class="dim">baseline</small></div><div class="gain ${tot.p >= 0 ? "up" : "down"}">${usd(tot.p, true)}<small>${tot.n} trades · ${tot.n ? Math.round(tot.w / tot.n * 100) : 0}% won</small></div></div>
-    ${modes.length ? `<table style="margin-top:10px"><tr><th>Mode</th><th>Trades</th><th>Won</th><th>P&amp;L</th></tr>${modes.map(m => `<tr><td>${m}</td><td>${b[m].trades}</td><td>${b[m].wins}</td><td class="${b[m].pnl >= 0 ? "up" : "down"}">${usd(b[m].pnl, true)}</td></tr>`).join("")}</table>` : `<p class="note">No trades in the window yet.</p>`}
-    <p class="note">Compare this with the real results above: if they're far apart, the replay is missing something and the tests below deserve less trust. ${tot.n ? Math.round(tot.r / tot.n * 100) + "% of entries saw real candles; the rest used candles rebuilt from price ticks." : ""}</p></div>`;
+    <p class="note">Recorded data covers the last ${hrs}h.</p>
+    ${allModes.length ? `<table style="margin-top:6px"><tr><th>Mode</th><th>Replay</th><th>P&amp;L</th><th>Real bot</th><th>P&amp;L</th></tr>${allModes.map(m => { const r = b[m] || { trades: 0, pnl: 0 }, l = lv[m] || { trades: 0, pnl: 0, open: 0 }; return `<tr><td>${m}</td><td>${r.trades}</td><td class="${r.pnl >= 0 ? "up" : "down"}">${usd(r.pnl, true)}</td><td>${l.trades}${l.open ? `<span class="faint" style="font-size:12px"> (${l.open} open)</span>` : ""}</td><td class="${l.pnl >= 0 ? "up" : "down"}">${usd(l.pnl, true)}</td></tr>`; }).join("")}</table>` : `<p class="note">No trades in the window yet.</p>`}
+    ${trust}
+    ${bc ? `<p class="note">Entries on real candles: ${bc.real.trades}, ${usd(bc.real.pnl, true)}. On candles rebuilt from price ticks: ${bc.rebuilt.trades}, ${usd(bc.rebuilt.pnl, true)}. Rebuilt candles are rough, so trust the first number more.</p>` : ""}
+    ${c && c.missedByReplay.length ? `<details><summary>Real trades the replay didn't take</summary><div class="diff">${c.missedByReplay.map(x => `<div><span>${esc(x.symbol)} <span class="faint">${esc(x.mode)}</span></span><span class="${(x.pnl ?? 0) >= 0 ? "up" : "down"}">${x.pnl == null ? "open" : usd(x.pnl, true)}</span></div>`).join("")}</div></details>` : ""}
+    </div>`;
   $("lab").innerHTML = rep.experiments.map(e => {
     const t = e.totals, d = t.pnl - t.basePnl;
     const same = !e.added.length && !e.dropped.length && Math.abs(d) < 0.005;
@@ -584,7 +597,10 @@ $("labRun").onclick = async () => {
 function demoLab() {
   const now = Date.now();
   const tr = (symbol, mode, pnl, exit, leg) => ({ symbol, mode, pnl, exit, leg, pct: pnl / 4, at: now - 3e6 });
-  return { status: { running: false, lastRunAt: now - 2 * 3600e3 }, report: { ranAt: now - 2 * 3600e3, hours: 72, coins: 412, baseline: { summary: {
+  return { status: { running: false, lastRunAt: now - 2 * 3600e3 }, report: { ranAt: now - 2 * 3600e3, to: now - 2 * 3600e3, hours: 72, coins: 412,
+    check: { dataFrom: now - 20 * 3600e3, liveTrades: 4, matched: 1, live: { ride: { trades: 3, wins: 1, pnl: -2.29, open: 2 }, trusted: { trades: 1, wins: 1, pnl: 0.83, open: 1 } },
+      byCandles: { real: { trades: 8, wins: 4, pnl: 2.1 }, rebuilt: { trades: 13, wins: 4, pnl: -3.5 } }, missedByReplay: [{ mode: "ride", symbol: "YILONGMA", pnl: null }, { mode: "trusted", symbol: "Chillbaby", pnl: 0.83 }] },
+    baseline: { summary: {
       trusted: { trades: 6, wins: 4, pnl: 3.1, realCandleShare: 0.4 }, ride: { trades: 14, wins: 7, pnl: 2.2, realCandleShare: 0.9 }, dip: { trades: 9, wins: 4, pnl: -1.4, realCandleShare: 0.8 }, pullback: { trades: 3, wins: 1, pnl: 0.6, realCandleShare: 0.7 } } },
     experiments: [
       { name: "Ride: tighter trails", why: "A ride core peaked at +62.6% and trailed back to breakeven.", modes: ["ride"], totals: { trades: 17, wins: 10, pnl: 4.9, baseTrades: 14, baseWins: 7, basePnl: 2.2 }, added: [tr("YILONGMA", "ride", 1.2, "trail 8% from peak close", "sleeve")], dropped: [tr("YILONGMA", "ride", -0.4, "close stop", "core")] },

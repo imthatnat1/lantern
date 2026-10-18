@@ -89,3 +89,18 @@ test("a gate rejection logged by the live bot blocks the replay entry", () => {
   assert.equal(r.trades.length, 0);
   db.prepare("DELETE FROM signals_log WHERE mint=?").run(MINT);
 });
+
+test("live check: a real trade on the same coin and mode counts as matched; one the replay never took is listed", () => {
+  const cols = "mode,mint,symbol,entry_price,entry_at,qty,remaining_qty,cost_usd,peak_price,peak_close,last_good_price,last_good_at,atr15,liquidity_at_entry,plan,tp_taken,realized_usd,status,meta";
+  const ins = db.prepare(`INSERT INTO positions(${cols}) VALUES(${cols.split(",").map(() => "?").join(",")})`);
+  ins.run("pullback", MINT, "PULL", 1.95, T0 + 365 * MIN, 1, 0, 5, 2, 2, 1.95, T0, 0.1, 60000, "{}", "[]", 1.2, "closed", "{}");
+  ins.run("ride", "OTHERxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "OTHER", 1, T0 + 100 * MIN, 1, 1, 8, 1, 1, 1, T0, 0.1, 60000, "{}", "[]", 0, "open", "{}");
+  const rep = runLab(10, [], NOW);
+  const c = rep.check!;
+  assert.equal(c.liveTrades, 2);
+  assert.equal(c.matched, 1);
+  assert.deepEqual(c.missedByReplay.map(m => m.symbol), ["OTHER"]);
+  assert.equal(c.live.ride!.open, 1);
+  assert.equal(c.byCandles.rebuilt.trades, 1);
+  db.prepare("DELETE FROM positions").run();
+});
