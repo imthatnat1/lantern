@@ -5,7 +5,7 @@ import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { scored, baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"pullback"> = config.modes.pullback;
 
@@ -86,13 +86,13 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const a15 = atr(c15);
   const hv = holderVelocity(s.mint);
   if (hv != null && hv <= -0.10) { logLook("pullback", s, `holders shrinking ${(hv * 100).toFixed(0)}% in 10m`); return null; }
-  const score = p.base + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
+  const { score, scoreParts } = scored({ setup: p.base, "holder growth": holderScore(s.mint), "creative pair": pairScore(s), wallets: walletScore(s.mint), snipers: sniperPenalty(g) });
 
   const sig: Signal = {
     mode: "pullback", mint: s.mint, symbol: s.symbol, sizeUsd: C.sizeUsd, score,
     reason: `pullback ${(p.retrace * 100).toFixed(0)}% from 1h high, reclaim on vol`,
     snapshot: s, candles15: c15,
-    meta: { atr15: a15, retraceLow: p.lo, hiRef: p.hi, holders: g.holders },
+    meta: { atr15: a15, retraceLow: p.lo, hiRef: p.hi, holders: g.holders, scoreParts },
     plan: p.plan,
   };
   if (!g.ok) { logSignal(sig, false, g.why!); return null; }

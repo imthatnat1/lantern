@@ -45,3 +45,10 @@ test("no trades yet: nulls, not NaN", () => {
   assert.equal(s.profitFactor, null);
   assert.equal(s.avgHoldMs, null);
 });
+
+test("scored: total matches the parts, zero parts dropped", async () => {
+  const { scored } = await import("../src/strategies/base.js");
+  const r = scored({ setup: 60, "holder growth": 10, "creative pair": 0, snipers: -4 });
+  assert.equal(r.score, 66);
+  assert.deepEqual(r.scoreParts, { setup: 60, "holder growth": 10, snipers: -4 });
+});

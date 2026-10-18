@@ -148,6 +148,16 @@
   .labels { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
   .labels span { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ivory-dim); }
   .labels span.hot { border-color: rgba(245,181,68,.6); color: var(--lantern); }
+  .card details.more { border: 0; border-top: 1px dashed var(--line-2); margin-top: 12px; }
+  .card details.more summary { padding: 10px 0 2px; min-height: 44px; align-items: center; font-size: 14px; font-weight: 500; color: var(--lantern); }
+  .card details.more summary::after { color: var(--lantern); }
+  .bars { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: center; margin-top: 8px; font-size: 14px; }
+  .bars i { display: block; height: 8px; border-radius: 4px; background: var(--cell); }
+  .bars b { display: block; height: 8px; border-radius: 4px; background: var(--lantern); }
+  .bars b.neg { background: var(--coral); }
+  .labels span.ok { color: var(--sage); border-color: rgba(95,212,160,.5); background: rgba(95,212,160,.1); }
+  .grid.plan { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.plan > div { white-space: normal; line-height: 1.45; }
   .score { font-family: var(--serif); font-size: 26px; font-weight: 500; color: var(--lantern); }
   .setup { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--inset); border: 1px solid var(--line); }
   .setup .need { font-size: 14px; color: var(--ivory); }
@@ -499,6 +509,50 @@ function stopBar(p) {
     <div class="sbar-k"><span>${word}</span><span class="${above < 0.1 ? "near" : "ok"}">${pct(above).replace("+", "")} above ${word}</span><span>peak</span></div>`;
 }
 
+/** Tap-to-open panel on an open position: why it bought, what the safety gate saw, and the exit plan. */
+const openDetail = new Set();
+function detail(p) {
+  const m = p.market || {}, sf = p.safety, plan = p.plan || {};
+  // Why bought: score bars when the parts were recorded, else the reason split into chips.
+  let why = "";
+  const parts = p.scoreParts ? Object.entries(p.scoreParts) : [];
+  if (parts.length) {
+    const top = Math.max(...parts.map(([, v]) => Math.abs(v)), 1);
+    why = `<div class="bars">${parts.map(([k, v]) => `<span>${esc(k)}</span><i><b class="${v < 0 ? "neg" : ""}" style="width:${(Math.abs(v) / top * 100).toFixed(0)}%"></b></i><span class="mono ${v < 0 ? "down" : ""}">${v > 0 ? "" : "−"}${Math.abs(v)}</span>`).join("")}</div>`;
+  }
+  const chips = String(p.reason || "").split(/,\s*|:\s*/).filter(x => x && x.length < 60);
+  why += `<div class="labels">${chips.map(c => `<span>${esc(c)}</span>`).join("")}${(p.wallets || []).map(w => `<span class="hot">${esc(w)}</span>`).join("")}</div>`;
+  // Buzz and safety, as the gate saw it at entry (holders now in brackets when it moved).
+  const h = sf && sf.holders != null ? sf.holders : p.holdersAtEntry;
+  const safe = [
+    h != null ? `${num(h)} holders at entry${m.holders && m.holders !== h ? ` (${num(m.holders)} now)` : ""}` : null,
+    sf && sf.top10 != null ? `top 10 ${sf.top10.toFixed(1)}%` : null,
+    sf && sf.sniper != null ? `snipers ${sf.sniper.toFixed(0)}%` : null,
+    m.twitter ? "X linked" : "no X link",
+    m.website ? "site linked" : null,
+    ...(m.labels || []),
+  ].filter(Boolean);
+  const gate = `<span class="ok">passed safety gate</span>`;
+  // Exit plan.
+  const tp = (p.takeProfits || []).map((t, i) => `${p.tpTaken.includes(i) ? "✓ " : ""}+${Math.round(t.gain * 100)}% → sell ${Math.round(t.sell * 100)}%`).join("<br>") || "none";
+  const trail = plan.trailPct ? `${Math.round(plan.trailPct * 100)}% below peak close, after +${Math.round(plan.trailAfterGain * 100)}%` + (plan.trailLadder && plan.trailLadder.length ? "<br>" + plan.trailLadder.map(r => `+${Math.round(r.peakGain * 100)}% → ${Math.round(r.trailPct * 100)}%`).join(", ") : "") : "none";
+  const floorPx = p.entryPrice * (1 + p.hardFloorPct);
+  const open = openDetail.has(p.mint) ? " open" : "";
+  return `<details class="more" data-mint="${esc(p.mint)}"${open}><summary>Why it bought, safety, exit plan</summary>
+    <p class="kicker">Why bought · score ${p.score ?? "—"}</p>${why}
+    <p class="kicker">Buzz &amp; safety</p><div class="labels">${safe.map(x => `<span>${esc(x)}</span>`).join("")}${gate}</div>
+    <p class="kicker">Exit plan</p>
+    <div class="grid mine plan">
+      <div><span>hard floor · any tick</span>${px(floorPx)} (${pct(p.hardFloorPct)})</div>
+      <div><span>close stop · 15m</span>${px(p.closeStop)} (${pct(p.stopPct)})${p.trailArmed ? " · trailing" : ""}</div>
+      <div><span>take profit</span>${tp}</div>
+      <div><span>trail</span>${trail}</div>
+      <div class="full"><span>time exit</span>${plan.maxHoldMs ? "after " + ago(plan.maxHoldMs) + ", if the strategy agrees" : "none, trail and stop only"}</div>
+    </div>
+  </details>`;
+}
+document.addEventListener("toggle", e => { const d = e.target; if (d.classList && d.classList.contains("more")) { d.open ? openDetail.add(d.dataset.mint) : openDetail.delete(d.dataset.mint); } }, true);
+
 function openRows(open) {
   const rows = modeFilter === "all" ? open : open.filter(o => o.mode === modeFilter);
   if (!rows.length) return `<div class="empty">No open positions${modeFilter === "all" ? "" : " in " + modeFilter}. The scanners are watching.</div>`;
@@ -526,7 +580,8 @@ function openRows(open) {
         <div><span>score</span>${p.score ?? "—"}</div>
       </div>
       ${stopBar(p)}
-      <div class="note">${esc(p.reason)} · take profit ${tps}${p.realizedUsd ? ` · banked ${usd(p.realizedUsd, true)}` : ""}</div>
+      <div class="note">${esc(p.reason)}${p.realizedUsd ? ` · banked ${usd(p.realizedUsd, true)}` : ""}</div>
+      ${detail(p)}
     </div>`;
   }).join("");
 }
@@ -877,9 +932,9 @@ function demo() {
     health: { feedDownS: 0, dexStaleS: 4, rejectedTicks24h: 3, startedAt: now - 2 * 86400e3, uptimeMs: 2 * 86400e3, walletEvents1h: 4, helius: { keyLooksValid: true, lastOkAt: now - 4 * 60e3 }, rejected: [{ at: now - 3e6, mint: "6GmAxxxxxxxxUNgx", price: 0.0011, last_good: 0.11 }] },
     config: { modes: { pullback: { sizeUsd: 5, maxOpen: 3 } }, allocation: { ultra: .4, bounce: .2, pullback: .25, trusted: .15 } },
     open: [
-      { symbol: "KURP", mode: "pullback", mint: "xpobxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", entryPrice: 0.00113, price: 0.00212, gainPct: 0.88, pnlUsd: 4.4, sizeUsd: 5, costUsd: 5, realizedUsd: 0, openedAt: now - 4.2 * 3600e3, closeStop: 0.00078, stopPct: -0.31, hardFloorPct: -0.45, trailArmed: true, peakPct: 1.1, tpTaken: [0], takeProfits: [{ gain: .6, sell: .33 }], reason: "pullback 28% from 1h high, reclaim on vol", score: 82, mcapAtEntry: 113000, market: mk("KURP", "SOL", 0.00212, 2100000, 180000, [4, 61, 320], 4120, 9, 2.4e6) },
-      { symbol: "FTR", mode: "ultra", mint: "DFMtxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", entryPrice: 0.00496, price: 0.0044, gainPct: -0.11, pnlUsd: -0.9, sizeUsd: 8, costUsd: 8, realizedUsd: 0, openedAt: now - 1.1 * 3600e3, closeStop: 0.00288, stopPct: -0.42, hardFloorPct: -0.55, trailArmed: false, peakPct: 0.14, tpTaken: [], takeProfits: [{ gain: 1, sell: .33 }], reason: "second leg breakout, vol 2.1x, 3 higher lows", score: 78, mcapAtEntry: 4780000, market: mk("FTR", "SOL", 0.0044, 3660000, 243000, [-4, -15, -29], 44868, 48, 8.9e6, ["1 trusted holds"]) },
-      { symbol: "ZCAT", mode: "trusted", mint: "HcRLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxDeJR", entryPrice: 0.0422, price: 0.0486, gainPct: 0.15, pnlUsd: 0.6, sizeUsd: 4, costUsd: 4, realizedUsd: 0, openedAt: now - 40 * 60e3, closeStop: 0.0304, stopPct: -0.28, hardFloorPct: -0.45, trailArmed: false, peakPct: 0.22, tpTaken: [], takeProfits: [{ gain: 1, sell: .5 }], reason: "2 trusted wallets bought", score: 70, mcapAtEntry: 41880000, market: mk("ZCAT", "ZEC", 0.0486, 47170000, 1100000, [0.2, -8.7, -13], 76677, 47 * 24, 444000, ["2 trusted bought"]) },
+      { symbol: "KURP", mode: "pullback", mint: "xpobxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", entryPrice: 0.00113, price: 0.00212, gainPct: 0.88, pnlUsd: 4.4, sizeUsd: 5, costUsd: 5, realizedUsd: 0, openedAt: now - 4.2 * 3600e3, closeStop: 0.00078, stopPct: -0.31, hardFloorPct: -0.45, trailArmed: true, peakPct: 1.1, tpTaken: [0], takeProfits: [{ gain: .6, sell: .33 }], reason: "pullback 28% from 1h high, reclaim on vol", score: 82, scoreParts: { setup: 60, "holder growth": 20, wallets: 5, snipers: -3 }, safety: { holders: 3600, top10: 18.4, sniper: 3 }, plan: { trailPct: .3, trailAfterGain: .5, trailLadder: null, maxHoldMs: 12 * 3600e3 }, mcapAtEntry: 113000, market: mk("KURP", "SOL", 0.00212, 2100000, 180000, [4, 61, 320], 4120, 9, 2.4e6) },
+      { symbol: "FTR", mode: "ultra", mint: "DFMtxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", entryPrice: 0.00496, price: 0.0044, gainPct: -0.11, pnlUsd: -0.9, sizeUsd: 8, costUsd: 8, realizedUsd: 0, openedAt: now - 1.1 * 3600e3, closeStop: 0.00288, stopPct: -0.42, hardFloorPct: -0.55, trailArmed: false, peakPct: 0.14, tpTaken: [], takeProfits: [{ gain: 1, sell: .33 }], reason: "second leg breakout, vol 2.1x, 3 higher lows", score: 78, scoreParts: { setup: 70, "creative pair": 0, wallets: 10, snipers: -2 }, safety: { holders: 44100, top10: 2.1, sniper: 2 }, plan: { trailPct: .35, trailAfterGain: .5, trailLadder: [{ peakGain: 1, trailPct: .35 }, { peakGain: 3, trailPct: .4 }], maxHoldMs: 0 }, mcapAtEntry: 4780000, market: mk("FTR", "SOL", 0.0044, 3660000, 243000, [-4, -15, -29], 44868, 48, 8.9e6, ["1 trusted holds"]) },
+      { symbol: "ZCAT", mode: "trusted", mint: "HcRLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxDeJR", entryPrice: 0.0422, price: 0.0486, gainPct: 0.15, pnlUsd: 0.6, sizeUsd: 4, costUsd: 4, realizedUsd: 0, openedAt: now - 40 * 60e3, closeStop: 0.0304, stopPct: -0.28, hardFloorPct: -0.45, trailArmed: false, peakPct: 0.22, tpTaken: [], takeProfits: [{ gain: 1, sell: .5 }], reason: "trusted copy: wirelyss + hexi bought", score: 70, wallets: ["wirelyss", "hexi"], scoreParts: { base: 30, "trusted wallets": 20, "buy/sell": 15, holders: 10, "top 10": -5, liquidity: 10, snipers: -10 }, safety: { holders: 76000, top10: 31, sniper: 10 }, plan: { trailPct: .25, trailAfterGain: .4, trailLadder: null, maxHoldMs: 6 * 3600e3 }, mcapAtEntry: 41880000, market: mk("ZCAT", "ZEC", 0.0486, 47170000, 1100000, [0.2, -8.7, -13], 76677, 47 * 24, 444000, ["2 trusted bought"]) },
     ],
     closed: [
       { symbol: "OPTIMA", mode: "pullback", mint: "DdVXxxxx", realized_usd: 6.8, closed_at: now - 3 * 3600e3, entry_at: now - 9 * 3600e3, close_reason: "TP +60%" },

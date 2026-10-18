@@ -4,7 +4,7 @@ import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
 import { allCandidates, isPinned, isQuality, isStonkPair } from "../data/universe.js";
-import { buySellRatio, candles5and15, dex, gate, dist, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { scored, buySellRatio, candles5and15, dex, gate, dist, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"dip"> = config.modes.dip;
 
@@ -86,17 +86,14 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   const g = await gate(s, "dip", C.sizeUsd);
   const a15 = atr(c15);
   const dayLow = lowestLow(c15, ctx.now - 24 * 3_600_000);
-  let score = p.base;
-  if (isPinned(s.mint)) score += 10;
-  score += pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
-  score += holderScore(s.mint);
+  const { score, scoreParts } = scored({ setup: p.base, pinned: isPinned(s.mint) ? 10 : 0, "holder growth": holderScore(s.mint), "creative pair": pairScore(s), wallets: walletScore(s.mint), snipers: sniperPenalty(g) });
   if (score < C.minScore) { logLook("dip", s, `score ${score.toFixed(0)} below ${C.minScore}`); return null; }
 
   const sig: Signal = {
     mode: "dip", mint: s.mint, symbol: s.symbol, sizeUsd: C.sizeUsd, score,
     reason: `dip ${(p.depth * 100).toFixed(1)}% off 24h high${isStonkPair(s) ? `, ${s.quoteSymbol} pair` : ""}${isPinned(s.mint) ? ", pinned" : ""}`,
     snapshot: s, candles15: c15,
-    meta: { atr15: a15, dipLow: p.lo, dayLow, holders: g.holders },
+    meta: { atr15: a15, dipLow: p.lo, dayLow, holders: g.holders, scoreParts },
     plan: dipPlan(p.lo, dayLow),
   };
   if (!g.ok) { logSignal(sig, false, g.why!); return null; }

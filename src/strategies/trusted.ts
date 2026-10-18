@@ -6,7 +6,7 @@ import { atr, lowestLow } from "../data/gecko.js";
 import * as helius from "../data/helius.js";
 import { recentBuys as pushedBuys } from "../data/wallets.js";
 import { kv } from "../db.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, sniperPenalty, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { scored, buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, sniperPenalty, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"trusted"> = config.modes.trusted;
 
@@ -95,13 +95,15 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names:
 
   // Our own score. Not fixed at 60 anymore.
   const bs = buySellRatio(s);
-  let score = 30;
-  score += walletCount >= 2 ? 20 : 10;
-  score += bs >= 1.2 && bs <= 5 ? 15 : bs > 8 ? 0 : 5;
-  score += (g.holders ?? 0) >= 150 ? 10 : (g.holders ?? 0) >= 50 ? 5 : 0;
-  score += (g.top10 ?? 100) > 40 ? -15 : (g.top10 ?? 100) > 25 ? -5 : 5;
-  score += s.liquidityUsd >= 25_000 ? 10 : 0;
-  score += holderScore(s.mint) + pairScore(s) + sniperPenalty(g);
+  const { score, scoreParts } = scored({
+    base: 30,
+    "trusted wallets": walletCount >= 2 ? 20 : 10,
+    "buy/sell": bs >= 1.2 && bs <= 5 ? 15 : bs > 8 ? 0 : 5,
+    holders: (g.holders ?? 0) >= 150 ? 10 : (g.holders ?? 0) >= 50 ? 5 : 0,
+    "top 10": (g.top10 ?? 100) > 40 ? -15 : (g.top10 ?? 100) > 25 ? -5 : 5,
+    liquidity: s.liquidityUsd >= 25_000 ? 10 : 0,
+    "holder growth": holderScore(s.mint), "creative pair": pairScore(s), snipers: sniperPenalty(g),
+  });
   if (score < C.minScore) { logSignal({ mode: "trusted", mint: s.mint, symbol: s.symbol, sizeUsd: size, score, reason: "score floor", snapshot: s, candles15: [], plan: () => null as any }, false, "score below floor"); return null; }
 
   let c15 = [] as Awaited<ReturnType<typeof candles5and15>>["c15"];
@@ -114,7 +116,7 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names:
     mode: "trusted", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
     reason: `trusted copy: ${names.join(" + ") || walletCount + " wallets"} bought`,
     snapshot: s, candles15: c15,
-    meta: { atr15: a15, walletCount, wallets: names, walletAddrs: addrs, holders: g.holders },
+    meta: { atr15: a15, walletCount, wallets: names, walletAddrs: addrs, holders: g.holders, scoreParts },
     plan: trustedPlan(low, C),
   };
   if (!g.ok) { logSignal(sig, false, g.why!); return null; }

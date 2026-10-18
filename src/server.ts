@@ -72,6 +72,7 @@ export function snapshotEquity(marks: Map<string, number>) {
 }
 
 const mk = db.prepare("SELECT * FROM market WHERE mint=?");
+const safetyAt = db.prepare("SELECT at, ok, top10, holders, sniper, reasons FROM safety_history WHERE mint=? AND at<=? ORDER BY at DESC LIMIT 1");
 function mkt(mint: string) {
   const m = mk.get(mint) as any;
   if (!m) return null;
@@ -116,6 +117,11 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       peakPct: p.peakPrice / p.entryPrice - 1, tpTaken: p.tpTaken, takeProfits: p.plan.takeProfits,
       reason: p.meta.reason, score: p.meta.score, mcapAtEntry: (p.meta.mcapAtEntry as number) ?? null, leg: (p.meta.leg as string) ?? null,
       market: mkt(p.mint),
+      // Detail panel: how it scored, what the safety gate saw at entry, and the full exit plan.
+      scoreParts: (p.meta.scoreParts as Record<string, number>) ?? null,
+      wallets: (p.meta.wallets as string[]) ?? null, holdersAtEntry: (p.meta.holders as number) ?? null,
+      safety: safetyAt.get(p.mint, p.entryAt + 10 * 60_000) ?? null,
+      plan: { trailPct: p.plan.trailPct, trailAfterGain: p.plan.trailAfterGain, trailLadder: p.plan.trailLadder ?? null, maxHoldMs: p.plan.maxHoldMs },
     };
   });
 
