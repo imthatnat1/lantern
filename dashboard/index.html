@@ -206,6 +206,14 @@
   .hint { font-size: 12px; line-height: 1.5; color: var(--ivory-faint); margin: 8px 0 0; }
   .empty { color: var(--ivory-dim); padding: 18px 0; font-size: 15px; }
 
+  .activity { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin: 0 0 22px; }
+  .activity .lbl { font-size: 12px; color: var(--ivory-faint); letter-spacing: .04em; text-transform: uppercase; }
+  .activity .nums { display: flex; gap: 18px; flex-wrap: wrap; margin: 4px 0 8px; font-size: 15px; color: var(--ivory-dim); }
+  .activity .nums b { color: var(--ivory); font-size: 20px; font-weight: 500; margin-right: 4px; }
+  .activity .nums .buy b { color: var(--sage); }
+  .activity .why { font-size: 13px; color: var(--ivory-dim); line-height: 1.7; }
+  .activity .why span { display: inline-block; border: 1px solid var(--line-2); border-radius: 999px; padding: 0 9px; margin: 2px 4px 2px 0; white-space: nowrap; }
+  .activity .why span b { color: var(--ivory); font-weight: 500; }
   .lab-intro { font-size: 15px; color: var(--ivory-dim); margin: 0 0 14px; }
   .trust { border-radius: 16px; padding: 16px; margin: 0 0 8px; background: var(--night-2); border: 1px solid var(--line); }
   .trust.ok { border-left-color: var(--sage); }
@@ -277,6 +285,7 @@
   <p class="verdict flat" id="verdict">Reading the book.</p>
   <p class="sub" id="sub"></p>
 </div>
+<div class="activity" id="activity"></div>
 
 <h2>How it's going</h2>
 <div class="tiles" id="tiles"></div>
@@ -742,8 +751,17 @@ function rejectedRows(rows) {
   return `<table><tr><th>when</th><th>coin</th><th>tick said</th><th>last good</th></tr>${rows.map(r => `<tr><td>${hhmm(r.at)}</td><td>${short(r.mint)}</td><td>${px(r.price)}</td><td>${px(r.last_good)}</td></tr>`).join("")}</table>`;
 }
 
+function activityStrip(a) {
+  if (!a) return "";
+  const groups = Object.entries(a.rejectedBy || {}).sort((x, y) => y[1] - x[1]);
+  return `<div class="lbl">Last hour</div>
+    <div class="nums"><span><b>${a.checked}</b>coins checked</span><span><b>${a.setups}</b>setups forming</span><span class="buy"><b>${a.bought}</b>bought</span></div>
+    ${a.rejected ? `<div class="why">Turned down ${a.rejected}: ${groups.map(([k, n]) => `<span><b>${n}</b> ${esc(k)}</span>`).join("")}</div>` : `<div class="why">Nothing turned down this hour.</div>`}`;
+}
+
 function render(s) {
   S = s;
+  $("activity").innerHTML = activityStrip(s.activity);
   $("pausedBanner").style.display = s.paused ? "block" : "none";
   const ctl = $("ctl");
   ctl.innerHTML = s.paused ? `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5 L10.5 6 L3 10.5 Z"/></svg>Resume` : `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1.5" width="2.5" height="9" rx="1"/><rect x="7.5" y="1.5" width="2.5" height="9" rx="1"/></svg>Pause`;
@@ -917,6 +935,7 @@ function demo() {
   const mk = (sym, quote, price, mcap, liq, ch, holders, created, vol24, labels = []) => ({ symbol: sym, quote, price, mcap, liquidity: liq, ch5m: ch[0], ch1h: ch[0], ch6h: ch[1], ch24h: ch[2], holders, created_at: now - created * 3600e3, vol24h: vol24, vol1h: vol24 / 24 * 2.1, pair: "demo", labels });
   return {
     at: now, paused: false,
+    activity: { checked: 284, looked: 118, setups: 12, rejected: 96, bought: 0, rejectedBy: { "rug risk": 38, "bot volume": 21, "overheated": 17, "too new or thin": 11, "copycat or slop": 6, "honeypot": 3 } },
     account: { cash: 275.1, vault: 6.2, equity: 303.7, peakEquity: 312, startingCapital: 300, realizedToday: 7.4, openPnl: 6.1, closedCount: 18, closedWins: 9, closedPnl: 16.6, dayStartValue: 302.1 },
     stats: (() => {
       const P = (n, wins, pnl, avgWin, avgLoss, pf, bought, looked, byMode) => ({ n, wins, pnl, avgWin, avgLoss, profitFactor: pf, avgHoldMs: 3.4 * 3600e3, bought, looked, byMode });
