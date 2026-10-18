@@ -189,10 +189,31 @@ export function snapshotEquity(marks: Map<string, number>) {
 }
 
 const mk = db.prepare("SELECT * FROM market WHERE mint=?");
+const safetyAt = db.prepare("SELECT at, ok, top10, holders, sniper, reasons FROM safety_history WHERE mint=? AND at<=? ORDER BY at DESC LIMIT 1");
 function mkt(mint: string) {
   const m = mk.get(mint) as any;
   if (!m) return null;
   return { ...m, labels: JSON.parse(m.labels || "[]") };
+}
+
+/** Closed-trade stats, entries and looks since `since` (0 = all time), overall and per mode. */
+export function periodStats(since: number) {
+  const rows = db.prepare(`SELECT mode, realized_usd AS pnl, entry_at, closed_at FROM positions WHERE status='closed' AND closed_at >= ?`).all(since) as { mode: string; pnl: number; entry_at: number; closed_at: number }[];
+  const sum = (xs: typeof rows) => {
+    const wins = xs.filter(x => x.pnl > 0), losses = xs.filter(x => x.pnl <= 0);
+    const won = wins.reduce((a, x) => a + x.pnl, 0), lost = -losses.reduce((a, x) => a + x.pnl, 0);
+    return {
+      n: xs.length, wins: wins.length, pnl: won - lost,
+      avgWin: wins.length ? won / wins.length : null, avgLoss: losses.length ? -lost / losses.length : null,
+      profitFactor: lost > 0 ? won / lost : null,
+      avgHoldMs: xs.length ? xs.reduce((a, x) => a + (x.closed_at - x.entry_at), 0) / xs.length : null,
+    };
+  };
+  const byMode: Record<string, ReturnType<typeof sum>> = {};
+  for (const m of new Set([...Object.keys(config.allocation), ...rows.map(r => r.mode)])) byMode[m] = sum(rows.filter(r => r.mode === m));
+  const bought = (db.prepare("SELECT count(*) AS n FROM positions WHERE entry_at >= ?").get(since) as any).n as number;
+  const looked = (db.prepare("SELECT count(DISTINCT mode || mint) AS n FROM signals_log WHERE at >= ?").get(since) as any).n as number;
+  return { ...sum(rows), bought, looked, byMode };
 }
 
 function state(marks: Map<string, number>, health: { feedDownS: number; dexStaleS: number }) {
@@ -213,6 +234,11 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       peakPct: p.peakPrice / p.entryPrice - 1, tpTaken: p.tpTaken, takeProfits: p.plan.takeProfits,
       reason: p.meta.reason, score: p.meta.score, mcapAtEntry: (p.meta.mcapAtEntry as number) ?? null, leg: (p.meta.leg as string) ?? null,
       market: mkt(p.mint),
+      // Detail panel: how it scored, what the safety gate saw at entry, and the full exit plan.
+      scoreParts: (p.meta.scoreParts as Record<string, number>) ?? null,
+      wallets: (p.meta.wallets as string[]) ?? null, holdersAtEntry: (p.meta.holders as number) ?? null,
+      safety: safetyAt.get(p.mint, p.entryAt + 10 * 60_000) ?? null,
+      plan: { trailPct: p.plan.trailPct, trailAfterGain: p.plan.trailAfterGain, trailLadder: p.plan.trailLadder ?? null, maxHoldMs: p.plan.maxHoldMs },
     };
   });
 
@@ -278,13 +304,19 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
   const closedAll = db.prepare(`SELECT count(*) AS n, sum(case when realized_usd>0 then 1 else 0 end) AS wins, coalesce(sum(realized_usd),0) AS pnl FROM positions WHERE status='closed'`).get() as any;
   const eq = broker.equity(marks);
   const openPnl = open.reduce((s, o) => s + o.pnlUsd, 0);
+  // Account value (equity + vault) at the start of the Brisbane day: the first snapshot after midnight, else the last before it.
+  const dayRow = (db.prepare("SELECT equity, vault FROM equity_history WHERE at >= ? ORDER BY at LIMIT 1").get(dayStart)
+    ?? db.prepare("SELECT equity, vault FROM equity_history WHERE at < ? ORDER BY at DESC LIMIT 1").get(dayStart)) as { equity: number; vault: number } | undefined;
+  const missed48 = missed.length + stoppedThenRan.length;
 
   return {
     at: now, paused: kv.get("paused", false), activity: activity(now),
     account: {
       cash: a.cash, vault: a.vault, equity: eq, peakEquity: a.peakEquity, startingCapital: config.startingCapital,
       realizedToday: broker.realizedToday(), openPnl, closedCount: closedAll.n, closedWins: closedAll.wins, closedPnl: closedAll.pnl,
+      dayStartValue: dayRow ? dayRow.equity + dayRow.vault : null,
     },
+    stats: { "24h": periodStats(now - 24 * 3_600_000), "7d": periodStats(now - 7 * 24 * 3_600_000), all: periodStats(0), missed48 },
     guardrails: { dailyLossStopUsd: config.risk.dailyLossStopUsd, drawdownHaltAt: a.peakEquity * (1 - config.risk.drawdownHaltPct), capitalAtRisk: broker.openValueUsd(marks), maxCapitalAtRisk: config.risk.maxCapitalAtRiskUsd },
     health: { ...health, rejectedTicks24h: rejected.n, rejected: rejectedRows, startedAt: kv.get("startedAt", now), uptimeMs: now - kv.get("startedAt", now),
       helius: { keyLooksValid: /^[0-9a-f-]{36}$/.test(config.keys.helius ?? ""), lastOkAt: kv.get("helius:lastOkAt", 0), lastErr: kv.get("helius:lastErr", ""),

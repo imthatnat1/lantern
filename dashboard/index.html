@@ -3,20 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#161a2e">
+<meta name="theme-color" content="#12161E">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="robots" content="noindex">
 <title>Lantern</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --night: #161a2e; --night-2: #1c2138; --line: #2b3150; --line-2: #3a4169;
-    --ivory: #efe9df; --ivory-dim: #a9a69d; --ivory-faint: #6f6e6a;
-    --blossom: #f0a7bb; --sage: #9fcf9a; --coral: #ef8a7a; --gold: #e6c27a;
-    --serif: "Fraunces", Georgia, serif; --sans: "Instrument Sans", system-ui, sans-serif;
+    /* Night: the room. Paper: the words. Lantern amber only means "awake" or "needs you". */
+    --night: #12161E; --night-2: #1C2330; --cell: #283142; --inset: #161B24; --line: #333D50; --line-2: #3A4558;
+    --ivory: #ECE6DA; --ivory-dim: #B8BFCA; --ivory-faint: #9AA3B1;
+    --lantern: #F5B544; --brass: #E2B66A; --ember: #E8743B; --sage: #5FD4A0; --coral: #FF8A7A; --gold: #E8743B; --sand: #D9C59A;
+    --serif: "Fraunces", Georgia, serif; --sans: "Geist", system-ui, sans-serif; --mono: "Geist Mono", ui-monospace, monospace;
   }
   * { box-sizing: border-box; }
   html { background: var(--night); }
@@ -28,85 +29,159 @@
   a { color: inherit; }
   button { font: inherit; color: inherit; background: none; border: 1px solid var(--line-2); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
   button:hover { border-color: var(--ivory-dim); }
-  h2 { font: 500 15px/1.3 var(--sans); color: var(--ivory-dim); margin: 40px 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; }
-  h2 small { font-weight: 400; color: var(--ivory-faint); }
+  h2 { font: 600 24px/1.2 var(--serif); color: var(--ivory); margin: 40px 0 12px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; letter-spacing: -.01em; }
+  h2 small { font: 400 13px/1.3 var(--mono); color: var(--ivory-faint); }
+  .mono { font-family: var(--mono); }
   .up { color: var(--sage); } .down { color: var(--coral); } .dim { color: var(--ivory-dim); } .faint { color: var(--ivory-faint); }
 
-  .top { display: flex; justify-content: space-between; align-items: center; color: var(--ivory-dim); font-size: 14px; gap: 10px; }
-  .top b { color: var(--ivory); font-weight: 500; }
-  .top .brand { font-family: var(--serif); font-weight: 500; font-size: 20px; color: var(--ivory); letter-spacing: -.01em; }
-  .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--sage); margin-right: 7px; vertical-align: 1px; }
-  .pulse.down { background: var(--coral); } .pulse.stale { background: var(--gold); } .pulse.paused { background: var(--ivory-faint); }
-  .paused-banner { margin: 16px 0 0; padding: 10px 14px; border: 1px solid var(--gold); border-radius: 10px; color: var(--gold); font-size: 14px; display: none; }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .top .brand { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 600; font-size: 24px; color: var(--ivory); letter-spacing: -.03em; }
+  .top .right { display: flex; align-items: center; gap: 8px; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--lantern); background: rgba(245,181,68,.10); border: 1px solid rgba(245,181,68,.35); white-space: nowrap; }
+  .pill i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill.paused { color: var(--ember); background: rgba(232,116,59,.10); border-color: rgba(232,116,59,.35); }
+  .pill.halted, .pill.down { color: #C8D1DE; background: rgba(200,209,222,.08); border-color: rgba(200,209,222,.3); }
+  .pill.stale { color: var(--ember); background: rgba(232,116,59,.10); border-color: rgba(232,116,59,.35); }
+  .top .ctl { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; background: var(--night-2); border: 1px solid var(--line-2); font-size: 14px; font-weight: 500; }
+  .top .ctl svg { width: 12px; height: 12px; fill: currentColor; }
+  .paused-banner { margin: 16px 0 0; padding: 10px 14px; border: 1px solid var(--ember); border-radius: 10px; color: var(--ember); font-size: 14px; display: none; }
 
-  .verdict { font-family: var(--serif); font-weight: 300; font-size: clamp(30px, 8.5vw, 44px); line-height: 1.12; margin: 26px 0 10px; letter-spacing: -.01em; font-variation-settings: "opsz" 144; }
-  .verdict .amt { font-weight: 500; }
-  .verdict.up .amt { color: var(--sage); } .verdict.down .amt { color: var(--coral); } .verdict.flat .amt { color: var(--blossom); }
-  .sub { color: var(--ivory-dim); font-size: 15px; margin: 0 0 22px; }
+  /* Hero: the lantern is the status light. Lit = live, low ember = paused or a feed is down, cold = halted. */
+  .hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 22px 0 6px; }
+  .lamp { position: relative; width: 160px; height: 150px; display: flex; align-items: center; justify-content: center; }
+  .lamp .halo { position: absolute; inset: -5px 0 0 0; border-radius: 50%; background: radial-gradient(circle, rgba(247,190,85,.5) 0%, rgba(247,190,85,.15) 38%, rgba(247,190,85,0) 66%); }
+  .lamp svg { position: relative; width: 84px; height: 118px; }
+  .lamp .glass { fill: url(#glassLit); } .lamp .frame { fill: var(--brass); } .lamp .frame-s { stroke: var(--brass); }
+  .lamp .flame { fill: #FFFBEF; transform-box: fill-box; transform-origin: 50% 100%; }
+  .lamp.paused .halo { inset: 30px 35px; background: radial-gradient(circle, rgba(232,116,59,.3) 0%, rgba(232,116,59,0) 70%); }
+  .lamp.paused .glass { fill: #33271B; } .lamp.paused .frame { fill: #8C7A57; } .lamp.paused .frame-s { stroke: #8C7A57; } .lamp.paused .flame { fill: var(--ember); scale: .45; }
+  .lamp.halted .halo { display: none; } .lamp.halted .glass { fill: #161C27; } .lamp.halted .frame { fill: #4A5466; } .lamp.halted .frame-s { stroke: #4A5466; } .lamp.halted .flame { fill: #5B6577; scale: .2; }
+  @media (prefers-reduced-motion: no-preference) {
+    .lamp:not(.paused):not(.halted) .halo { animation: breathe 3s ease-in-out infinite alternate; }
+    .lamp:not(.paused):not(.halted) svg { animation: bloom 3s ease-in-out infinite alternate; }
+    .lamp:not(.halted) .flame { animation: flick 1.4s ease-in-out infinite alternate; }
+    .lamp.paused .flame { animation-duration: 3s; }
+    @keyframes breathe { from { opacity: .62; transform: scale(.94); } to { opacity: 1; transform: scale(1.06); } }
+    @keyframes bloom { from { filter: drop-shadow(0 0 8px rgba(247,190,85,.45)); } to { filter: drop-shadow(0 0 22px rgba(247,190,85,.85)); } }
+    @keyframes flick { 0% { transform: scaleY(1); } 35% { transform: scaleY(.9) skewX(2deg); } 65% { transform: scaleY(1.06) skewX(-1.5deg); } 100% { transform: scaleY(.96) skewX(.5deg); } }
+  }
+  .hero .k { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ivory-faint); margin-top: 8px; }
+  .hero .value { font: 500 46px/1.05 var(--mono); margin: 6px 0 8px; }
+  .hero .value.up { color: var(--sage); } .hero .value.down { color: var(--coral); }
+  .hero .line { display: flex; gap: 18px; font: 14px var(--mono); color: var(--ivory-dim); flex-wrap: wrap; justify-content: center; }
+  .verdict { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 18px; line-height: 1.35; margin: 14px 0 4px; color: #D8CFBE; }
+  .verdict .amt { font-style: normal; font-weight: 500; }
+  .verdict.up .amt { color: var(--sage); } .verdict.down .amt { color: var(--coral); } .verdict.flat .amt { color: var(--lantern); }
+  .sub { color: var(--ivory-dim); font-size: 14px; margin: 0; }
 
-  .chart { position: relative; height: 130px; margin: 0 -4px 26px; }
+  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .tile .k { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ivory-faint); }
+  .tile .v { font: 500 22px/1.2 var(--mono); }
+  .tile .s { font-size: 12px; color: var(--ivory-dim); }
+  .tile .v.vault { color: var(--lantern); }
+  .box { background: var(--night-2); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin-top: 10px; }
+  .box .cap { font-size: 13px; color: var(--ivory-dim); }
+
+  .chart { position: relative; height: 130px; margin: 12px -4px 26px; }
   .chart svg { width: 100%; height: 100%; overflow: visible; display: block; }
   .chart .axis { position: absolute; left: 4px; right: 4px; bottom: -20px; display: flex; justify-content: space-between; font-size: 12px; color: var(--ivory-dim); }
   .chart .range { position: absolute; right: 4px; top: -2px; font-size: 12px; color: var(--ivory-faint); }
-  .ranges { display: flex; gap: 6px; margin: 30px 0 0; }
-  .ranges button { padding: 3px 10px; font-size: 13px; color: var(--ivory-dim); }
-  .ranges button.on { color: var(--ivory); border-color: var(--ivory-dim); }
+  .ranges, .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 12px; background: var(--inset); border: 1px solid var(--line); margin-top: 12px; }
+  .ranges button, .seg button { border: 0; border-radius: 9px; min-height: 40px; font-size: 14px; font-weight: 500; color: var(--ivory-dim); }
+  .ranges button.on, .seg button.on { color: var(--ivory); background: var(--line-2); }
 
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 14px; margin-top: 10px; }
-  .stat { padding: 12px 0 6px; border-top: 1px solid var(--line); }
-  .stat .v { font-size: 21px; font-weight: 500; }
-  .stat .k { font-size: 13px; color: var(--ivory-dim); margin-top: 1px; }
-  .stat .v.vault { color: var(--gold); }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; text-align: center; }
+  .stat { background: var(--cell); border-radius: 12px; padding: 10px 4px; min-width: 0; }
+  .stat .v { font: 500 18px/1.25 var(--mono); }
+  .stat .k { font-size: 11px; color: var(--ivory-dim); margin-top: 2px; }
+  .funnel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; text-align: center; }
+  .funnel div { border: 1px solid var(--line-2); border-radius: 12px; padding: 10px 4px; }
+  .funnel b { display: block; font: 500 20px/1.2 var(--mono); }
+  .funnel span { font-size: 12px; color: var(--ivory-faint); }
+  .kicker { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ivory-faint); margin: 14px 0 0; }
 
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 28px 0 0; }
-  .chips button { font-size: 13px; padding: 4px 11px; color: var(--ivory-dim); }
-  .chips button.on { color: var(--night); background: var(--ivory); border-color: var(--ivory); }
-  .chips button span { color: inherit; opacity: .6; margin-left: 5px; }
+  .chips button { font-size: 13px; padding: 6px 12px; min-height: 36px; color: var(--ivory-dim); background: var(--night-2); }
+  .chips button.on { color: var(--night); background: var(--lantern); border-color: var(--lantern); }
+  .chips button span { color: inherit; opacity: .7; margin-left: 5px; }
 
-  .card { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 10px 0; }
-  .card .head { display: grid; grid-template-columns: 40px 1fr auto; gap: 2px 12px; align-items: center; }
+  .card { background: var(--night-2); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin: 10px 0; }
+  .card.lit { background: var(--cell); border-color: rgba(245,181,68,.55); box-shadow: 0 0 0 4px rgba(245,181,68,.07), 0 12px 40px rgba(245,181,68,.12); }
+  .card .head { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; }
   .av { width: 40px; height: 40px; border-radius: 50%; background: var(--line-2); color: var(--ivory); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; letter-spacing: .02em; overflow: hidden; }
   .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .card .sym { font-weight: 600; font-size: 17px; line-height: 1.2; }
-  .card .sym small { font-weight: 500; color: var(--night); background: var(--blossom); border-radius: 999px; padding: 1px 8px; margin-left: 8px; font-size: 11px; vertical-align: 2px; }
-  .card .sym small.dim { background: var(--line-2); color: var(--ivory-dim); }
-  .card .sym .rw { color: var(--gold); margin-left: 6px; font-size: 13px; cursor: help; }
-  .card .gain { font-size: 20px; font-weight: 500; text-align: right; line-height: 1.1; }
+  .card .sym { font-weight: 600; font-size: 17px; line-height: 1.2; overflow-wrap: anywhere; }
+  .card .sym small, .card .sym .rw { display: inline-block; margin-top: 3px; }   /* tags wrap to a new line instead of running under the price */
+  .card .sym small { font-weight: 500; border-radius: 999px; padding: 1px 9px; margin-left: 8px; font-size: 12px; vertical-align: 2px; color: var(--ivory-dim); background: rgba(200,209,222,.10); border: 1px solid rgba(200,209,222,.3); }
+  .card .sym small.m-dip { color: #8AB4FF; background: rgba(138,180,255,.12); border-color: rgba(138,180,255,.3); }
+  .card .sym small.m-ultra { color: #B79CFF; background: rgba(183,156,255,.12); border-color: rgba(183,156,255,.3); }
+  .card .sym small.m-pullback { color: #66CFD9; background: rgba(102,207,217,.12); border-color: rgba(102,207,217,.3); }
+  .card .sym small.m-bounce { color: #FF9EC4; background: rgba(255,158,196,.12); border-color: rgba(255,158,196,.3); }
+  .card .sym small.m-ride { color: var(--sand); background: rgba(217,197,154,.12); border-color: rgba(217,197,154,.3); }
+  .card .sym small.m-trusted { color: #C8D1DE; }
+  .card .sym small.m-pick { color: var(--lantern, #F5B544); background: rgba(245,181,68,.12); border-color: rgba(245,181,68,.35); }
+  .card .sym small.held { color: var(--ivory); background: rgba(95,212,160,.14); border-color: rgba(95,212,160,.4); }
+  .card .sym .rw { color: var(--sand); margin-left: 6px; font-size: 12px; cursor: help; font-weight: 500; border: 1px solid rgba(217,197,154,.4); border-radius: 999px; padding: 1px 8px; vertical-align: 2px; }
+  .card .gain { font: 500 20px/1.1 var(--mono); text-align: right; }
   .card .gain small { display: block; font-size: 13px; font-weight: 400; color: var(--ivory-dim); margin-top: 2px; }
-  .card .links { grid-column: 2 / -1; font-size: 12px; color: var(--ivory-dim); display: flex; gap: 12px; flex-wrap: wrap; }
-  .card .links a { text-decoration: none; border-bottom: 1px solid var(--line-2); }
+  .card .links { grid-column: 2 / -1; font-size: 12px; color: var(--ivory-faint); display: flex; gap: 12px; flex-wrap: wrap; }
+  .card .links .cp { font-family: var(--mono); }
+  .card .links a { text-decoration: none; border-bottom: 1px solid var(--line-2); color: #8AB4FF; }
+  .card .links span:not(.cp) { color: var(--sand); }
   .card .links .cp { cursor: pointer; }
-  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; }
-  .grid + .grid { border-top: 1px dashed var(--line); }
-  .grid div span { display: block; font-size: 10.5px; color: var(--ivory-faint); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 1px; }
-  .grid div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The coin, in filled cells. Your trade, in outlined cells below it. */
+  .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 12px; font: 13px/1.3 var(--mono); }
+  .grid > div { background: var(--cell); border-radius: 10px; padding: 8px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .grid.mine { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid.mine > div { background: none; border: 1px solid var(--line-2); }
+  .grid > div > span:first-child { display: block; font: 10px/1.4 var(--sans); color: var(--ivory-faint); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 2px; }
   .grid .wide { grid-column: span 2; }
-  .note { font-size: 13px; color: var(--ivory-dim); margin-top: 12px; line-height: 1.4; }
+  .grid .full { grid-column: 1 / -1; }
+  .kicker.trade { margin: 12px 0 0; }
+  .sbar { position: relative; height: 18px; margin-top: 12px; }
+  .sbar .rail { position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; background: var(--line-2); }
+  .sbar .stop { position: absolute; left: 0; top: 2px; width: 3px; height: 14px; border-radius: 2px; background: var(--coral); }
+  .sbar .tick { position: absolute; top: 3px; width: 2px; height: 12px; background: var(--ivory-dim); }
+  .sbar .dot { position: absolute; top: 2px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; border: 2px solid var(--night-2); }
+  .sbar-k { display: flex; justify-content: space-between; gap: 8px; font: 11px var(--mono); color: var(--ivory-faint); margin-top: 6px; }
+  .sbar-k .near { color: var(--ember); } .sbar-k .ok { color: var(--ivory-dim); }
+  .note { font: 12px/1.5 var(--mono); color: var(--ivory-faint); margin-top: 12px; }
   .labels { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .labels span { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ivory-dim); }
-  .labels span.hot { border-color: var(--blossom); color: var(--blossom); }
-  .score { font-family: var(--serif); font-size: 24px; font-weight: 500; color: var(--blossom); }
-  .setup { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--night); border: 1px solid var(--line); }
+  .labels span { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--ivory-dim); }
+  .labels span.hot { border-color: rgba(245,181,68,.6); color: var(--lantern); }
+  .card details.more { border: 0; border-top: 1px dashed var(--line-2); margin-top: 12px; }
+  .card details.more summary { padding: 10px 0 2px; min-height: 44px; align-items: center; font-size: 14px; font-weight: 500; color: var(--lantern); }
+  .card details.more summary::after { color: var(--lantern); }
+  .bars { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: center; margin-top: 8px; font-size: 14px; }
+  .bars i { display: block; height: 8px; border-radius: 4px; background: var(--cell); }
+  .bars b { display: block; height: 8px; border-radius: 4px; background: var(--lantern); }
+  .bars b.neg { background: var(--coral); }
+  .labels span.ok { color: var(--sage); border-color: rgba(95,212,160,.5); background: rgba(95,212,160,.1); }
+  .grid.plan { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.plan > div { white-space: normal; line-height: 1.45; }
+  .score { font-family: var(--serif); font-size: 26px; font-weight: 500; color: var(--lantern); }
+  .setup { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--inset); border: 1px solid var(--line); }
   .setup .need { font-size: 14px; color: var(--ivory); }
-  .setup .need b { color: var(--blossom); font-weight: 500; }
-  .setup .track { height: 6px; background: var(--line); border-radius: 3px; margin: 8px 0 4px; position: relative; overflow: hidden; }
-  .setup .track b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--blossom); border-radius: 3px; }
-  .setup .track.far b { background: var(--line-2); }
+  .setup .need b { color: var(--lantern); font-weight: 500; }
+  .setup .track { height: 6px; background: var(--line-2); border-radius: 3px; margin: 8px 0 6px; position: relative; overflow: hidden; }
+  .setup .track b { position: absolute; left: 0; top: 0; bottom: 0; background: var(--lantern); border-radius: 3px; box-shadow: 0 0 8px rgba(245,181,68,.5); }
+  .setup .track.far b { background: #5B6577; box-shadow: none; }
+  .setup .meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ivory-faint); }
+  .setup .meta span:first-child { color: var(--ivory); }
+  .fill .tag { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; gap: 6px; }
+  .fill .tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .fill.loss .tag::before { border-radius: 1px; transform: rotate(45deg); }
+  .fill.buy .tag { color: var(--lantern); } .fill.win .tag { color: var(--sage); } .fill.loss .tag { color: var(--coral); }
   .setup.stale { opacity: .6; border-style: dashed; }
   .setup.notyet .need b { color: var(--ivory-dim); }
   .pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--ivory-faint); }
-  .pick .buy { border-color: var(--gold); color: var(--gold); font-weight: 500; }
+  .pick .buy { border-color: var(--lantern); color: var(--lantern); font-weight: 500; }
   .pick .buy:disabled { opacity: .5; cursor: default; }
   .pick .res { flex: 1 1 100%; color: var(--ivory-dim); }
   .pick .res.ok { color: var(--sage); } .pick .res.no { color: var(--coral); }
   .setup.stale .need b { color: var(--ivory-dim); }
-  .setup .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--ivory-dim); }
-  .fill { padding: 12px 16px 12px 14px; border-left: 4px solid var(--line-2); }
-  .fill.buy { border-left-color: var(--blossom); }
-  .fill.win { border-left-color: var(--sage); }
-  .fill.loss { border-left-color: var(--coral); }
-  .fill .tag { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-  .fill.buy .tag { color: var(--blossom); } .fill.win .tag { color: var(--sage); } .fill.loss .tag { color: var(--coral); }
+  .setup.stale .track { display: none; }
   .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ivory-dim); margin: 8px 0 2px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
   .fill .head .gain { font-size: 17px; }
@@ -128,14 +203,20 @@
   details[open] summary::after { content: "–"; }
   pre { font-size: 12px; color: var(--ivory-dim); white-space: pre-wrap; word-break: break-word; }
 
-  .guard { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; font-size: 15px; }
-  .guard span:nth-child(even) { text-align: right; }
+  .gr { border-top: 1px solid var(--line); padding: 14px 0; }
+  .gr .row { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; }
+  .gr .row span:last-child { font-family: var(--mono); color: var(--ivory-dim); }
+  .gr .bar { height: 6px; border-radius: 3px; background: var(--cell); margin-top: 8px; }
+  .gr .bar b { display: block; height: 6px; border-radius: 3px; background: var(--ivory-dim); min-width: 3px; }
+  .gr .bar b.warn { background: var(--ember); } .gr .bar b.crit { background: var(--coral); }
+  .gr .s { font-size: 12px; color: var(--ivory-faint); margin-top: 4px; }
+  .feeds { display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 14px 0; }
+  .feeds span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: var(--night-2); font-size: 13px; }
+  .feeds i { width: 7px; height: 7px; border-radius: 50%; background: var(--sage); }
+  .feeds i.down { background: var(--coral); } .feeds i.idle { background: var(--ivory-faint); }
+  .hint { font-size: 12px; line-height: 1.5; color: var(--ivory-faint); margin: 8px 0 0; }
   .empty { color: var(--ivory-dim); padding: 18px 0; font-size: 15px; }
 
-  .control { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .control .stop { border-color: var(--coral); color: var(--coral); }
-  .control .resume { border-color: var(--sage); color: var(--sage); }
-  .control .what { font-size: 13px; color: var(--ivory-faint); flex: 1 1 100%; }
   .activity { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin: 0 0 12px; }
   .activity .lbl { font-size: 12px; color: var(--ivory-faint); letter-spacing: .04em; text-transform: uppercase; }
   .activity .nums { display: flex; gap: 18px; flex-wrap: wrap; margin: 4px 0 8px; font-size: 15px; color: var(--ivory-dim); }
@@ -145,7 +226,7 @@
   .activity .why span { display: inline-block; border: 1px solid var(--line-2); border-radius: 999px; padding: 0 9px; margin: 2px 4px 2px 0; white-space: nowrap; }
   .activity .why span b { color: var(--ivory); font-weight: 500; }
   .lab-intro { font-size: 15px; color: var(--ivory-dim); margin: 0 0 14px; }
-  .trust { border-radius: 14px; padding: 16px; margin: 0 0 8px; background: var(--night-2); border: 1px solid var(--line); border-left: 4px solid var(--gold); }
+  .trust { border-radius: 16px; padding: 16px; margin: 0 0 8px; background: var(--night-2); border: 1px solid var(--line); }
   .trust.ok { border-left-color: var(--sage); }
   .trust .q { font-size: 13px; color: var(--ivory-dim); }
   .trust .a { font-family: var(--serif); font-size: 28px; font-weight: 500; line-height: 1.15; margin: 2px 0 6px; color: var(--gold); }
@@ -182,64 +263,174 @@
   .chg .k { font-size: 12px; color: var(--ivory-faint); margin: 10px 0 0; }
   .foot { margin-top: 28px; font-size: 13px; color: var(--ivory-faint); display: flex; justify-content: space-between; }
 
-  /* login */
-  #login { position: fixed; inset: 0; background: var(--night); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 9; }
-  #login form { width: 100%; max-width: 360px; }
-  #login h1 { font-family: var(--serif); font-weight: 300; font-size: 40px; margin: 0 0 6px; }
-  #login p { color: var(--ivory-dim); margin: 0 0 24px; }
-  #login input { width: 100%; font: inherit; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--night-2); color: var(--ivory); margin-bottom: 12px; }
-  #login button { width: 100%; padding: 12px; border-radius: 10px; background: var(--ivory); color: var(--night); border: 0; font-weight: 500; }
-  #login .err { color: var(--coral); font-size: 14px; min-height: 20px; margin-top: 10px; }
+  /* login: Beacon. The lantern sits on the horizon and sends its beam up the sky; typing brightens it, Enter flares it, then the iris opens onto the dashboard. */
+  #login { position: fixed; inset: 0; display: none; z-index: 9; overflow-x: hidden; overflow-y: auto; background: linear-gradient(180deg, #050814 0%, #0B1130 35%, #1A1640 100%); color: #F4EEE4; --t: 0; }
+  #login .lg-page { position: relative; flex: 1 1 auto; width: 100%; min-height: 100%; display: flex; flex-direction: column; }
+  #login .lg-stars { position: absolute; left: 0; top: 0; width: 2px; height: 2px; border-radius: 50%; box-shadow: 6vw 8vh 0 0 #fff, 14vw 18vh 0 0 #E8E4FF, 24vw 6vh 0 0 #fff, 33vw 26vh 0 0 #fff, 40vw 12vh 0 0 #DCD8FF, 62vw 9vh 0 0 #fff, 70vw 22vh 0 0 #E8E4FF, 79vw 5vh 0 0 #fff, 88vw 16vh 0 0 #fff, 95vw 30vh 0 0 #fff, 8vw 38vh 0 0 #fff, 92vw 42vh 0 0 #E8E4FF, 18vw 46vh 0 0 #fff, 80vw 48vh 0 0 #fff; animation: lgTwinkle 3.6s ease-in-out infinite alternate; }
+  #login header { position: relative; z-index: 2; padding: clamp(36px, 8vh, 88px) 20px 0; text-align: center; }
+  #login h1 { margin: 0; font-family: var(--serif); font-weight: 600; font-size: clamp(64px, 9vw, 150px); line-height: .95; letter-spacing: -.045em; color: #FBF4E8; text-shadow: 0 0 60px rgba(255,190,100,.3); }
+  #login .lg-tag { margin: 10px 0 0; font-family: var(--mono); font-size: clamp(11px, 1vw, 13px); letter-spacing: .32em; text-transform: uppercase; color: #FFD58A; }
+  #login .lg-mask { display: block; overflow: hidden; padding: 0 .08em .06em; }
+  #login .lg-rise { display: block; animation: lgRise 1.1s cubic-bezier(.16,.84,.24,1) both; }
+  #login .lg-sky { position: relative; z-index: 1; flex: 1.2 1 200px; background: linear-gradient(180deg, rgba(31,24,68,0) 0%, rgba(58,30,72,.75) 55%, #6E3248 88%, #A2464C 100%); }
+  #login .lg-beam, #login .lg-beam-core, #login .lg-beam-line { position: absolute; left: 50%; bottom: 0; pointer-events: none; height: calc(75% + var(--t) * 25%); transition: transform .6s cubic-bezier(.2,.8,.2,1), height .6s ease; }
+  #login .lg-beam { width: 520px; transform: translateX(-50%) scaleX(calc(1 + var(--t) * .5)); background: radial-gradient(ellipse 50% 100% at 50% 100%, rgba(255,205,130,.36) 0%, rgba(240,140,110,.12) 45%, transparent 75%); animation: lgBeam 2.8s ease-in-out infinite alternate; }
+  #login .lg-beam-core { width: 18px; transform: translateX(-50%) scaleX(calc(1 + var(--t) * .6)); background: linear-gradient(0deg, rgba(255,243,207,.95) 0%, rgba(255,214,140,.55) 40%, rgba(255,214,140,0) 100%); filter: blur(3px); animation: lgBeam 1.9s ease-in-out infinite alternate; }
+  #login .lg-beam-line { width: 2px; transform: translateX(-50%); background: linear-gradient(0deg, #FFFBEF 0%, rgba(255,251,239,0) 100%); }
+  #login.flare .lg-beam, #login.flare .lg-beam-core, #login.flare .lg-beam-line { height: 170%; }
+  #login.flare .lg-beam { transform: translateX(-50%) scaleX(3.2); }
+  #login.flare .lg-beam-core { transform: translateX(-50%) scaleX(2.6); }
+  #login .lg-sparks { position: absolute; left: 50%; bottom: 0; width: 0; height: 0; }
+  #login .lg-sparks i { position: absolute; width: 3px; height: 10px; border-radius: 2px; background: linear-gradient(#FFF3CF, rgba(255,214,140,0)); animation: lgUp linear infinite; }
+  #login .lg-ground { position: relative; z-index: 2; flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; padding: 84px 20px 48px; background: linear-gradient(180deg, #140F2A 0%, #0D0B1E 40%, #0A0918 100%); }
+  #login .lg-floor { position: absolute; inset: 0; perspective: 380px; overflow: hidden; pointer-events: none; -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%); mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%); }
+  #login .lg-floor div { position: absolute; left: -80%; right: -80%; top: 0; height: 100%; transform-origin: 50% 0; transform: rotateX(70deg); }
+  #login .lg-floor span { position: absolute; left: 0; right: 0; top: -64px; height: 300%; background-image: linear-gradient(rgba(245,181,68,.3) 1px, transparent 1px), linear-gradient(90deg, rgba(240,167,187,.18) 1px, transparent 1px); background-size: 64px 64px; animation: lgFloor 4s linear infinite; }
+  #login .lg-horizon { position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: linear-gradient(90deg, transparent 0%, rgba(255,200,120,.5) 20%, #FFE2A6 50%, rgba(255,200,120,.5) 80%, transparent 100%); box-shadow: 0 0 24px 4px rgba(255,190,110,.45); }
+  #login .lg-ripples { position: absolute; left: 50%; top: 0; width: 0; height: 0; }
+  #login .lg-ripples i { position: absolute; left: 50%; top: 0; width: 900px; height: 120px; border-radius: 50%; border: 1px solid rgba(255,214,140,.5); animation: lgRipple 4s ease-out infinite; }
+  #login .lg-logo { position: absolute; left: 50%; top: 0; transform: translate(-50%,-50%); }
+  #login .lg-logo > div { animation: lgEmerge 1.4s cubic-bezier(.16,.84,.24,1) .1s both; position: relative; }
+  #login .lg-halo, #login .lg-glow { position: absolute; left: 50%; top: 50%; width: 320px; height: 320px; border-radius: 50%; pointer-events: none; }
+  #login .lg-halo { transform: translate(-50%,-50%); background: radial-gradient(circle, rgba(255,220,150,.7) 0%, rgba(247,190,85,.2) 36%, transparent 66%); }
+  #login .lg-glow { transform: translate(-50%,-50%) scale(calc(.8 + var(--t) * .5)); opacity: calc(var(--t) * .9); background: radial-gradient(circle, rgba(255,236,190,.8) 0%, rgba(255,200,110,.28) 35%, rgba(255,200,110,0) 66%); transition: transform .5s ease, opacity .5s ease; }
+  #login.flare .lg-glow { transform: translate(-50%,-50%) scale(1.7); opacity: 1; }
+  #login .lg-logo svg { position: relative; display: block; width: 120px; height: 120px; }
+  #login .lg-spin { transform-box: fill-box; transform-origin: 50% 50%; animation: lgSpin 28s linear infinite; }
+  #login .lg-flame { transform-box: fill-box; transform-origin: 50% 100%; animation: lgFlick 1.4s ease-in-out infinite alternate; }
+  #login .lg-form { position: relative; width: 100%; max-width: 420px; animation: lgFormIn 1s cubic-bezier(.16,.84,.24,1) 1s both; }
+  #login form { display: flex; gap: 10px; padding: 8px; border-radius: 18px; background: rgba(10,8,24,.88); border: 1px solid rgba(255,214,150,.22); box-shadow: 0 24px 70px rgba(0,0,0,.5); }
+  #login form.shake { animation: lgShake .45s ease; }
+  #login label.lg-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  #login input { flex: 1 1 auto; min-width: 0; height: 50px; border-radius: 12px; border: 1px solid transparent; background: #120F24; color: #FBF4E8; font: 500 16px var(--sans); padding: 0 16px; margin: 0; }
+  #login input::placeholder { color: #8F93A8; }
+  #login input:focus { outline: none; border-color: var(--lantern); box-shadow: 0 0 0 3px rgba(245,181,68,.25); }
+  #login button { flex: none; width: auto; height: 50px; padding: 0 20px; border-radius: 12px; border: 0; cursor: pointer; background: linear-gradient(180deg, #FFD27A 0%, #F2A93B 100%); color: #1E1306; font: 600 15px var(--sans); transition: box-shadow .3s ease; }
+  #login button:hover { box-shadow: 0 0 0 1px #FFD58A, 0 12px 44px rgba(245,181,68,.5); }
+  #login button:disabled { opacity: .7; cursor: default; }
+  #login .err { color: var(--coral); font-size: 14px; min-height: 20px; margin-top: 12px; text-align: center; }
+  #login .lg-foot { margin-top: 4px; display: flex; justify-content: center; gap: 14px; align-items: center; font-family: var(--mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: #A79FBC; }
+  #login .lg-foot b { width: 6px; height: 6px; border-radius: 50%; background: #6EE0AE; box-shadow: 0 0 8px #6EE0AE; animation: lgTwinkle 3.6s ease-in-out infinite alternate; }
+  #login .lg-foot em { width: 3px; height: 3px; border-radius: 50%; background: #F0A7BB; }
+  #iris { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none; display: none; }
+  #iris.on { display: block; }
+  #iris rect { transform: translateY(170px); }
+  #iris.close rect { animation: lgIrisClose .7s cubic-bezier(.65,0,.35,1) both; }
+  #iris.open rect { animation: lgIrisOpen .9s cubic-bezier(.65,0,.35,1) both; }
+  @keyframes lgRise { 0% { transform: translateY(110%); } 100% { transform: translateY(0); } }
+  @keyframes lgEmerge { 0% { transform: translateY(46px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+  @keyframes lgFormIn { 0% { transform: translateY(18px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+  @keyframes lgBeam { 0% { opacity: .75; } 100% { opacity: 1; } }
+  @keyframes lgFloor { 0% { transform: translateY(0); } 100% { transform: translateY(64px); } }
+  @keyframes lgUp { 0% { transform: translateY(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-28vh); opacity: 0; } }
+  @keyframes lgRipple { 0% { transform: translate(-50%,-50%) scale(.2); opacity: .8; } 100% { transform: translate(-50%,-50%) scale(1); opacity: 0; } }
+  @keyframes lgSpin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  @keyframes lgFlick { 0% { transform: scaleY(1); } 50% { transform: scaleY(.92); } 100% { transform: scaleY(1.05); } }
+  @keyframes lgTwinkle { 0% { opacity: .35; } 100% { opacity: .95; } }
+  @keyframes lgShake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(3px); } }
+  @keyframes lgIrisClose { 0% { transform: translateY(170px); } 100% { transform: translateY(0px); } }
+  @keyframes lgIrisOpen { 0% { transform: translateY(0px); } 100% { transform: translateY(170px); } }
+  @media (max-height: 680px) { #login header { padding-top: 22px; } #login h1 { font-size: clamp(52px, 7vw, 96px); } #login .lg-sky { flex-basis: 110px; } #login .lg-ground { padding-top: 74px; padding-bottom: 32px; } }
+  @media (prefers-reduced-motion: reduce) { #login *, #login *::before { animation: none !important; transition: none !important; } }
 
-  @media (prefers-reduced-motion: no-preference) { .verdict { animation: in .6s ease-out both; } @keyframes in { from { opacity: 0; transform: translateY(6px); } } }
-  :focus-visible { outline: 2px solid var(--blossom); outline-offset: 3px; }
-  @media (max-width: 420px) { .grid { grid-template-columns: repeat(3, 1fr); gap: 11px 8px; } .grid .wide { grid-column: span 3; } .stats { grid-template-columns: repeat(3, 1fr); gap: 8px 10px; } .stat .v { font-size: 18px; } }
+  :focus-visible { outline: 2px solid var(--lantern); outline-offset: 3px; }
+  @media (max-width: 420px) { .grid { font-size: 12px; } .grid > div { padding: 7px 8px; } .stat .v { font-size: 16px; } .hero .value { font-size: 40px; } .top .brand { font-size: 22px; } }
 </style>
 </head>
 <body>
 
-<div id="login"><form id="loginForm"><h1>Lantern</h1><p>Paper trading, on while you sleep.</p>
-  <input type="password" id="pw" placeholder="Password" autocomplete="current-password" autofocus><button type="submit">Open</button><div class="err" id="loginErr"></div></form></div>
+<div id="login"><div class="lg-page">
+  <div class="lg-stars" aria-hidden="true"></div>
+  <header>
+    <h1 class="lg-mask"><span class="lg-rise" style="animation-delay:.5s">lantern</span></h1>
+    <p class="lg-tag lg-mask"><span class="lg-rise" style="animation-delay:.8s">Agentic Market Intelligence</span></p>
+  </header>
+  <div class="lg-sky" aria-hidden="true">
+    <div class="lg-beam"></div><div class="lg-beam-core"></div><div class="lg-beam-line"></div>
+    <div class="lg-sparks"><i style="left:-6px;animation-duration:3.4s;animation-delay:-.4s"></i><i style="left:5px;animation-duration:4.2s;animation-delay:-2.1s"></i><i style="left:-2px;animation-duration:3.8s;animation-delay:-3s"></i><i style="left:9px;animation-duration:5s;animation-delay:-1.2s"></i></div>
+  </div>
+  <div class="lg-ground">
+    <div class="lg-floor" aria-hidden="true"><div><span></span></div></div>
+    <div class="lg-horizon" aria-hidden="true"></div>
+    <div class="lg-ripples" aria-hidden="true"><i></i><i style="animation-delay:-2s"></i></div>
+    <div class="lg-logo"><div>
+      <div class="lg-halo" aria-hidden="true"></div><div class="lg-glow" aria-hidden="true"></div>
+      <svg viewBox="0 0 120 120" role="img" aria-label="Lantern"><defs><radialGradient id="lgCore" cx="50%" cy="58%" r="60%"><stop offset="0" stop-color="#FFF3CF"/><stop offset=".5" stop-color="#F7BE55"/><stop offset="1" stop-color="#C2741F"/></radialGradient></defs><circle cx="60" cy="60" r="56" fill="#0A0918"/><g class="lg-spin"><circle cx="60" cy="60" r="50" fill="none" stroke="#E9BF72" stroke-width="9" stroke-dasharray="53.8 9" transform="rotate(-90 60 60)"/></g><circle cx="60" cy="60" r="31" fill="url(#lgCore)"/><path class="lg-flame" d="M60 43 C70 55 70 69 60 75 C50 69 50 55 60 43 Z" fill="#FFFBEF"/></svg>
+    </div></div>
+    <div class="lg-form">
+      <form id="loginForm"><label class="lg-sr" for="pw">Password</label><input type="password" id="pw" placeholder="Password" autocomplete="current-password" autofocus><button type="submit" id="loginBtn">Enter</button></form>
+      <div class="err" id="loginErr" role="alert"></div>
+      <div class="lg-foot"><span style="display:flex;align-items:center;gap:7px"><b aria-hidden="true"></b>Keeping watch</span><em aria-hidden="true"></em><span>Blossom realm</span></div>
+    </div>
+  </div>
+</div></div>
+<svg id="iris" viewBox="-100 -100 200 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <g transform="rotate(0)"><rect x="-320" y="0" width="640" height="320" fill="#0B0918" stroke="#E2B66A" stroke-width=".7"/></g>
+  <g transform="rotate(72)"><rect x="-320" y="0" width="640" height="320" fill="#0D0B1C" stroke="#E2B66A" stroke-width=".7"/></g>
+  <g transform="rotate(144)"><rect x="-320" y="0" width="640" height="320" fill="#0B0918" stroke="#E2B66A" stroke-width=".7"/></g>
+  <g transform="rotate(216)"><rect x="-320" y="0" width="640" height="320" fill="#0D0B1C" stroke="#E2B66A" stroke-width=".7"/></g>
+  <g transform="rotate(288)"><rect x="-320" y="0" width="640" height="320" fill="#0B0918" stroke="#E2B66A" stroke-width=".7"/></g>
+</svg>
 
 <div class="top">
-  <span class="brand">Lantern</span>
-  <span><i class="pulse" id="pulse"></i><b id="status">Connecting</b></span>
-  <span id="clock" class="dim"></span>
+  <span class="brand"><svg width="20" height="28" viewBox="0 0 100 140" aria-hidden="true"><path d="M32 24 H68 L78 38 H22 Z" fill="#E2B66A"/><path d="M24 42 H76 L71 106 H29 Z" fill="#F7BE55"/><path d="M50 60 C60 74 60 90 50 97 C40 90 40 74 50 60 Z" fill="#FFFBEF"/><rect x="22" y="108" width="56" height="10" rx="3" fill="#E2B66A"/></svg>lantern</span>
+  <span class="right"><span class="pill" id="status"><i></i><span id="statusText">Connecting</span></span><button class="ctl" id="ctl" aria-label="Pause entries"></button></span>
 </div>
-<div class="paused-banner" id="pausedBanner">Global stop is on. No new buys. Open positions still get managed and exited.</div>
+<div class="paused-banner" id="pausedBanner">Paused. No new buys. Open positions still get managed and exited.</div>
 
-<p class="verdict flat" id="verdict">Reading the book.</p>
-<p class="sub" id="sub"></p>
+<div class="hero">
+  <div class="lamp" id="lamp"><div class="halo"></div><svg viewBox="0 0 100 140" role="img" aria-label="Lantern status"><defs><radialGradient id="glassLit" cx="50%" cy="62%" r="65%"><stop offset="0" stop-color="#FFF3CF"/><stop offset=".45" stop-color="#F7BE55"/><stop offset="1" stop-color="#C2741F"/></radialGradient></defs><path class="frame-s" d="M38 22 A12 12 0 0 1 62 22" fill="none" stroke-width="5" stroke-linecap="round"/><path class="frame" d="M32 24 H68 L78 38 H22 Z"/><path class="glass" d="M24 42 H76 L71 106 H29 Z"/><path class="flame" d="M50 60 C60 74 60 90 50 97 C40 90 40 74 50 60 Z"/><path class="frame-s" d="M24 42 H76 L71 106 H29 Z" fill="none" stroke-width="4" stroke-linejoin="round"/><rect class="frame" x="22" y="108" width="56" height="10" rx="3"/></svg></div>
+  <div class="k">Account value</div>
+  <div class="value" id="value">—</div>
+  <div class="line" id="heroLine"></div>
+  <p class="verdict flat" id="verdict">Reading the book.</p>
+  <p class="sub" id="sub"></p>
+</div>
 
-<div class="ranges" id="ranges"><button data-h="24" class="on">24h</button><button data-h="72">3d</button><button data-h="168">7d</button></div>
-<div class="chart" id="chart"><span class="range" id="chartRange"></span><svg viewBox="0 0 600 130" preserveAspectRatio="none" aria-label="Account value over time"></svg><div class="axis"><span id="ax0"></span><span id="ax1"></span></div></div>
-
+<h2>How it's going</h2>
+<div class="tiles" id="tiles"></div>
+<div class="box">
+  <div class="cap">Account value · dashed = money put in</div>
+  <div class="ranges" id="ranges"><button data-h="24" class="on">24h</button><button data-h="72">3d</button><button data-h="168">7d</button></div>
+  <div class="chart" id="chart"><span class="range" id="chartRange"></span><svg viewBox="0 0 600 130" preserveAspectRatio="none" aria-label="Account value over time"></svg><div class="axis"><span id="ax0"></span><span id="ax1"></span></div></div>
+</div>
+<div class="seg" id="period" role="group" aria-label="Period"><button data-p="24h" class="on">24h</button><button data-p="7d">7d</button><button data-p="all">All</button></div>
+<p class="kicker" id="periodLabel"></p>
 <div class="stats" id="stats"></div>
+<div class="funnel" id="funnel"></div>
+<div id="modes"></div>
+<p class="hint">Paper numbers, after the fee and slippage model.</p>
+
+<h2>Guardrails <small id="guardState"></small></h2>
+<div id="guard"></div>
+<div class="feeds" id="feeds"></div>
+<p class="hint">Bars fill as room gets used. Ember past 70%, coral past 90%.</p>
+<details style="margin-top:6px"><summary>Junk price ticks refused in the last 24h</summary><div id="rejected"></div></details>
 
 <div class="chips" id="chips"></div>
-
-<h2>Open positions <small id="openCount"></small></h2>
+<h2>Open <small id="openCount"></small></h2>
 <div id="open"></div>
 
 <h2>Watching <small id="hotCount"></small></h2>
-<p class="dim" style="font-size:13px;margin:0 0 6px">The hot list: coins that passed every safety check in the last 30 minutes. <b>In a setup</b> shows how close price is to the trigger. <b>Not yet</b> says what we're waiting for. These are re-checked first every scan, so the moment one meets every rule it gets bought.</p>
+<p class="hint" style="margin:0 0 6px">The hot list: coins that passed every safety check in the last 30 minutes. <b>In a setup</b> shows how close price is to the trigger. <b>Not yet</b> says what we're waiting for. These are re-checked first every scan, so the moment one meets every rule it gets bought.</p>
 <div id="hot"></div>
 
 <h2>Would have bought <small id="wouldCount"></small></h2>
-<p class="dim" style="font-size:13px;margin:0 0 6px">Paused modes keep looking. Dip is paused, so it watches flagships (your pinned coins and Stonk.fun's biggest) and logs where it would have bought. No money used. How these play out decides when dip comes back.</p>
+<p class="hint" style="margin:0 0 6px">Paused modes keep looking. Dip is paused, so it watches flagships (your pinned coins and Stonk.fun's biggest) and logs where it would have bought. No money used. How these play out decides when dip comes back.</p>
 <div id="would"></div>
 
+<h2>Missed runners <small id="missedCount"></small></h2>
+<div id="missedTotals" class="totals"></div>
+<div id="missed"></div>
+
 <h2>Today's trades <small id="tradesSummary"></small></h2>
-<div class="legend"><span><i style="background:var(--blossom)"></i>bought</span><span><i style="background:var(--sage)"></i>sold at a profit</span><span><i style="background:var(--coral)"></i>sold at a loss</span></div>
+<div class="legend"><span><i style="background:var(--lantern);border-radius:50%"></i>bought</span><span><i style="background:var(--sage);border-radius:50%"></i>sold at a profit</span><span><i style="background:var(--coral);transform:rotate(45deg) scale(.8)"></i>sold at a loss</span></div>
 <div class="chips" id="tradeChips" style="margin-top:6px"></div>
 <div id="trades"></div>
 
 <h2>Wallets we follow <small>last 7 days</small></h2>
-<p class="dim" style="font-size:13px;margin:0 0 6px">Trusted wallets can trigger buys (after our own checks). KOLs only add score. Both are audited here: of the coins each wallet bought, how many went 2x within 6 hours, and how many halved.</p>
+<p class="hint" style="margin:0 0 6px">Trusted wallets can trigger buys (after our own checks). KOLs only add score. Both are audited here: of the coins each wallet bought, how many went 2x within 6 hours, and how many halved.</p>
 <div id="wallets"></div>
-
-<h2>By strategy <small>all time</small></h2>
-<div id="modes"></div>
 
 <h2>Lab <small id="labMeta"></small></h2>
 <p class="lab-intro">What if we changed one rule? The lab replays the market with the change and compares. It never changes how the bot trades.</p>
@@ -247,27 +438,14 @@
 <div class="labbar"><span id="labStatus"></span><button id="labRun">Run again</button></div>
 <div id="lab"></div>
 
-<h2>Runners we missed <small id="missedCount"></small></h2>
-<div id="missedTotals" class="totals"></div>
-<div id="missed"></div>
-
-<h2>Looked at but didn't buy <small id="looksCount"></small></h2>
+<h2>Looked, didn't buy <small id="looksCount"></small></h2>
 <div class="activity" id="activity"></div>
-<p class="dim" style="font-size:13px;margin:0 0 6px">Coral stripe means the rug guard rejected it. The rest were clean but the setup never completed.</p>
+<p class="hint" style="margin:0 0 6px">Diamond means the rug guard said no. The rest were clean but the setup never completed.</p>
 <details><summary>Show the list</summary><div id="looks"></div></details>
-
-<h2>Guardrails</h2>
-<div class="guard" id="guard"></div>
-<details style="margin-top:10px"><summary>Junk price ticks refused in the last 24h</summary><div id="rejected"></div></details>
 
 <h2>Strategy internals</h2>
 <details><summary>Every number the bot runs on</summary><pre id="internals"></pre></details>
 
-<div class="control">
-  <button class="stop" id="stopBtn">Global stop</button>
-  <button class="resume" id="resumeBtn" style="display:none">Resume buying</button>
-  <span class="what">Stop halts new buys only. Exits, stops and trails keep running on everything already open.</span>
-</div>
 <p class="foot"><span id="foot"></span><a href="#" id="logout">log out</a></p>
 
 <script>
@@ -334,22 +512,68 @@ function chart(eqAll, startCap) {
   $("chartRange").textContent = `low ${usd(Math.min(...ys))} · high ${usd(Math.max(...ys))} · now ${usd(end)}`;
 }
 
-function stats(s) {
+/** live, paused (by you, or a feed is down), halted (a guardrail tripped), plus what the pill says. */
+function lampState(s) {
+  const g = s.guardrails, a = s.account, h = s.health;
+  const stale = Date.now() - s.at > 120e3;
+  const lossLeft = g.dailyLossStopUsd + Math.min(0, a.realizedToday);
+  if (a.equity <= g.drawdownHaltAt) return { k: "halted", text: "Halted", why: "Drawdown halt. Needs you to resume." };
+  if (lossLeft <= 0) return { k: "halted", text: "Halted", why: "Daily loss stop hit. Back tomorrow." };
+  if (s.paused) return { k: "paused", text: "Paused", why: "Turned low. Exits still run, no new buys." };
+  if (stale) return { k: "stale", text: "Last heard " + ago(Date.now() - s.at), why: "The bot hasn't reported in. Check the server." };
+  if (h.feedDownS > 120 || h.dexStaleS > 60) return { k: "down", text: "Feed down", why: "A price feed is down. The bot is waiting on it." };
+  return { k: "live", text: "Live", why: "" };
+}
+
+function hero(s) {
+  const a = s.account, total = a.equity + a.vault;
+  const base = a.dayStartValue ?? (total - a.realizedToday);
+  const day = total - base;
+  const st = lampState(s);
+  $("lamp").className = "lamp" + (st.k === "live" ? "" : st.k === "halted" ? " halted" : " paused");
+  $("status").className = "pill " + st.k;
+  $("statusText").textContent = st.text;
+  $("value").className = "value " + (day > 0.005 ? "up" : day < -0.005 ? "down" : "");
+  $("value").innerHTML = `${usd(total)}`;
+  $("heroLine").innerHTML = `<span class="${day >= 0 ? "up" : "down"}">${day >= 0 ? "▲" : "▼"} ${usd(day, true)} since midnight</span><span>peak ${usd(a.peakEquity)}</span>`;
+  if (st.why) $("sub").textContent = st.why;
+}
+
+function tiles(s) {
   const a = s.account, total = a.equity + a.vault;
   const d = total - a.startingCapital;
-  const winRate = a.closedCount ? a.closedWins / a.closedCount : null;
   const todayPct = a.realizedToday / (total - a.realizedToday || 1);
-  $("stats").innerHTML = `
-    <div class="stat"><div class="v">${usd(total)}</div><div class="k">account value · <span class="${d >= 0 ? "up" : "down"}">${usd(d, true)}</span> vs ${usd(a.startingCapital)} put in</div></div>
-    <div class="stat"><div class="v ${a.realizedToday >= 0 ? "up" : "down"}">${usd(a.realizedToday, true)}</div><div class="k">today · ${pct(todayPct)}</div></div>
-    <div class="stat"><div class="v vault">${usd(a.vault)}</div><div class="k">locked profit, never traded</div></div>
-    <div class="stat"><div class="v">${usd(s.guardrails.capitalAtRisk)}</div><div class="k">open risk · of ${usd(s.guardrails.maxCapitalAtRisk)} cap · ${s.open.length} open</div></div>
-    <div class="stat"><div class="v">${a.closedCount}</div><div class="k">closed trades · ${winRate == null ? "—" : Math.round(winRate * 100) + "%"} won</div></div>
-    <div class="stat"><div class="v ${a.closedPnl >= 0 ? "up" : "down"}">${usd(a.closedPnl, true)}</div><div class="k">closed P&amp;L, all time</div></div>
-    <div class="stat"><div class="v ${a.openPnl >= 0 ? "up" : "down"}">${usd(a.openPnl, true)}</div><div class="k">open P&amp;L, unrealised</div></div>
-    <div class="stat"><div class="v ${a.closedPnl + a.openPnl >= 0 ? "up" : "down"}">${usd(a.closedPnl + a.openPnl, true)}</div><div class="k">total P&amp;L</div></div>
-    <div class="stat"><div class="v">${ago(s.health.uptimeMs)}</div><div class="k">bot uptime · paper</div></div>`;
+  $("tiles").innerHTML = `
+    <div class="tile"><span class="k">Today, closed</span><span class="v ${a.realizedToday >= 0 ? "up" : "down"}">${usd(a.realizedToday, true)}</span><span class="s">${pct(todayPct)}</span></div>
+    <div class="tile"><span class="k">Vault</span><span class="v vault">${usd(a.vault)}</span><span class="s">locked profit</span></div>
+    <div class="tile"><span class="k">Open risk</span><span class="v">${usd(s.guardrails.capitalAtRisk)}</span><span class="s">of ${usd(s.guardrails.maxCapitalAtRisk)} · ${s.open.length} open</span></div>
+    <div class="tile"><span class="k">Vs money put in</span><span class="v ${d >= 0 ? "up" : "down"}">${usd(d, true)}</span><span class="s">${usd(a.startingCapital)} in · up ${ago(s.health.uptimeMs)}</span></div>`;
 }
+
+let period = "24h";
+const PERIOD_WORDS = { "24h": "last 24h", "7d": "last 7 days", all: "all time" };
+function periodStats(s) {
+  $("periodLabel").textContent = "All modes · " + PERIOD_WORDS[period];
+  const st = s.stats && s.stats[period];
+  if (!st) { $("stats").innerHTML = ""; $("funnel").innerHTML = ""; $("modes").innerHTML = modeTable(s.byMode); return; }
+  const a = s.account;
+  const cell = (v, k, cls = "") => `<div class="stat"><div class="v ${cls}">${v}</div><div class="k">${k}</div></div>`;
+  const sign = n => n > 0 ? "up" : n < 0 ? "down" : "";
+  $("stats").innerHTML =
+    cell(st.n, "closed trades") +
+    cell(st.n ? Math.round(st.wins / st.n * 100) + "%" : "—", "win rate") +
+    cell(usd(st.pnl, true), "closed P&amp;L", sign(st.pnl)) +
+    cell(s.open.length, "open trades") +
+    cell(usd(a.openPnl, true), "open P&amp;L", sign(a.openPnl)) +
+    cell(usd(st.pnl + a.openPnl, true), "total P&amp;L", sign(st.pnl + a.openPnl)) +
+    cell(st.avgWin == null ? "—" : usd(st.avgWin, true), "avg win", "up") +
+    cell(st.avgLoss == null ? "—" : usd(st.avgLoss, true), "avg loss", "down") +
+    cell(st.profitFactor == null ? "—" : st.profitFactor.toFixed(2), "profit factor", st.profitFactor == null ? "" : st.profitFactor >= 1 ? "up" : "down");
+  $("funnel").innerHTML = `<div><b>${num(st.looked)}</b><span>looked at</span></div><div><b>${num(st.bought)}</b><span>bought</span></div><div><b>${s.stats.missed48 ?? s.missed.length}</b><span>missed, 48h</span></div>`;
+  const rows = Object.entries(st.byMode).map(([mode, m]) => ({ mode, n: m.n, wins: m.wins, pnl: m.pnl, open: s.open.filter(o => o.mode === mode).length }));
+  $("modes").innerHTML = modeTable(rows);
+}
+$("period").querySelectorAll("button").forEach(b => b.onclick = () => { period = b.dataset.p; $("period").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); if (S) periodStats(S); });
 
 function chips(s) {
   const modes = ["ride", "dip", "ultra", "bounce", "pullback", "trusted"];
@@ -370,8 +594,8 @@ function marketGrid(m, extra = "") {
     <div><span>6h</span>${c(m.ch6h)}</div>
     <div><span>24h</span>${c(m.ch24h)}</div>
     <div><span>age</span>${age(m.created_at)}</div>
-    <div><span>volume 24h</span>${big(m.vol24h)}</div>
-    <div><span>holders</span>${num(m.holders)}</div>
+    <div class="wide"><span>volume 24h</span>${big(m.vol24h)}</div>
+    <div class="wide"><span>holders</span>${num(m.holders)}</div>
   </div>`;
 }
 
@@ -381,7 +605,67 @@ function links(mint, m) {
   return `<div class="links"><span class="cp" data-cp="${mint}" title="copy mint">${short(mint)} ⧉</span><a href="${dex}" target="_blank" rel="noopener">chart ↗</a>${quote}</div>`;
 }
 
-function rewardFlag(m) { return m && m.quote && !STANDARD_QUOTES.test(m.quote) ? `<span class="rw" title="Creative pair: holders earn ${esc(m.quote)}. Wider stops and smaller size apply.">💰 ${esc(m.quote)}</span>` : ""; }
+function rewardFlag(m) { return m && m.quote && !STANDARD_QUOTES.test(m.quote) ? `<span class="rw" title="Creative pair: holders earn ${esc(m.quote)}. Wider stops and smaller size apply.">earns ${esc(m.quote)}</span>` : ""; }
+
+const mt = (mode, label = mode) => `<small class="m-${esc(mode)}">${esc(label)}</small>`;
+
+/** Where price sits between the stop (left) and the peak (right), with the entry marked. */
+function stopBar(p) {
+  const peak = p.entryPrice * (1 + Math.max(0, p.peakPct));
+  const lo = p.closeStop, hi = Math.max(peak, p.price, p.entryPrice);
+  if (!(lo > 0) || !(hi > lo)) return "";
+  const at = v => Math.max(0, Math.min(100, (v - lo) / (hi - lo) * 100)).toFixed(1);
+  const above = p.price / lo - 1;
+  const word = p.trailArmed ? "trail" : "stop";
+  return `<div class="sbar" role="img" aria-label="Price ${pct(above)} above the ${word}"><div class="rail"></div><div class="stop"></div>
+      <div class="tick" style="left:${at(p.entryPrice)}%"></div><div class="tick" style="right:0"></div>
+      <div class="dot" style="left:${at(p.price)}%;background:${p.gainPct >= 0 ? "var(--sage)" : "var(--coral)"}"></div></div>
+    <div class="sbar-k"><span>${word}</span><span class="${above < 0.1 ? "near" : "ok"}">${pct(above).replace("+", "")} above ${word}</span><span>peak</span></div>`;
+}
+
+/** Tap-to-open panel on an open position: why it bought, what the safety gate saw, and the exit plan. */
+const openDetail = new Set();
+function detail(p) {
+  const m = p.market || {}, sf = p.safety, plan = p.plan || {};
+  // Why bought: score bars when the parts were recorded, else the reason split into chips.
+  let why = "";
+  const parts = p.scoreParts ? Object.entries(p.scoreParts) : [];
+  if (parts.length) {
+    const top = Math.max(...parts.map(([, v]) => Math.abs(v)), 1);
+    why = `<div class="bars">${parts.map(([k, v]) => `<span>${esc(k)}</span><i><b class="${v < 0 ? "neg" : ""}" style="width:${(Math.abs(v) / top * 100).toFixed(0)}%"></b></i><span class="mono ${v < 0 ? "down" : ""}">${v > 0 ? "" : "−"}${Math.abs(v)}</span>`).join("")}</div>`;
+  }
+  const chips = String(p.reason || "").split(/,\s*|:\s*/).filter(x => x && x.length < 60);
+  why += `<div class="labels">${chips.map(c => `<span>${esc(c)}</span>`).join("")}${(p.wallets || []).map(w => `<span class="hot">${esc(w)}</span>`).join("")}</div>`;
+  // Buzz and safety, as the gate saw it at entry (holders now in brackets when it moved).
+  const h = sf && sf.holders != null ? sf.holders : p.holdersAtEntry;
+  const safe = [
+    h != null ? `${num(h)} holders at entry${m.holders && m.holders !== h ? ` (${num(m.holders)} now)` : ""}` : null,
+    sf && sf.top10 != null ? `top 10 ${sf.top10.toFixed(1)}%` : null,
+    sf && sf.sniper != null ? `snipers ${sf.sniper.toFixed(0)}%` : null,
+    m.twitter ? "X linked" : "no X link",
+    m.website ? "site linked" : null,
+    ...(m.labels || []),
+  ].filter(Boolean);
+  const gate = `<span class="ok">passed safety gate</span>`;
+  // Exit plan.
+  const tp = (p.takeProfits || []).map((t, i) => `${p.tpTaken.includes(i) ? "✓ " : ""}+${Math.round(t.gain * 100)}% → sell ${Math.round(t.sell * 100)}%`).join("<br>") || "none";
+  const trail = plan.trailPct ? `${Math.round(plan.trailPct * 100)}% below peak close, after +${Math.round(plan.trailAfterGain * 100)}%` + (plan.trailLadder && plan.trailLadder.length ? "<br>" + plan.trailLadder.map(r => `+${Math.round(r.peakGain * 100)}% → ${Math.round(r.trailPct * 100)}%`).join(", ") : "") : "none";
+  const floorPx = p.entryPrice * (1 + p.hardFloorPct);
+  const open = openDetail.has(p.mint) ? " open" : "";
+  return `<details class="more" data-mint="${esc(p.mint)}"${open}><summary>Why it bought, safety, exit plan</summary>
+    <p class="kicker">Why bought · score ${p.score ?? "—"}</p>${why}
+    <p class="kicker">Buzz &amp; safety</p><div class="labels">${safe.map(x => `<span>${esc(x)}</span>`).join("")}${gate}</div>
+    <p class="kicker">Exit plan</p>
+    <div class="grid mine plan">
+      <div><span>hard floor · any tick</span>${px(floorPx)} (${pct(p.hardFloorPct)})</div>
+      <div><span>close stop · 15m</span>${px(p.closeStop)} (${pct(p.stopPct)})${p.trailArmed ? " · trailing" : ""}</div>
+      <div><span>take profit</span>${tp}</div>
+      <div><span>trail</span>${trail}</div>
+      <div class="full"><span>time exit</span>${plan.maxHoldMs ? "after " + ago(plan.maxHoldMs) + ", if the strategy agrees" : "none, trail and stop only"}</div>
+    </div>
+  </details>`;
+}
+document.addEventListener("toggle", e => { const d = e.target; if (d.classList && d.classList.contains("more")) { d.open ? openDetail.add(d.dataset.mint) : openDetail.delete(d.dataset.mint); } }, true);
 
 function openRows(open) {
   const rows = modeFilter === "all" ? open : open.filter(o => o.mode === modeFilter);
@@ -392,21 +676,26 @@ function openRows(open) {
     return `<div class="card">
       <div class="head">
         ${av(p.symbol, m)}
-        <div class="sym">${esc(p.symbol)}<small>${p.mode}${p.leg ? " · " + p.leg : ""}</small>${rewardFlag(m)}</div>
+        <div class="sym">${esc(p.symbol)}${mt(p.mode, p.leg ? p.mode + " · " + p.leg : p.mode)}${rewardFlag(m)}</div>
         <div class="gain ${p.gainPct >= 0 ? "up" : "down"}">${pct(p.gainPct)}<small>${usd(p.pnlUsd, true)}</small></div>
         ${links(p.mint, m)}
       </div>
-      ${marketGrid(m, `<div class="wide"><span>mcap entry → now</span>${big(p.mcapAtEntry)} → ${big(m && m.mcap)}</div>`)}
-      <div class="grid">
+      ${marketGrid(m, `<div class="wide"><span>mcap in → now</span>${big(p.mcapAtEntry)} → ${big(m && m.mcap)}</div>`)}
+      <p class="kicker trade">Your trade</p>
+      <div class="grid mine">
         <div><span>entry</span>${px(p.entryPrice)}</div>
         <div><span>now</span>${px(p.price)}</div>
         <div><span>size</span>${usd(p.sizeUsd)}</div>
-        <div><span>held</span>${ago(Date.now() - p.openedAt)}</div>
-        <div class="wide"><span>${p.trailArmed ? "trail" : "stop"} · 15m close</span>${px(p.closeStop)} <span style="display:inline;text-transform:none;font-size:13px;color:var(--ivory-dim)">(${pct(p.stopPct)}, floor ${pct(p.hardFloorPct)})</span></div>
+        <div><span>${p.trailArmed ? "trail" : "stop"} · 15m</span>${px(p.closeStop)}</div>
         <div><span>peak</span>${pct(p.peakPct)}</div>
+        <div><span>held</span>${ago(Date.now() - p.openedAt)}</div>
+        <div><span>floor</span>${pct(p.hardFloorPct)}</div>
+        <div><span>stop</span>${pct(p.stopPct)}</div>
         <div><span>score</span>${p.score ?? "—"}</div>
       </div>
-      <div class="note">${esc(p.reason)} · take profit ${tps}${p.realizedUsd ? ` · banked ${usd(p.realizedUsd, true)}` : ""}</div>
+      ${stopBar(p)}
+      <div class="note">${esc(p.reason)}${p.realizedUsd ? ` · banked ${usd(p.realizedUsd, true)}` : ""}</div>
+      ${detail(p)}
     </div>`;
   }).join("");
 }
@@ -438,7 +727,7 @@ function wouldRows(rows) {
   return rows.map(r => {
     const now = r.nowX == null ? null : r.nowX - 1, peak = r.peakX == null ? null : r.peakX - 1;
     return `<div class="card">
-      <div class="head">${av(r.symbol, r.market)}<div class="sym">${esc(r.symbol)}<small>${esc(r.mode)}</small>${r.flagship ? '<small class="dim">flagship</small>' : ""}</div>
+      <div class="head">${av(r.symbol, r.market)}<div class="sym">${esc(r.symbol)}${mt(r.mode)}${r.flagship ? '<small class="held">flagship</small>' : ""}</div>
         <div class="gain ${now == null ? "" : now >= 0 ? "up" : "down"}">${now == null ? "—" : pct(now)}<small>since the signal</small></div>
         ${links(r.mint, r.market)}</div>
       <div class="note">Would have bought at ${px(r.price)}${r.mcap ? ` (${big(r.mcap)})` : ""} · ${ago(Date.now() - r.at)} ago · best since ${peak == null ? "—" : pct(peak)} · score ${Math.round(r.score)}</div>
@@ -453,17 +742,16 @@ function hotCard(h) {
     ? setupBlock(l)
     : `<div class="setup notyet"><div class="need"><b>Not yet</b> (${esc(h.mode)}): ${esc(h.status)}</div>
         <div class="meta"><span>clean since ${hhmm(h.since)}</span><span>checked ${ago(Date.now() - h.checkedAt)} ago</span></div></div>`;
-  const modes = (h.modes || [h.mode]).join(" · ");
   return `<div class="card">
     <div class="head">
       ${av(h.symbol, m)}
-      <div class="sym">${esc(h.symbol)}<small class="dim">${esc(modes)}${h.paused ? " · watch only" : ""}</small>${rewardFlag(m)}</div>
-      <div class="gain">${m.ch1h != null ? `<span class="${m.ch1h >= 0 ? "up" : "down"}">${pct(m.ch1h / 100)}</span>` : "·"}<small>${big(m.mcap)} · 1h</small></div>
+      <div class="sym">${esc(h.symbol)}${(h.modes || [h.mode]).map(x => mt(x)).join("")}${h.paused ? '<small class="dim" style="white-space:nowrap">watch only</small>' : ""}${rewardFlag(m)}</div>
+      <div class="gain">${m.ch1h != null ? `<span class="${m.ch1h >= 0 ? "up" : "down"}">${pct(m.ch1h / 100)}</span>` : "·"}<small>${big(m.mcap)}<br>1h</small></div>
       ${links(h.mint, m)}
     </div>
     ${where}
     ${h.chips && h.chips.length ? `<div class="labels">${h.chips.map(x => `<span class="${/trusted|KOL|holders \+|Stonk/i.test(x) ? "hot" : ""}">${esc(x)}</span>`).join("")}</div>` : ""}
-    ${h.setup ? marketGrid(m, `<div><span>market cap</span>${big(m.mcap)}</div>`) : ""}
+    ${h.setup ? marketGrid(m, `<div class="wide"><span>market cap</span>${big(m.mcap)}</div>`) : ""}
     ${pickRow(h)}
   </div>`;
 }
@@ -516,13 +804,13 @@ function hotRows(looks, open, hot) {
     return `<div class="card">
       <div class="head">
         ${av(l.symbol, l.market)}
-        <div class="sym">${esc(l.symbol)}<small class="${held.has(l.mint) ? "" : "dim"}">${held.has(l.mint) ? "held" : l.mode + (l.paused ? " · watch only" : "")}</small>${rewardFlag(m)}</div>
+        <div class="sym">${esc(l.symbol)}${held.has(l.mint) ? '<small class="held">held</small>' : mt(l.mode)}${l.paused && !held.has(l.mint) ? '<small class="dim">watch only</small>' : ""}${rewardFlag(m)}</div>
         <div class="gain"><span class="score">${l.score ? Math.round(l.score) : "·"}</span><small>${big(m.mcap)}</small></div>
         ${links(l.mint, m)}
       </div>
       ${setupBlock(l)}
       ${labels.length ? `<div class="labels">${labels.map(x => `<span class="${/trusted|KOL|holders \+/i.test(x) ? "hot" : ""}">${esc(x)}</span>`).join("")}</div>` : ""}
-      ${marketGrid(m, `<div><span>market cap</span>${big(m.mcap)}</div>`)}
+      ${marketGrid(m, `<div class="wide"><span>market cap</span>${big(m.mcap)}</div>`)}
     </div>`;
   }).join("");
 }
@@ -542,7 +830,7 @@ function tradeRows(fills) {
     const tag = buy ? "Bought" : x.pnlUsd > 0 ? "Sold at a profit" : "Sold at a loss";
     const head = buy ? `${usd(x.usd)}` : `<span class="${x.pnlUsd >= 0 ? "up" : "down"}">${usd(x.pnlUsd, true)}<small style="color:inherit">${pct(x.pnlPct)}</small></span>`;
     return `<div class="card fill ${kind}">
-      <div class="head">${av(sym, x.market)}<div class="sym"><div class="tag">${tag}</div>${esc(sym)}<small>${x.mode}</small>${rewardFlag(x.market)}</div><div class="gain">${head}</div>
+      <div class="head">${av(sym, x.market)}<div class="sym"><div class="tag">${tag}</div>${esc(sym)}${mt(x.mode)}${rewardFlag(x.market)}</div><div class="gain">${head}</div>
       ${links(x.mint, x.market)}
       <div class="reason"><b>${buy ? "Entry" : reasonTitle(x.reason)}</b> · ${hhmm(x.at)}${!buy && x.fraction < 0.99 ? ` · sold ${Math.round(x.fraction * 100)}% of the position` : ""}<br>${esc(x.reason)}</div></div>
     </div>`;
@@ -588,10 +876,11 @@ function missedRows(missed) {
       : /mcap|ceiling/i.test(m.reason) ? `Blocked on market cap, then it ran ${m.peakX.toFixed(1)}x.`
       : /score/i.test(m.reason) ? `Scored too low, then it ran ${m.peakX.toFixed(1)}x. The floor may be strict.`
       : /full|allocation|cash/i.test(m.reason) ? `A signal we couldn't fund ran ${m.peakX.toFixed(1)}x. Allocation may be too tight.`
-      : /copycat|slop|safety/i.test(m.reason) ? `A filter blocked it and it ran ${m.peakX.toFixed(1)}x. Pin it if it's a real community coin.`
+      : /copycat|slop|safety/i.test(m.reason) ? `A filter blocked it and it ran ${m.peakX.toFixed(1)}x. Before pinning, check it's the coin its community is actually behind, not a copy of an older one.`
       : `Passed on it (${esc(m.reason)}), then it ran ${m.peakX.toFixed(1)}x.`;
-    return `<div class="card">
-      <div class="head">${av(m.symbol, m.market)}<div class="sym">${esc(m.symbol)}<small>${m.mode}</small></div><div class="gain up">+${Math.round((m.peakX - 1) * 100)}%<small>${why}</small></div>
+    const lit = !m.soldEarly && /copycat|slop/i.test(m.reason);
+    return `<div class="card${lit ? " lit" : ""}">
+      <div class="head">${av(m.symbol, m.market)}<div class="sym">${esc(m.symbol)}${mt(m.mode)}</div><div class="gain up">+${Math.round((m.peakX - 1) * 100)}%<small>${why}</small></div>
       ${links(m.mint, m.market)}</div>
       <div class="note">${big(m.mcap || (m.market && m.market.mcap))} when we looked → peak ${m.peakX.toFixed(1)}x · now ${m.nowX.toFixed(1)}x · ${ago(Date.now() - m.at)} ago<br>${esc(m.reason)}</div>
       <div class="lesson">${lesson}</div>
@@ -615,21 +904,31 @@ function looksRows(looks) {
   $("looksCount").textContent = looks.length ? `(${looks.length})` : "";
   if (!looks.length) return `<div class="empty">No looks logged yet.</div>`;
   return looks.map(l => `<div class="card fill ${l.rejected ? "loss" : ""}">
-    <div class="head">${av(l.symbol, l.market)}<div class="sym">${l.rejected ? '<div class="tag">Rejected</div>' : ""}${esc(l.symbol)}<small class="dim">${l.mode}</small></div><div class="gain"><small>${ago(Date.now() - l.at)} ago${l.market ? " · " + big(l.market.mcap) : ""}</small></div>
+    <div class="head">${av(l.symbol, l.market)}<div class="sym">${l.rejected ? '<div class="tag">Rejected</div>' : ""}${esc(l.symbol)}${mt(l.mode)}</div><div class="gain"><small>${ago(Date.now() - l.at)} ago${l.market ? " · " + big(l.market.mcap) : ""}</small></div>
     <div class="reason">${esc(l.reason)}</div></div></div>`).join("");
 }
 
 function guard(s) {
   const g = s.guardrails, a = s.account, h = s.health;
-  const lossLeft = g.dailyLossStopUsd + Math.min(0, a.realizedToday);
-  const ddRoom = a.equity - g.drawdownHaltAt;
-  return `
-    <span>Daily loss room</span><span class="${lossLeft <= 10 ? "down" : ""}">${usd(Math.max(0, lossLeft))} of ${usd(g.dailyLossStopUsd)}</span>
-    <span>Room above drawdown halt</span><span class="${ddRoom <= 15 ? "down" : ""}">${usd(ddRoom)} (halts at ${usd(g.drawdownHaltAt)})</span>
-    <span>Capital at risk</span><span>${usd(g.capitalAtRisk)} of ${usd(g.maxCapitalAtRisk)}</span>
-    <span>Launch feed (PumpPortal)</span><span class="${h.feedDownS > 120 ? "down" : ""}">${h.feedDownS > 120 ? "down " + ago(h.feedDownS * 1000) : "live"}</span>
-    <span>Price feed (DexScreener)</span><span class="${h.dexStaleS > 60 ? "down" : ""}">${h.dexStaleS > 60 ? "stale " + ago(h.dexStaleS * 1000) : "live"}</span>
-    <span>Junk ticks refused, 24h</span><span>${h.rejectedTicks24h}</span>`;
+  const lossUsed = Math.max(0, -Math.min(0, a.realizedToday));
+  const ddSpan = a.peakEquity - g.drawdownHaltAt, ddUsed = Math.max(0, a.peakEquity - a.equity);
+  const row = (name, val, used, sub = "") => {
+    const f = Math.max(0, Math.min(1, used));
+    return `<div class="gr"><div class="row"><span>${name}</span><span>${val}</span></div><div class="bar"><b class="${f >= .9 ? "crit" : f >= .7 ? "warn" : ""}" style="width:${(f * 100).toFixed(1)}%"></b></div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
+  };
+  const worst = Math.max(lossUsed / g.dailyLossStopUsd, ddUsed / (ddSpan || 1), g.capitalAtRisk / g.maxCapitalAtRisk);
+  $("guardState").textContent = worst >= .9 ? "at the limit" : worst >= .7 ? "getting close" : "all clear";
+  $("guardState").style.color = worst >= .9 ? "var(--coral)" : worst >= .7 ? "var(--ember)" : "var(--sage)";
+  $("feeds").innerHTML = [
+    ["PumpPortal", h.feedDownS > 120 ? "down" : "", h.feedDownS > 120 ? " down " + ago(h.feedDownS * 1000) : ""],
+    ["DexScreener", h.dexStaleS > 60 ? "down" : "", h.dexStaleS > 60 ? " stale " + ago(h.dexStaleS * 1000) : ""],
+    ["Helius", !h.helius ? "idle" : h.helius.lastOkAt && Date.now() - h.helius.lastOkAt < 30 * 60e3 ? "" : h.helius.keyLooksValid ? "idle" : "down", h.helius && h.helius.lastOkAt ? " · " + ago(Date.now() - h.helius.lastOkAt) + " ago" : ""],
+    ["Wallet events 1h", "idle", ": " + (h.walletEvents1h ?? "—")],
+    ["Junk ticks 24h", "idle", ": " + h.rejectedTicks24h],
+  ].map(([n, c, t]) => `<span><i class="${c}"></i>${n}${esc(t)}</span>`).join("");
+  return row("Daily loss", `${usd(lossUsed)} of ${usd(g.dailyLossStopUsd)}`, lossUsed / g.dailyLossStopUsd)
+    + row("Drawdown", `${usd(a.equity - g.drawdownHaltAt)} to halt`, ddUsed / (ddSpan || 1), `Halts at ${usd(g.drawdownHaltAt)}`)
+    + row("Capital at risk", `${usd(g.capitalAtRisk)} of ${usd(g.maxCapitalAtRisk)}`, g.capitalAtRisk / g.maxCapitalAtRisk);
 }
 function rejectedRows(rows) {
   if (!rows.length) return `<div class="empty">None. Every price the bot saw agreed with a second source.</div>`;
@@ -648,28 +947,26 @@ function activityStrip(a) {
 function render(s) {
   S = s;
   $("activity").innerHTML = activityStrip(s.activity);
-  const stale = Date.now() - s.at > 120e3;
-  $("pulse").className = "pulse" + (s.paused ? " paused" : stale ? " stale" : s.health.feedDownS > 120 || s.health.dexStaleS > 60 ? " down" : "");
-  $("status").textContent = s.paused ? "Stopped" : stale ? "Last heard " + ago(Date.now() - s.at) + " ago" : "Running";
-  $("clock").textContent = hhmm(Date.now());
   $("pausedBanner").style.display = s.paused ? "block" : "none";
-  $("stopBtn").style.display = s.paused ? "none" : "";
-  $("resumeBtn").style.display = s.paused ? "" : "none";
+  const ctl = $("ctl");
+  ctl.innerHTML = s.paused ? `<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5 L10.5 6 L3 10.5 Z"/></svg>Resume` : `<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="1.5" width="2.5" height="9" rx="1"/><rect x="7.5" y="1.5" width="2.5" height="9" rx="1"/></svg>Pause`;
+  ctl.setAttribute("aria-label", s.paused ? "Resume buying" : "Pause entries");
   verdict(s);
+  hero(s);
+  tiles(s);
   chart(s.equity, s.account.startingCapital);
-  stats(s);
+  periodStats(s);
+  $("guard").innerHTML = guard(s);
   chips(s);
-  $("openCount").textContent = s.open.length ? `(${s.open.length})` : "";
+  $("openCount").textContent = `${s.open.length} position${s.open.length === 1 ? "" : "s"}`;
   $("open").innerHTML = openRows(s.open);
   $("hotCount").textContent = "updated " + ago(Date.now() - s.at) + " ago";
   $("hot").innerHTML = hotRows(s.looks, s.open, s.hot);
   $("would").innerHTML = wouldRows(s.wouldBuy || []);
   $("trades").innerHTML = tradeRows(s.fills);
-  $("modes").innerHTML = modeTable(s.byMode);
   $("wallets").innerHTML = walletTable(s.wallets || []);
   $("missed").innerHTML = missedRows(s.missed);
   $("looks").innerHTML = looksRows(s.looks);
-  $("guard").innerHTML = guard(s);
   $("rejected").innerHTML = rejectedRows(s.health.rejected || []);
   $("internals").textContent = JSON.stringify(s.config, null, 2);
   $("foot").textContent = `Paper trading since ${dmy(s.health.startedAt)} · snapshot ${Math.round((Date.now() - s.at) / 1000)}s old · refreshes every 30s`;
@@ -782,7 +1079,7 @@ function demoLab() {
 }
 
 function fail(msg) {
-  $("pulse").className = "pulse down"; $("status").textContent = "Not connected";
+  $("status").className = "pill down"; $("statusText").textContent = "Not connected"; $("lamp").className = "lamp halted";
   $("verdict").className = "verdict flat"; $("verdict").innerHTML = `Can't reach the bot.`; $("sub").textContent = msg;
 }
 
@@ -799,10 +1096,34 @@ async function load() {
   } catch (e) { fail("Network error. Pull down to retry. (" + String(e).slice(0, 80) + ")"); }
 }
 
+// Login (Beacon): the beam grows as you type; on the right password it flares, the iris closes, the dashboard loads underneath, the iris opens.
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+$("pw").addEventListener("input", () => { $("login").style.setProperty("--t", Math.min(1, $("pw").value.length / 10).toFixed(2)); $("loginErr").textContent = ""; });
 $("loginForm").onsubmit = async e => {
   e.preventDefault();
-  const r = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) });
-  if (r.ok) { $("pw").value = ""; load(); } else { $("loginErr").textContent = (await r.json()).error || "Couldn't log in."; }
+  $("loginBtn").disabled = true;
+  let r;
+  try { r = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) }); }
+  catch { r = null; }
+  if (!r || !r.ok) {
+    $("loginBtn").disabled = false;
+    $("loginErr").textContent = r ? ((await r.json().catch(() => ({}))).error || "Couldn't log in.") : "Couldn't reach the dashboard. Check your connection.";
+    const f = $("loginForm"); f.classList.remove("shake"); void f.offsetWidth; f.classList.add("shake");
+    return;
+  }
+  $("pw").value = "";
+  if (calm) { $("loginBtn").disabled = false; $("login").style.setProperty("--t", 0); return load(); }
+  const iris = $("iris");
+  $("login").classList.add("flare");
+  await sleep(650);
+  iris.classList.add("on", "close");
+  await sleep(720);
+  await load();
+  $("login").classList.remove("flare"); $("login").style.setProperty("--t", 0); $("loginBtn").disabled = false;
+  iris.classList.remove("close"); void iris.offsetWidth; iris.classList.add("open");
+  await sleep(950);
+  iris.classList.remove("on", "open");
 };
 $("logout").onclick = async e => { e.preventDefault(); await fetch("/api/login", { method: "DELETE" }); location.reload(); };
 $("ranges").querySelectorAll("button").forEach(b => b.onclick = () => { rangeH = Number(b.dataset.h); $("ranges").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); if (S) chart(S.equity, S.account.startingCapital); });
@@ -810,8 +1131,11 @@ async function control(action) {
   const r = await fetch("/api/state", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
   if (!r.ok) alert("That didn't go through. " + ((await r.json()).error || "")); else load();
 }
-$("stopBtn").onclick = () => { if (confirm("Stop all new buys? Open positions keep their stops and exits.")) control("stop"); };
-$("resumeBtn").onclick = () => control("resume");
+$("ctl").onclick = () => {
+  if (!S) return;
+  if (S.paused) control("resume");
+  else if (confirm("Pause all new buys? Open positions keep their stops, trails and exits.")) control("stop");
+};
 
 function demo() {
   const now = Date.now();
@@ -821,14 +1145,24 @@ function demo() {
   return {
     at: now, paused: false,
     activity: { charts: { tracking: 64, charts: 512, own: 497, geckoCalls: 15, geckoFailed: 0 }, checked: 284, looked: 118, setups: 12, rejected: 96, bought: 0, stonk: 23, rejectedBy: { "rug risk": 38, "bot volume": 21, "overheated": 17, "too new or thin": 11, "copycat or slop": 6, "honeypot": 3 } },
-    account: { cash: 275.1, vault: 6.2, equity: 303.7, peakEquity: 312, startingCapital: 300, realizedToday: 7.4, openPnl: 6.1, closedCount: 18, closedWins: 9, closedPnl: 16.6 },
+    account: { cash: 275.1, vault: 6.2, equity: 303.7, peakEquity: 312, startingCapital: 300, realizedToday: 7.4, openPnl: 6.1, closedCount: 18, closedWins: 9, closedPnl: 16.6, dayStartValue: 302.1 },
+    stats: (() => {
+      const P = (n, wins, pnl, avgWin, avgLoss, pf, bought, looked, byMode) => ({ n, wins, pnl, avgWin, avgLoss, profitFactor: pf, avgHoldMs: 3.4 * 3600e3, bought, looked, byMode });
+      const M = (n, wins, pnl) => ({ n, wins, pnl });
+      return {
+        "24h": P(5, 3, 9.4, 4.1, -1.5, 3.7, 6, 41, { pullback: M(2, 2, 8.1), ultra: M(1, 1, 2.5), bounce: M(1, 0, -1.9), trusted: M(1, 0, -0.1), ride: M(0, 0, 0), dip: M(0, 0, 0) }),
+        "7d": P(14, 7, 12.8, 3.6, -1.8, 2.0, 17, 212, { pullback: M(5, 3, 12.2), ultra: M(3, 2, 3.1), bounce: M(4, 1, -2.6), trusted: M(2, 1, 0.1), ride: M(0, 0, 0), dip: M(0, 0, 0) }),
+        all: P(18, 9, 16.6, 3.4, -1.6, 2.2, 21, 380, { pullback: M(6, 3, 14.2), ultra: M(4, 2, 3.1), bounce: M(5, 2, -2.6), trusted: M(3, 2, 1.9), ride: M(0, 0, 0), dip: M(0, 0, 0) }),
+        missed48: 2,
+      };
+    })(),
     guardrails: { dailyLossStopUsd: 30, drawdownHaltAt: 249.6, capitalAtRisk: 21.5, maxCapitalAtRisk: 180 },
-    health: { feedDownS: 0, dexStaleS: 4, rejectedTicks24h: 3, startedAt: now - 2 * 86400e3, uptimeMs: 2 * 86400e3, rejected: [{ at: now - 3e6, mint: "6GmAxxxxxxxxUNgx", price: 0.0011, last_good: 0.11 }] },
+    health: { feedDownS: 0, dexStaleS: 4, rejectedTicks24h: 3, startedAt: now - 2 * 86400e3, uptimeMs: 2 * 86400e3, walletEvents1h: 4, helius: { keyLooksValid: true, lastOkAt: now - 4 * 60e3 }, rejected: [{ at: now - 3e6, mint: "6GmAxxxxxxxxUNgx", price: 0.0011, last_good: 0.11 }] },
     config: { modes: { pullback: { sizeUsd: 5, maxOpen: 3 } }, allocation: { ultra: .4, bounce: .2, pullback: .25, trusted: .15 } },
     open: [
-      { symbol: "KURP", mode: "pullback", mint: "xpobxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", entryPrice: 0.00113, price: 0.00212, gainPct: 0.88, pnlUsd: 4.4, sizeUsd: 5, costUsd: 5, realizedUsd: 0, openedAt: now - 4.2 * 3600e3, closeStop: 0.00078, stopPct: -0.31, hardFloorPct: -0.45, trailArmed: true, peakPct: 1.1, tpTaken: [0], takeProfits: [{ gain: .6, sell: .33 }], reason: "pullback 28% from 1h high, reclaim on vol", score: 82, mcapAtEntry: 113000, market: mk("KURP", "SOL", 0.00212, 2100000, 180000, [4, 61, 320], 4120, 9, 2.4e6) },
-      { symbol: "FTR", mode: "ultra", mint: "DFMtxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", entryPrice: 0.00496, price: 0.0044, gainPct: -0.11, pnlUsd: -0.9, sizeUsd: 8, costUsd: 8, realizedUsd: 0, openedAt: now - 1.1 * 3600e3, closeStop: 0.00288, stopPct: -0.42, hardFloorPct: -0.55, trailArmed: false, peakPct: 0.14, tpTaken: [], takeProfits: [{ gain: 1, sell: .33 }], reason: "second leg breakout, vol 2.1x, 3 higher lows", score: 78, mcapAtEntry: 4780000, market: mk("FTR", "SOL", 0.0044, 3660000, 243000, [-4, -15, -29], 44868, 48, 8.9e6, ["1 trusted holds"]) },
-      { symbol: "ZCAT", mode: "trusted", mint: "HcRLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxDeJR", entryPrice: 0.0422, price: 0.0486, gainPct: 0.15, pnlUsd: 0.6, sizeUsd: 4, costUsd: 4, realizedUsd: 0, openedAt: now - 40 * 60e3, closeStop: 0.0304, stopPct: -0.28, hardFloorPct: -0.45, trailArmed: false, peakPct: 0.22, tpTaken: [], takeProfits: [{ gain: 1, sell: .5 }], reason: "2 trusted wallets bought", score: 70, mcapAtEntry: 41880000, market: mk("ZCAT", "ZEC", 0.0486, 47170000, 1100000, [0.2, -8.7, -13], 76677, 47 * 24, 444000, ["2 trusted bought"]) },
+      { symbol: "KURP", mode: "pullback", mint: "xpobxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", entryPrice: 0.00113, price: 0.00212, gainPct: 0.88, pnlUsd: 4.4, sizeUsd: 5, costUsd: 5, realizedUsd: 0, openedAt: now - 4.2 * 3600e3, closeStop: 0.00078, stopPct: -0.31, hardFloorPct: -0.45, trailArmed: true, peakPct: 1.1, tpTaken: [0], takeProfits: [{ gain: .6, sell: .33 }], reason: "pullback 28% from 1h high, reclaim on vol", score: 82, scoreParts: { setup: 60, "holder growth": 20, wallets: 5, snipers: -3 }, safety: { holders: 3600, top10: 18.4, sniper: 3 }, plan: { trailPct: .3, trailAfterGain: .5, trailLadder: null, maxHoldMs: 12 * 3600e3 }, mcapAtEntry: 113000, market: mk("KURP", "SOL", 0.00212, 2100000, 180000, [4, 61, 320], 4120, 9, 2.4e6) },
+      { symbol: "FTR", mode: "ultra", mint: "DFMtxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", entryPrice: 0.00496, price: 0.0044, gainPct: -0.11, pnlUsd: -0.9, sizeUsd: 8, costUsd: 8, realizedUsd: 0, openedAt: now - 1.1 * 3600e3, closeStop: 0.00288, stopPct: -0.42, hardFloorPct: -0.55, trailArmed: false, peakPct: 0.14, tpTaken: [], takeProfits: [{ gain: 1, sell: .33 }], reason: "second leg breakout, vol 2.1x, 3 higher lows", score: 78, scoreParts: { setup: 70, "creative pair": 0, wallets: 10, snipers: -2 }, safety: { holders: 44100, top10: 2.1, sniper: 2 }, plan: { trailPct: .35, trailAfterGain: .5, trailLadder: [{ peakGain: 1, trailPct: .35 }, { peakGain: 3, trailPct: .4 }], maxHoldMs: 0 }, mcapAtEntry: 4780000, market: mk("FTR", "SOL", 0.0044, 3660000, 243000, [-4, -15, -29], 44868, 48, 8.9e6, ["1 trusted holds"]) },
+      { symbol: "ZCAT", mode: "trusted", mint: "HcRLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxDeJR", entryPrice: 0.0422, price: 0.0486, gainPct: 0.15, pnlUsd: 0.6, sizeUsd: 4, costUsd: 4, realizedUsd: 0, openedAt: now - 40 * 60e3, closeStop: 0.0304, stopPct: -0.28, hardFloorPct: -0.45, trailArmed: false, peakPct: 0.22, tpTaken: [], takeProfits: [{ gain: 1, sell: .5 }], reason: "trusted copy: wirelyss + hexi bought", score: 70, wallets: ["wirelyss", "hexi"], scoreParts: { base: 30, "trusted wallets": 20, "buy/sell": 15, holders: 10, "top 10": -5, liquidity: 10, snipers: -10 }, safety: { holders: 76000, top10: 31, sniper: 10 }, plan: { trailPct: .25, trailAfterGain: .4, trailLadder: null, maxHoldMs: 6 * 3600e3 }, mcapAtEntry: 41880000, market: mk("ZCAT", "ZEC", 0.0486, 47170000, 1100000, [0.2, -8.7, -13], 76677, 47 * 24, 444000, ["2 trusted bought"]) },
     ],
     closed: [
       { symbol: "OPTIMA", mode: "pullback", mint: "DdVXxxxx", realized_usd: 6.8, closed_at: now - 3 * 3600e3, entry_at: now - 9 * 3600e3, close_reason: "TP +60%" },
@@ -850,8 +1184,8 @@ function demo() {
     ],
     looks: [
       { mode: "trusted", mint: "6VsnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpGjm", symbol: "SOUVENIR", score: 0, reason: "1 trusted wallet bought, but mcap $246k > $150k ceiling (copy latency: we'd buy their exit)", at: now - 2.4 * 3600e3, market: mk("SOUVENIR", "SOL", 0.000273, 265000, 45400, [3.4, 20, 59], 1200, 13 * 24, 220000, ["1 trusted bought"]) },
-      { mode: "pullback", mint: "Hmqnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxfart", symbol: "SEXCOIN", score: 0, reason: "watching: only 9% off the high, waiting for a 20-40% retrace", at: now - 12 * 60e3, watchedSince: now - 95 * 60e3, setup: { need: "pull back to 0.000212 (20% off the 1h high)", level: 0.000212, distance: 0.11 }, market: mk("SEXCOIN", "SOL", 0.000233, 228000, 43100, [11, 434, 434], 800, 1.7, 1.49e6, ["1 KOL buy"]) },
-      { mode: "ultra", mint: "2kuYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "dev/null", score: 0, reason: "recovered, but only 2 higher lows", at: now - 30 * 60e3, watchedSince: now - 4 * 3600e3, setup: { need: "print 3 higher lows", progress: { done: 2, of: 3 } }, market: mk("dev/null", "SOL", 0.0000942, 87800, 27000, [-24, 123, 123], 600, 5.3, 1.93e6) },
+      { mode: "pullback", mint: "Hmqnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxfart", symbol: "SEXCOIN", score: 64, watching: true, reason: "watching: only 9% off the high, waiting for a 20-40% retrace", at: now - 12 * 60e3, watchedSince: now - 95 * 60e3, setup: { need: "pull back to 0.000212 (20% off the 1h high)", level: 0.000212, distance: 0.11 }, market: mk("SEXCOIN", "SOL", 0.000233, 228000, 43100, [11, 434, 434], 800, 1.7, 1.49e6, ["1 KOL buy"]) },
+      { mode: "ultra", mint: "2kuYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "dev/null", score: 0, watching: true, reason: "recovered, but only 2 higher lows", at: now - 30 * 60e3, watchedSince: now - 4 * 3600e3, setup: { need: "print 3 higher lows", progress: { done: 2, of: 3 } }, market: mk("dev/null", "SOL", 0.0000942, 87800, 27000, [-24, 123, 123], 600, 5.3, 1.93e6) },
     ],
     hot: [
       { mint: "Chatxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "CHATON", mode: "pullback", modes: ["pullback"], group: "setup", heat: 131, status: "base holding, waiting for a green reclaim on volume", setup: { need: "green 5m close above 0.000674 on 1.3x volume", level: 0.000674, distance: 0.031 }, checkedAt: now - 60e3, since: now - 26 * 60e3, chips: ["holders +18% 1h", "vol 2.3x"], market: mk("CHATON", "SOL", 0.000654, 654000, 90000, [8, 40, 210], 2400, 9, 1.4e6) },

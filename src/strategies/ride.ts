@@ -6,7 +6,7 @@ import { atr, lowestLow, vwap } from "../data/gecko.js";
 import { allCandidates, isPinned, isStonkPair } from "../data/universe.js";
 import { ride as rideDb } from "../db.js";
 import { brisbaneDayStart } from "../engine/broker.js";
-import { buySellRatio, candles5and15, dex, dist, gate, holderScore, walletScore, logLook, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { scored, buySellRatio, candles5and15, dex, dist, gate, holderScore, walletScore, logLook, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"ride"> = config.modes.ride;
 
@@ -124,11 +124,11 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<{ leader: boolean;
   if (!hasCore) {
     const g = await gate(s, "ride", C.coreSizeUsd);
     if (!g.ok) { logLook("ride", s, g.why!, g.holders); return { leader: true, sig: null }; }
-    const score = 70 + (isPinned(s.mint) ? 10 : 0) + (isStonkPair(s) ? 5 : 0) + holderScore(s.mint) + walletScore(s.mint);
+    const { score, scoreParts } = scored({ leader: 70, pinned: isPinned(s.mint) ? 10 : 0, "Stonk pair": isStonkPair(s) ? 5 : 0, "holder growth": holderScore(s.mint), wallets: walletScore(s.mint) });
     return { leader: true, sig: {
       mode: "ride", mint: s.mint, symbol: s.symbol, sizeUsd: C.coreSizeUsd, score,
       reason: `ride core: leader with $${(s.volume24h / 1e6).toFixed(1)}M 24h volume, rising 1h structure`,
-      snapshot: s, candles15: c15, meta: { atr15: a15, leg: "core", holders: g.holders },
+      snapshot: s, candles15: c15, meta: { atr15: a15, leg: "core", holders: g.holders, scoreParts },
       plan: rideCorePlan(st, C),
     } };
   }
@@ -146,11 +146,11 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<{ leader: boolean;
 
   const g = await gate(s, "ride", C.sleeveSizeUsd);
   if (!g.ok) { logLook("ride", s, g.why!, g.holders); return { leader: true, sig: null }; }
-  const score = p.base + holderScore(s.mint) + walletScore(s.mint);
+  const { score, scoreParts } = scored({ setup: p.base, "holder growth": holderScore(s.mint), wallets: walletScore(s.mint) });
   return { leader: true, sig: {
     mode: "ride", mint: s.mint, symbol: s.symbol, sizeUsd: C.sleeveSizeUsd, score,
     reason: `ride sleeve: pullback ${(p.pullback * 100).toFixed(0)}% to ${p.ref.toPrecision(3)}, target ${p.target.toPrecision(3)}`,
-    snapshot: s, candles15: c15, meta: { atr15: a15, leg: "sleeve", target: p.target, holders: g.holders },
+    snapshot: s, candles15: c15, meta: { atr15: a15, leg: "sleeve", target: p.target, holders: g.holders, scoreParts },
     plan: p.plan,
   } };
 }

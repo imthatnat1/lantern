@@ -3,7 +3,7 @@ import { log } from "../log.js";
 import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { scored, baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"bounce"> = config.modes.bounce;
 
@@ -92,13 +92,13 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   const a15 = atr(c15);
   const hv = holderVelocity(s.mint);
   if (hv != null && hv <= -0.10) { logLook("bounce", s, `holders shrinking ${(hv * 100).toFixed(0)}% in 10m`); return null; }
-  const score = p.base + ((g.holders ?? 0) > 200 ? 10 : 0) + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
+  const { score, scoreParts } = scored({ setup: p.base, "200+ holders": (g.holders ?? 0) > 200 ? 10 : 0, "holder growth": holderScore(s.mint), "creative pair": pairScore(s), wallets: walletScore(s.mint), snipers: sniperPenalty(g) });
 
   const sig: Signal = {
     mode: "bounce", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
     reason: `bounce from -${(p.dd * 100).toFixed(0)}% post-migration${floor.crowd ? `, early ($${Math.round(s.mcapUsd / 1000)}k, ${pre.holders} holders, half size)` : ""}`,
     snapshot: s, candles15: c15,
-    meta: { atr15: a15, baseLow: p.lo, migratedAt, holders: g.holders },
+    meta: { atr15: a15, baseLow: p.lo, migratedAt, holders: g.holders, scoreParts },
     plan: p.plan,
   };
   if (!g.ok) { logSignal(sig, false, g.why!); return null; }

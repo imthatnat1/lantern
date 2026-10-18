@@ -7,7 +7,7 @@ import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import { account } from "../engine/broker.js";
 import { db, cooldowns } from "../db.js";
-import { watchedMints, watchedFirst, buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { scored, watchedMints, watchedFirst, buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"ultra"> = config.modes.ultra;
 
@@ -70,10 +70,11 @@ async function reentry(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   cooldowns.set("ultra", s.mint, 0);
   const a15 = atr(c15);
   const sixHLow = lowestLow(c15, ctx.now - 6 * 3_600_000);
+  const { score, scoreParts } = scored({ "re-entry": 72, "holder growth": holderScore(s.mint), "creative pair": pairScore(s), wallets: walletScore(s.mint) });
   return {
-    mode: "ultra", mint: s.mint, symbol: s.symbol, sizeUsd: size, score: 72 + holderScore(s.mint) + pairScore(s) + walletScore(s.mint),
+    mode: "ultra", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
     reason: `ultra re-entry after stop: reclaimed ${stopLevel.toPrecision(3)}, new 1h high on ${(k.v / avgV).toFixed(1)}x volume`,
-    snapshot: s, candles15: c15, meta: { atr15: a15, reentry: true, holders: g.holders },
+    snapshot: s, candles15: c15, meta: { atr15: a15, reentry: true, holders: g.holders, scoreParts },
     plan: (entry, atr15) => ({
       hardFloorPct: 0.55,
       closeStopPrice: structuralStop(entry, Math.max(sixHLow, stopLevel * 0.97), atr15, 1, 0.50),
@@ -155,13 +156,13 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   if ((g.holders ?? 0) < C.minHolders) return null;
   const a15 = atr(c15);
   const sixHLow = lowestLow(c15, ctx.now - 6 * 3_600_000);
-  const score = p.base + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
+  const { score, scoreParts } = scored({ setup: p.base, "holder growth": holderScore(s.mint), "creative pair": pairScore(s), wallets: walletScore(s.mint), snipers: sniperPenalty(g) });
 
   const sig: Signal = {
     mode: "ultra", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
     reason: `second leg breakout, vol ${p.volX.toFixed(1)}x, ${p.lows} higher lows`,
     snapshot: s, candles15: c15,
-    meta: { atr15: a15, dumpLow: p.dumpLow, rangeTop: p.rangeTop, breakoutVol: p.breakoutVol, holders: g.holders },
+    meta: { atr15: a15, dumpLow: p.dumpLow, rangeTop: p.rangeTop, breakoutVol: p.breakoutVol, holders: g.holders, scoreParts },
     plan: ultraPlan(sixHLow),
   };
   if (!g.ok) { logSignal(sig, false, g.why!); return null; }

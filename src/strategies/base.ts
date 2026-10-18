@@ -39,6 +39,14 @@ export interface Mkt {
 
 export interface Gate { ok: boolean; why?: string; holders?: number; top10?: number; sniperPct?: number }
 /** Score penalty for sniper/bundle concentration: -1 per percent, max -20. */
+/** Add up a score from named parts and keep the parts, so the dashboard can show why it scored what it did. Zero parts are dropped. */
+export function scored(parts: Record<string, number>): { score: number; scoreParts: Record<string, number> } {
+  const scoreParts: Record<string, number> = {};
+  let score = 0;
+  for (const [k, v] of Object.entries(parts)) { score += v; if (v) scoreParts[k] = v; }
+  return { score, scoreParts };
+}
+
 export function sniperPenalty(g: Gate): number { return -Math.min(20, Math.round(g.sniperPct ?? 0)); }
 
 /**
