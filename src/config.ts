@@ -22,6 +22,7 @@ const DEFAULT_PINNED = [
   "AGi2s9zPRPHs3zEDPhPTroumTEXK5ufymYSfEFndCSSW", // LEVERCAT (xSOL pair)
   "HTmQz7My6MehV7bjhJ6jde8nDND1yvsz68d24LP7YgUQ", // GP (GLDx pair)
   "DFMt2FyLpB6ekPNAzVErLXgpSnJ9CRf1VnxBAkTLpump", // FTR
+  "5yC9BM8KUsJTPbWPLfA2N8qH1s9V8DQ3Vcw1G6Jdpump", // AgenC (the real Tetsuo dev's coin; Nat, 18 Oct)
 ];
 
 /** Trusted wallets Nat follows on pump.fun. Public addresses; TRUSTED_WALLETS in .env adds to these. */
