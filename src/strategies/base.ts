@@ -181,9 +181,17 @@ export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, hol
 /** Distance helper: how far price must move to reach `level`, as a positive fraction. */
 export function dist(price: number, level: number): number { return Math.abs(level - price) / price; }
 
+/**
+ * One GeckoTerminal call per coin, not two: 180 five-minute candles (15h), with the 15m candles rolled up from
+ * them. GeckoTerminal allows ~30 calls a minute per server (we keep to 15, Blossom shares the IP); with two calls
+ * per check the scans asked for far more, the host kept "cooling", and checks failed (18 Oct: every flagship
+ * dip check failed with "cooling api.geckoterminal.com").
+ */
 export async function candles5and15(pair: string): Promise<{ c5: Candle[]; c15: Candle[] }> {
-  const [c5, c15] = await Promise.all([gecko.candles(pair, 5, 100), gecko.candles(pair, 15, 60)]);
-  return { c5, c15 };
+  const all5 = await gecko.candles(pair, 5, 180);
+  const c15 = gecko.rollUp(all5).slice(-60);
+  try { if (c15.length) recorder.candles(pair, 15, c15); } catch { /* best effort, the lab reads these */ }
+  return { c5: all5.slice(-100), c15 };
 }
 
 export function buySellRatio(s: Pick<Mkt, "buys5m" | "sells5m">): number {
