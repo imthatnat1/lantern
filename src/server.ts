@@ -88,7 +88,8 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
  */
 const REJECT_GROUPS: [string, RegExp][] = [
   ["scam relaunch", /scam relaunch/i],
-  ["no socials", /no website or socials|no community, only/i],
+  ["no socials", /no links on DexScreener|no website or socials|no community/i],
+  ["bot volume", /fake holders/i],
   ["socials unreadable", /couldn't read its socials/i],
   ["rug risk", /crashed \d+% in an hour/i],
   ["bot volume", /bot volume|bot buys|real money is selling|blocked/i],

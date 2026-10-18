@@ -40,7 +40,7 @@ export function judge(l: Links): { real: string[]; why: string | null } {
   if (web && !real.length) {
     const j = judge({ twitter: /(x|twitter)\.com$/i.test(web.hostname) ? l.website : undefined, telegram: /t\.me$/i.test(web.hostname) ? l.website : undefined });
     real.push(...j.real);
-    if (j.why?.includes("borrowed")) borrowed = true;
+    if (j.why?.startsWith("no community")) borrowed = true;
   }
   if (real.length) return { real, why: null };
   return { real, why: borrowed ? "no community, only a link to someone else's tweet" : "no website or socials" };
@@ -82,7 +82,18 @@ export async function launchLinks(mint: string, uri: string | undefined): Promis
 }
 
 /**
- * The check the prefilter runs. Merges DexScreener's links with the launch metadata's.
+ * Nat's test (18 Oct, 21:26, after TTP passed the launch-metadata check): the links have to show on DexScreener.
+ * Anyone can type a link into pump.fun's launch form; a DexScreener profile (links, banner) is claimed and paid for
+ * by the team. Null when DexScreener shows at least one real link.
+ */
+export function dexProfileWhy(dex: Links): string | null {
+  const j = judge(dex);
+  if (!j.why) return null;
+  return j.why.startsWith("no community") ? "no community on DexScreener, only a link to someone else's tweet" : "no links on DexScreener (no website, X or Telegram)";
+}
+
+/**
+ * The launch-metadata check, used for Stonk.fun-listed coins (their page on Stonk.fun stands in for a DexScreener profile). Merges DexScreener's links with the launch metadata's.
  * Returns null when the coin has a real link, otherwise a rejection reason.
  */
 export async function socialsWhy(mint: string, dex: Links, metaUri: string | undefined, fetchLinks = launchLinks): Promise<string | null> {

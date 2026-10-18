@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 process.env.DB_PATH = ":memory:";
-const { judge, linksFromMeta, metaUrls, socialsWhy, _resetSocials } = await import("../src/data/socials.js");
+const { judge, linksFromMeta, metaUrls, socialsWhy, dexProfileWhy, _resetSocials } = await import("../src/data/socials.js");
 const { blockMint, burnedWhy, burnName, nameKey, _resetBlocks } = await import("../src/data/flow.js");
 
 // --- socials ---
@@ -77,4 +77,18 @@ test("a block without a name (Stonk.fun listings, Nat's watch list) burns nothin
   _resetBlocks();
   blockMint("TSLAX_1", "crashed 85% in an hour", 24, undefined);
   assert.equal(burnedWhy("TSLAx", "TSLAX_2"), null);
+});
+
+// --- DexScreener profile (Nat's test) ---
+
+test("TTP and GTA 6 Coin: nothing on DexScreener = refused, whatever the launch form says", () => {
+  assert.equal(dexProfileWhy({}), "no links on DexScreener (no website, X or Telegram)");
+});
+test("a DexScreener profile with an X account, Telegram or website passes", () => {
+  assert.equal(dexProfileWhy({ twitter: "https://x.com/agenc_ai" }), null);
+  assert.equal(dexProfileWhy({ telegram: "https://t.me/tortue_sol" }), null);
+  assert.equal(dexProfileWhy({ website: "https://tortue.fun" }), null);
+});
+test("a DexScreener profile that only links someone else's tweet is refused", () => {
+  assert.match(dexProfileWhy({ twitter: "https://x.com/elonmusk/status/1846000000000000000" })!, /only a link to someone else's tweet/);
 });

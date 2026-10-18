@@ -5,13 +5,13 @@ import * as live from "../data/livecandles.js";
 import * as rug from "../data/rugcheck.js";
 import * as jup from "../data/jupiter.js";
 import { config } from "../config.js";
-import { isCopycat, isSlop } from "../engine/filters.js";
+import { ageHours, isCopycat, isSlop } from "../engine/filters.js";
 import { db, cooldowns, audit, market, recorder, hot, type Setup } from "../db.js";
 import { isCreativePair } from "../data/universe.js";
 import { isStonkListed } from "../data/stonkfun.js";
 import { buyersOf } from "../data/wallets.js";
 import { blockedWhy, blockMint, burnedWhy, divergence, fakeValuation, flow, microTrades } from "../data/flow.js";
-import { socialsWhy } from "../data/socials.js";
+import { dexProfileWhy, socialsWhy } from "../data/socials.js";
 
 export interface Context {
   now: number;
@@ -97,8 +97,17 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   if (!pinned && safe.holders !== undefined && safe.holders < 150) return { ok: false, why: `rejected: only ${safe.holders} holders` };
   // No website, X or Telegram: no community forming (Nat, 18 Oct). Her hand-picked watch list is exempt.
   if (!pinned && !handPicked) {
-    const sw = await socialsWhy(s.mint, { website: s.website, twitter: s.twitter, telegram: s.telegram }, safe.metaUri);
+    const links = { website: s.website, twitter: s.twitter, telegram: s.telegram };
+    const sw = isStonkListed(s.mint) ? await socialsWhy(s.mint, links, safe.metaUri) : dexProfileWhy(links);
     if (sw) return { ok: false, why: `rejected: ${sw}` };
+    // TTP (18 Oct 21:25): holders +8,330% in 10 minutes, an hour after launch. Real coins don't grow 6x in holders in
+    // ten minutes once they're past the launch rush; that's a wallet farm faking a crowd to beat holder floors.
+    const hv = holderVelocity(s.mint);
+    if (hv != null && hv >= 5 && ageHours(s) >= 1 && (safe.holders ?? 0) >= 300) {
+      const why = `fake holders: +${Math.round(hv * 100)}% in 10 minutes`;
+      blockMint(s.mint, why, 24, burnable);
+      return { ok: false, why: `rejected: ${why}` };
+    }
   }
   const ageH = (Date.now() - s.createdAt) / 3_600_000;
   if (!pinned && ageH < 2) {
