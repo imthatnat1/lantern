@@ -134,6 +134,9 @@ export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
   const best = new Map<string, any>();
   for (const r of rows) {
     if (held.has(r.mint) || blockedWhy(r.mint)) continue;
+    // 19 Oct (Nat): "my watch list is dip but not buying". 9 of 15 cards were paused dip coins. Watching is for coins the
+    // bot can actually buy; paused modes' setups show under "Would have bought" instead.
+    if (config.pausedModes.includes(r.mode)) continue;
     // Cleared safety but the mode has since written it off (dead, no exit route, cooling down): not hot.
     if (/dead|deeper than|too deep|too thin|no sell route|exit impact|cooldown|holders shrinking/i.test(r.status ?? "")) continue;
     const m = mkt(r.mint);

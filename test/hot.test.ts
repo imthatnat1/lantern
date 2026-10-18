@@ -13,7 +13,7 @@ const setupLook = (mode: string, mint: string, agoMs: number) =>
 test("hot list: clean coins show up, setups first, rejected and written-off coins drop out", () => {
   hot.clean("pullback", "SETUP", "SETUP", 1, NOW - 2 * M); setupLook("pullback", "SETUP", 3 * M);
   hot.clean("pullback", "ONWAY", "ONWAY", 1, NOW - M); hot.status("pullback", "ONWAY", "watching: only 8% off the high, waiting for a 20-40% retrace", NOW - M);
-  hot.clean("ride", "QUIET", "QUIET", 1, NOW - M);
+  hot.clean("ultra", "QUIET", "QUIET", 1, NOW - M);
   hot.clean("pullback", "REJ", "REJ", 1, NOW - 5 * M); hot.status("pullback", "REJ", "rejected: creator history", NOW - 4 * M);
   hot.clean("bounce", "DEAD", "DEAD", 1, NOW - 5 * M); hot.status("bounce", "DEAD", "down 92% since migration, treated as dead", NOW - 4 * M);
   hot.clean("pullback", "OLD", "OLD", 1, NOW - 45 * M);
@@ -33,7 +33,7 @@ test("a coin on the hot list is re-checked first by its mode, so it can be bid t
   const w = watchedMints("pullback", NOW);
   assert.ok(w.includes("ONWAY"));
   assert.ok(!w.includes("REJ") && !w.includes("OLD"));
-  assert.ok(!watchedMints("pullback", NOW).includes("QUIET"), "ride's hot coins don't take pullback slots");
+  assert.ok(!watchedMints("pullback", NOW).includes("QUIET"), "ultra's hot coins don't take pullback slots");
 });
 
 test("passing safety again clears an old rejection; a coin clean an hour later starts a new 'since'", () => {
@@ -76,7 +76,7 @@ test("Watching is for coins near a buy: far setups and breaking-down coins leave
   // TSI at 22:41 on 18 Oct: an ultra setup 35.9% away, refreshed every check, so it never left the list.
   hot.clean("ultra", "TSIFAR", "TSIFAR", 1, NOW - 3 * M); far("TSIFAR", 0.359);
   hot.clean("ultra", "NEAR", "NEAR", 1, NOW - 3 * M); far("NEAR", 0.08);
-  hot.clean("ride", "BROKE", "BROKE", 1, NOW - 3 * M); hot.status("ride", "BROKE", "printed a 1h lower low, structure broken", NOW - 2 * M);
+  hot.clean("ultra", "BROKE", "BROKE", 1, NOW - 3 * M); hot.status("ultra", "BROKE", "printed a 1h lower low, structure broken", NOW - 2 * M);
   const h = hotList(NOW);
   const mints = h.map(x => x.mint);
   assert.ok(!mints.includes("TSIFAR"), "more than 25% from its trigger");
@@ -85,4 +85,11 @@ test("Watching is for coins near a buy: far setups and breaking-down coins leave
   assert.equal(h.find(x => x.mint === "NEAR")!.chips[0], "new", "joined in the last 30 minutes");
   // Still checked first behind the scenes, so it comes back on its own when it gets close.
   assert.ok(watchedMints("ultra", NOW).includes("TSIFAR"));
+});
+
+test("paused modes stay off Watching: dip and ride coins show under Would have bought instead", () => {
+  hot.clean("dip", "PAUSEDDIP", "PAUSEDDIP", 1, NOW - M); hot.status("dip", "PAUSEDDIP", "dip found, waiting for a green 5m reclaim", NOW - M);
+  hot.clean("ride", "PAUSEDRIDE", "PAUSEDRIDE", 1, NOW - M);
+  const mints = hotList(NOW).map(x => x.mint);
+  assert.ok(!mints.includes("PAUSEDDIP") && !mints.includes("PAUSEDRIDE"));
 });
