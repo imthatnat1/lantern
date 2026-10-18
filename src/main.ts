@@ -4,6 +4,7 @@ import { positions, cooldowns, kv, market, db, recorder, hot } from "./db.js";
 import { startLab } from "./lab/scheduler.js";
 import { PumpPortal } from "./data/pumpportal.js";
 import * as dex from "./data/dexscreener.js";
+import { pickBuy } from "./strategies/pick.js";
 import * as gecko from "./data/gecko.js";
 import * as jup from "./data/jupiter.js";
 import * as rug from "./data/rugcheck.js";
@@ -175,6 +176,9 @@ async function main() {
   startServer(() => markPrices, () => ({
     feedDownS: Math.round(Math.min(feed.downForMs, 99_999_000) / 1000),
     dexStaleS: Math.round((Date.now() - Math.max(lastDexOk, dex.lastOkAt)) / 1000),
+  }), mint => pickBuy(mint, {
+    marks: markPrices, solPrice,
+    feedHealthy: Date.now() - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs,
   }));
   startLab();
   solPrice = await jup.solPrice();

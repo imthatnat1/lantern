@@ -68,7 +68,7 @@ const tot = (s: Partial<Record<Mode, ModeSummary>>, modes: Mode[]) => modes.redu
 
 export function liveCheck(from: number, to: number, base: LabTrade[]): LiveCheck {
   const firstTick = (db.prepare("SELECT MIN(at) AS t FROM ticks WHERE at BETWEEN ? AND ?").get(from, to) as { t: number | null }).t ?? to;
-  const rows = db.prepare("SELECT mode, symbol, mint, entry_at, realized_usd, status FROM positions WHERE entry_at BETWEEN ? AND ? ORDER BY entry_at").all(Math.max(from, firstTick), to) as
+  const rows = db.prepare("SELECT mode, symbol, mint, entry_at, realized_usd, status FROM positions WHERE entry_at BETWEEN ? AND ? AND mode != 'pick' ORDER BY entry_at").all(Math.max(from, firstTick), to) as
     { mode: Mode; symbol: string; mint: string; entry_at: number; realized_usd: number; status: string }[];
   const live: LiveCheck["live"] = {};
   let matched = 0;

@@ -94,6 +94,11 @@
   .setup .track.far b { background: var(--line-2); }
   .setup.stale { opacity: .6; border-style: dashed; }
   .setup.notyet .need b { color: var(--ivory-dim); }
+  .pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--ivory-faint); }
+  .pick .buy { border-color: var(--gold); color: var(--gold); font-weight: 500; }
+  .pick .buy:disabled { opacity: .5; cursor: default; }
+  .pick .res { flex: 1 1 100%; color: var(--ivory-dim); }
+  .pick .res.ok { color: var(--sage); } .pick .res.no { color: var(--coral); }
   .setup.stale .need b { color: var(--ivory-dim); }
   .setup .meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--ivory-dim); }
   .fill { padding: 12px 16px 12px 14px; border-left: 4px solid var(--line-2); }
@@ -459,8 +464,35 @@ function hotCard(h) {
     ${where}
     ${h.chips && h.chips.length ? `<div class="labels">${h.chips.map(x => `<span class="${/trusted|KOL|holders \+|Stonk/i.test(x) ? "hot" : ""}">${esc(x)}</span>`).join("")}</div>` : ""}
     ${h.setup ? marketGrid(m, `<div><span>market cap</span>${big(m.mcap)}</div>`) : ""}
+    ${pickRow(h)}
   </div>`;
 }
+
+// The Buy button. Your tap replaces the entry pattern; the bot still runs every safety check and guardrail.
+const picks = {};   // mint -> { state: "checking" | "ok" | "no", text }, kept across the 30s refresh
+function pickRow(h) {
+  const p = picks[h.mint];
+  const res = p ? `<span class="res ${p.state === "ok" ? "ok" : p.state === "no" ? "no" : ""}">${esc(p.text)}</span>` : "";
+  if (p && p.state === "ok") return `<div class="pick">${res}</div>`;
+  return `<div class="pick"><button class="buy" data-mint="${esc(h.mint)}" data-sym="${esc(h.symbol)}" ${p && p.state === "checking" ? "disabled" : ""}>${p && p.state === "checking" ? "Checking…" : "Buy"}</button><span>paper $4 · the bot runs every safety check first</span>${res}</div>`;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest && e.target.closest(".pick .buy");
+  if (!b || b.disabled) return;
+  const mint = b.dataset.mint, sym = b.dataset.sym;
+  if (!confirm(`Paper buy $4 of ${sym}? The bot runs every safety check first and only buys if it passes.`)) return;
+  picks[mint] = { state: "checking", text: "Running the safety checks, up to 20 seconds…" };
+  if (S) render(S);
+  let r;
+  try {
+    if (location.search.includes("demo")) { await new Promise(x => setTimeout(x, 900)); r = sym === "GRUG" ? { ok: false, why: "rejected: bot volume: 61% of the last 220 buys were under $1" } : { ok: true, price: 0.000655, stop: 0.00052 }; }
+    else r = await (await fetch("/api/pick", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mint }) })).json();
+  } catch (err) { r = { ok: false, why: "the dashboard couldn't reach the bot" }; }
+  picks[mint] = r.ok
+    ? { state: "ok", text: `Bought at ${px(r.price)}, stop ${px(r.stop)}. It's in Open positions as "pick".` }
+    : { state: "no", text: `Didn't buy: ${r.why || r.error || "unknown"}` };
+  if (r.ok && !location.search.includes("demo")) load(); else if (S) render(S);
+});
 
 function hotRows(looks, open, hot) {
   if (hot) {

@@ -97,6 +97,7 @@ export const config = {
     trusted: 0.10,
     dip: 0.20,
     ride: 0.15,
+    pick: 0.10,
   },
 
   minExitLiquidityUsd: <Record<Mode, number>>{
@@ -106,6 +107,7 @@ export const config = {
     trusted: 8_000,
     dip: 20_000,
     ride: 50_000,
+    pick: 10_000,
   },
 
   modes: {
@@ -184,6 +186,13 @@ export const config = {
       maxSleeveTradesPerDay: 6, reenterAfterWinMs: 30 * 60_000, reenterAfterLossMs: 2 * 3_600_000,
       /** Drop the leader when 1h volume falls under this fraction of its average, or it prints a 1h lower low. */
       fadeVolX: 0.3,
+    },
+    /** Nat's picks: the Buy button on Watching. No entry pattern needed; every safety check and guardrail still runs. */
+    pick: {
+      maxOpen: 3,
+      sizeUsd: 4,
+      minLiquidity: 10_000, minHolders: 100,
+      backstopMs: 24 * 3_600_000,
     },
     trusted: {
       /** How often pushed webhook events are processed. */

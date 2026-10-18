@@ -16,7 +16,7 @@ import { isStonkListed } from "./data/stonkfun.js";
  *   GET  /api/lab                    latest lab report (entry replay experiments) and run status
  *   POST /api/lab {action:"run"}     start a lab run now
  */
-export function startServer(getMarks: () => Map<string, number>, getHealth: () => { feedDownS: number; dexStaleS: number }) {
+export function startServer(getMarks: () => Map<string, number>, getHealth: () => { feedDownS: number; dexStaleS: number }, buy?: (mint: string) => Promise<unknown>) {
   const token = process.env.DASHBOARD_TOKEN ?? "";
   const port = Number(process.env.DASHBOARD_PORT ?? 8787);
   if (!token) { log.warn("DASHBOARD_TOKEN not set, dashboard API disabled"); return; }
@@ -44,6 +44,20 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
       req.on("end", () => {
         try { const arr = JSON.parse(body || "[]"); let n = 0; for (const tx of Array.isArray(arr) ? arr : [arr]) n += ingest(tx); res.end(JSON.stringify({ ok: true, n })); }
         catch (e) { res.statusCode = 400; res.end(JSON.stringify({ error: String(e) })); }
+      });
+      return;
+    }
+    // The Buy button on Watching: full safety gate and guardrails, then a paper buy (strategies/pick.ts).
+    if (req.method === "POST" && req.url === "/api/pick") {
+      let body = "";
+      req.on("data", c => body += c);
+      req.on("end", async () => {
+        try {
+          if (!buy) { res.statusCode = 503; res.end('{"ok":false,"why":"picks aren\'t wired up"}'); return; }
+          const { mint } = JSON.parse(body || "{}");
+          log.info({ mint }, "pick requested from dashboard");
+          res.end(JSON.stringify(await buy(String(mint ?? ""))));
+        } catch (e) { res.statusCode = 500; res.end(JSON.stringify({ ok: false, why: `check failed: ${String(e).replace(/^Error:\s*/, "").slice(0, 80)}` })); }
       });
       return;
     }
