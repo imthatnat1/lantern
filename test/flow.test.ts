@@ -71,7 +71,7 @@ test("micro-trade bots are caught from the snapshot alone (18 Oct hot list)", ()
 test("fake valuations are caught from the snapshot (USDF, 18 Oct)", async () => {
   const { fakeValuation } = await import("../src/data/flow.js");
   const NOW = Date.now(), H = 3_600_000;
-  const c = (mcap: number, liq: number, ageH: number, b5 = 100, s5 = 100, onCurve = false) => fakeValuation({ mcapUsd: mcap, liquidityUsd: liq, createdAt: NOW - ageH * H, onCurve, buys5m: b5, sells5m: s5 }, NOW);
+  const c = (mcap: number, liq: number, ageH: number, b5 = 100, s5 = 100, onCurve = false) => fakeValuation({ mcapUsd: mcap, liquidityUsd: liq, createdAt: NOW - ageH * H, onCurve, buys5m: b5, sells5m: s5, volume24h: mcap * 5 }, NOW);
   assert.match(c(171_291_005, 1_116_375, 0.24, 2381, 218)!, /\$171M market cap at 14 minutes old/);
   assert.match(c(30e6, 400_000, 5)!, /75x the pool/, "older than 2h but 75x its pool");
   assert.match(c(800_000, 60_000, 3, 2381, 218)!, /bot buys: 2381 buys to 218 sells/);
@@ -83,4 +83,16 @@ test("fake valuations are caught from the snapshot (USDF, 18 Oct)", async () => 
   assert.equal(c(79_943_450, 2_195_097, 1779, 3, 0), null);       // STONK 36x
   assert.equal(c(120e6, 1e6, 2000), null, "old big coins are judged by other rules");
   assert.equal(c(900, 0, 0.1, 10, 0, true), null);
+});
+
+test("a valuation nobody traded to is fake (Glow, 18 Oct)", async () => {
+  const { fakeValuation } = await import("../src/data/flow.js");
+  const NOW = Date.now(), H = 3_600_000;
+  const c = (mcap: number, liq: number, ageH: number, vol24: number) => fakeValuation({ mcapUsd: mcap, liquidityUsd: liq, createdAt: NOW - ageH * H, onCurve: false, buys5m: 10, sells5m: 10, volume24h: vol24 }, NOW);
+  assert.match(c(6_892_542, 222_285, 0.25, 102_055)!, /only \$102k ever traded/);   // Glow, 31x pool so the pool rule missed it
+  assert.equal(c(368_392, 59_715, 6, 4_616_492), null);       // TSI
+  assert.equal(c(704_065, 78_960, 5.25, 2_226_149), null);    // SUPERCORE
+  assert.equal(c(167_137, 35_507, 20.5, 738_285), null);      // ZeroFee
+  assert.equal(c(2_838_666, 170_802, 37.7, 3_661_477), null); // ELON, older than a day
+  assert.equal(c(900_000, 80_000, 2, 50_000), null, "under $1M: other rules judge it");
 });
