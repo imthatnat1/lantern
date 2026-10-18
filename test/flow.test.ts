@@ -44,3 +44,11 @@ test("organic flow passes: spread wallets, real sizes, balanced dollars", () => 
   ];
   assert.equal(flowVerdict(flowFromTrades(trades)), null);
 });
+
+test("Minter is on the block list, and a coin caught with bot buys is blocked for a day", async () => {
+  const { blockedWhy, blockMint } = await import("../src/data/flow.js");
+  assert.match(blockedWhy("3NxfWMHmfQg8NJFW5AG1ti2xACdczWz24e9SKyk1pump")!, /block list/);
+  assert.equal(blockedWhy("FRESHxxxx"), null);
+  blockMint("FRESHxxxx", "bot buys: 2.3 buys per sell");
+  assert.match(blockedWhy("FRESHxxxx")!, /blocked for 24h: bot buys/);
+});

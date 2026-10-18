@@ -19,6 +19,8 @@ import type { Mode } from "../types.js";
 
 export interface ExperimentResult {
   name: string; why?: string; modes: Mode[];
+  /** Tests a safety-gate rule; those need recorded gate results, which start 18 Oct. */
+  gate?: boolean;
   result: Partial<Record<Mode, ModeSummary>>;
   baseline: Partial<Record<Mode, ModeSummary>>;
   totals: { trades: number; wins: number; pnl: number; baseTrades: number; baseWins: number; basePnl: number };
@@ -35,6 +37,8 @@ export interface LiveCheck {
   /** Live trades the replay also took (same coin and mode, within 30 minutes). */
   matched: number; liveTrades: number;
   missedByReplay: { mode: Mode; symbol: string; at: number; pnl: number | null }[];
+  /** Replay trades the real bot didn't take, with what the real bot logged about that coin at the time. */
+  extraByReplay: { mode: Mode; symbol: string; at: number; pnl: number; liveSaid: string }[];
   /** Baseline split by whether the entry saw real candles or ones rebuilt from ticks. */
   byCandles: { real: { trades: number; wins: number; pnl: number }; rebuilt: { trades: number; wins: number; pnl: number } };
 }
@@ -74,9 +78,15 @@ export function liveCheck(from: number, to: number, base: LabTrade[]): LiveCheck
     if (base.some(t => t.mode === r.mode && t.mint === r.mint && Math.abs(t.at - r.entry_at) <= 30 * 60_000)) matched++;
     else missed.push({ mode: r.mode, symbol: r.symbol, at: r.entry_at, pnl: r.status === "closed" ? r.realized_usd : null });
   }
+  const said = db.prepare("SELECT reason FROM signals_log WHERE mint=? AND mode=? AND at BETWEEN ? AND ? ORDER BY ABS(at - ?) LIMIT 1");
+  const extra = base.filter(t => !rows.some(r => r.mode === t.mode && r.mint === t.mint && Math.abs(t.at - r.entry_at) <= 30 * 60_000))
+    .map(t => {
+      const r = said.get(t.mint, t.mode, t.at - 30 * 60_000, t.at + 30 * 60_000, t.at) as { reason: string } | undefined;
+      return { mode: t.mode, symbol: t.symbol, at: t.at, pnl: t.pnl, liveSaid: r?.reason ?? "didn't check this coin then" };
+    }).sort((a, b) => a.pnl - b.pnl).slice(0, 15);
   const split = (f: (t: LabTrade) => boolean) => base.filter(f).reduce((a, t) => ({ trades: a.trades + 1, wins: a.wins + (t.pnl > 0 ? 1 : 0), pnl: a.pnl + t.pnl }), { trades: 0, wins: 0, pnl: 0 });
   return {
-    dataFrom: firstTick, live, matched, liveTrades: rows.length, missedByReplay: missed.slice(-10),
+    dataFrom: firstTick, live, matched, liveTrades: rows.length, missedByReplay: missed.slice(-10), extraByReplay: extra,
     byCandles: { real: split(t => t.candles === "real"), rebuilt: split(t => t.candles !== "real") },
   };
 }
@@ -97,7 +107,7 @@ export function runLab(hours: number, experiments: Experiment[], now = Date.now(
       const baseKeys = new Set(baseT.map(key)), expKeys = new Set(r.trades.map(key));
       const a = tot(summary, modes), b = tot(baseSummary, modes);
       out.push({
-        name: exp.name, why: exp.why, modes, result: summary, baseline: Object.fromEntries(modes.map(m => [m, baseSummary[m]]).filter(([, v]) => v)),
+        name: exp.name, why: exp.why, modes, gate: !!exp.gate, result: summary, baseline: Object.fromEntries(modes.map(m => [m, baseSummary[m]]).filter(([, v]) => v)),
         totals: { trades: a.trades, wins: a.wins, pnl: a.pnl, baseTrades: b.trades, baseWins: b.wins, basePnl: b.pnl },
         added: r.trades.filter(t => !baseKeys.has(key(t))).sort((x, y) => y.pnl - x.pnl).slice(0, 15),
         dropped: baseT.filter(t => !expKeys.has(key(t))).sort((x, y) => y.pnl - x.pnl).slice(0, 15),

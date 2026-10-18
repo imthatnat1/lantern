@@ -41,6 +41,11 @@ export const config = {
   trustedWallets: [...new Set([...DEFAULT_TRUSTED.map(w => w.address), ...env("TRUSTED_WALLETS").split(",").map(s => s.trim()).filter(Boolean)])],
   walletName: (address: string) => DEFAULT_TRUSTED.find(w => w.address === address)?.name ?? address.slice(0, 4) + "…" + address.slice(-4),
   /** Mints Nat likes. Always in scope for dip and ultra, exempt from the copycat filter. */
+  /** Never trade or watch these. BLOCKED_MINTS in .env adds more. */
+  blocked: [
+    "3NxfWMHmfQg8NJFW5AG1ti2xACdczWz24e9SKyk1pump", // Minter: cent-sized bot buys, 2.3 buys per sell while price fell 25% (18 Oct)
+    ...env("BLOCKED_MINTS").split(",").map(s => s.trim()).filter(Boolean),
+  ],
   pinned: [...DEFAULT_PINNED, ...env("PINNED_MINTS").split(",").map(s => s.trim()).filter(Boolean)],
   startingCapital: num("STARTING_CAPITAL", 300),
   dbPath: env("DB_PATH", "./data/lantern.db"),

@@ -128,15 +128,42 @@
   .control .stop { border-color: var(--coral); color: var(--coral); }
   .control .resume { border-color: var(--sage); color: var(--sage); }
   .control .what { font-size: 13px; color: var(--ivory-faint); flex: 1 1 100%; }
-  .lab .head { grid-template-columns: 1fr auto; }
-  .lab .vs { font-size: 13px; color: var(--ivory-dim); margin-top: 4px; }
-  .lab .diff { font-size: 13px; margin-top: 10px; }
-  .lab .diff div { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
-  .lab .diff div:last-child { border-bottom: 0; }
-  .lab .diff i { font-style: normal; color: var(--ivory-faint); width: 14px; display: inline-block; }
-  .lab .thin { font-size: 12px; color: var(--gold); margin-top: 8px; }
-  .labbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--ivory-dim); margin: 4px 0 6px; }
+  .lab-intro { font-size: 15px; color: var(--ivory-dim); margin: 0 0 14px; }
+  .trust { border-radius: 14px; padding: 16px; margin: 0 0 8px; background: var(--night-2); border: 1px solid var(--line); border-left: 4px solid var(--gold); }
+  .trust.ok { border-left-color: var(--sage); }
+  .trust .q { font-size: 13px; color: var(--ivory-dim); }
+  .trust .a { font-family: var(--serif); font-size: 28px; font-weight: 500; line-height: 1.15; margin: 2px 0 6px; color: var(--gold); }
+  .trust.ok .a { color: var(--sage); }
+  .trust p { margin: 0; font-size: 15px; line-height: 1.45; }
+  .trust details { border: 0; margin-top: 8px; }
+  .trust summary { padding: 8px 0; font-size: 14px; }
+  .said { padding: 9px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .said .top { display: flex; justify-content: space-between; gap: 10px; }
+  .said .why { color: var(--ivory-dim); font-size: 13px; margin-top: 2px; }
+  .mini { width: 100%; font-size: 14px; margin: 6px 0 4px; }
+  .mini td, .mini th { padding: 6px 0; }
+  .labbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--ivory-faint); margin: 10px 0 2px; }
   .labbar button { font-size: 13px; padding: 4px 12px; }
+  .test { border-bottom: 1px solid var(--line); }
+  .test summary { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: start; padding: 14px 0; color: var(--ivory); }
+  .test summary::after, .test[open] summary::after { content: none; }
+  .nw { white-space: nowrap; }
+  .chg .said { display: block; }
+  .chg .said .top, .chg .said .why { border-top: 0; padding: 0; }
+  .test .name { font-size: 16px; font-weight: 500; line-height: 1.3; }
+  .test .line { grid-column: 1 / -1; font-size: 14px; color: var(--ivory-dim); line-height: 1.4; }
+  .chip { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; white-space: nowrap; letter-spacing: .02em; }
+  .chip.helps { background: var(--sage); color: var(--night); }
+  .chip.hurts { background: var(--coral); color: var(--night); }
+  .chip.early { border: 1px solid var(--gold); color: var(--gold); }
+  .chip.same, .chip.wait { border: 1px solid var(--line-2); color: var(--ivory-dim); font-weight: 500; }
+  .test .body { padding: 0 0 16px; font-size: 14px; }
+  .test .body .why { color: var(--ivory-dim); margin: 0 0 10px; }
+  .cmp { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px 14px; font-size: 14px; }
+  .cmp b { font-weight: 500; } .cmp .h { color: var(--ivory-faint); font-size: 12px; }
+  .chg { margin-top: 12px; }
+  .chg div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px dashed var(--line); }
+  .chg .k { font-size: 12px; color: var(--ivory-faint); margin: 10px 0 0; }
   .foot { margin-top: 28px; font-size: 13px; color: var(--ivory-faint); display: flex; justify-content: space-between; }
 
   /* login */
@@ -195,9 +222,9 @@
 <div id="modes"></div>
 
 <h2>Lab <small id="labMeta"></small></h2>
-<p class="dim" style="font-size:13px;margin:0 0 6px">Each test replays the recorded market with one rule changed, through the same entry and exit code the bot runs, and compares it with the live rules over the same coins. Nothing here changes how the bot trades. Small samples lie: under 10 trades, treat it as a hint.</p>
-<div class="labbar"><span id="labStatus"></span><button id="labRun">Run now</button></div>
-<div id="labBase"></div>
+<p class="lab-intro">What if we changed one rule? The lab replays the market with the change and compares. It never changes how the bot trades.</p>
+<div id="labTrust"></div>
+<div class="labbar"><span id="labStatus"></span><button id="labRun">Run again</button></div>
 <div id="lab"></div>
 
 <h2>Runners we missed <small id="missedCount"></small></h2>
@@ -538,46 +565,71 @@ function render(s) {
 }
 
 const MODE_ORDER = ["trusted", "ride", "dip", "pullback", "bounce", "ultra"];
-function labTradeLine(t, sign) {
-  return `<div><span><i>${sign}</i>${esc(t.symbol)} <span class="faint">${esc(t.mode)}${t.leg ? " " + esc(t.leg) : ""} · ${esc(t.exit)}</span></span><span class="${t.pnl >= 0 ? "up" : "down"}">${usd(t.pnl, true)}</span></div>`;
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+/** One verdict per test, in plain words. */
+function verdictOf(e) {
+  const t = e.totals, d = t.pnl - t.basePnl;
+  const same = !e.added.length && !e.dropped.length && Math.abs(d) < 0.005;
+  if (e.error) return { k: "same", chip: "Didn't run", line: "This test failed to run: " + esc(e.error) };
+  if (same && e.gate) return { k: "wait", chip: "Waiting for data", line: "Needs a few days of the safety check's records. They started this morning." };
+  if (same) return { k: "same", chip: "No difference", line: `Same ${plural(t.trades, "trade")}, same result. This rule didn't come into play.` };
+  const n = Math.max(t.trades, t.baseTrades);
+  const how = `${d >= 0 ? "Would have made" : "Would have lost"} <span class="nw">${usd(Math.abs(d))} more</span>: <span class="nw">${usd(t.pnl, true)}</span> instead of <span class="nw">${usd(t.basePnl, true)}</span>`;
+  if (n < 10) return { k: "early", chip: "Too early", line: `${how}, but on only ${plural(n, "trade")}. Could be luck.` };
+  return d >= 0 ? { k: "helps", chip: "Helps", line: `${how}, over ${plural(n, "trade")}.` } : { k: "hurts", chip: "Hurts", line: `${how}, over ${plural(n, "trade")}.` };
 }
+const ORDER = { helps: 0, early: 1, hurts: 2, same: 3, wait: 4 };
+
+function tradeLine(t, sign) {
+  return `<div><span>${sign} ${esc(t.symbol)} <span class="faint">${esc(t.mode)}${t.leg ? " " + esc(t.leg) : ""}</span></span><span class="${t.pnl >= 0 ? "up" : "down"}">${usd(t.pnl, true)}</span></div>`;
+}
+
 function renderLab(L) {
   const st = L.status || {}, rep = L.report;
-  $("labStatus").textContent = st.running ? "Running now, takes a minute or two." : st.lastError ? "Last run failed: " + st.lastError.slice(0, 90) : rep ? `Last run ${ago(Date.now() - rep.ranAt)} ago, ${rep.coins} coins, ${rep.hours}h of history.` : "No run yet. The first one starts 10 minutes after the bot updates.";
+  $("labStatus").textContent = st.running ? "Running now. Takes a minute or two." : st.lastError ? "Last run failed: " + st.lastError.slice(0, 90) : rep ? `Updated ${ago(Date.now() - rep.ranAt)} ago` : "First run starts 10 minutes after the bot updates.";
   $("labRun").disabled = !!st.running;
-  if (!rep) { $("labBase").innerHTML = ""; $("lab").innerHTML = ""; $("labMeta").textContent = ""; return; }
-  $("labMeta").textContent = `${rep.experiments.length} tests`;
-  const b = rep.baseline.summary || {};
-  const modes = MODE_ORDER.filter(m => b[m]);
-  const tot = modes.reduce((a, m) => ({ n: a.n + b[m].trades, w: a.w + b[m].wins, p: a.p + b[m].pnl, r: a.r + b[m].realCandleShare * b[m].trades }), { n: 0, w: 0, p: 0, r: 0 });
-  const c = rep.check;
-  const lv = (c && c.live) || {};
-  const allModes = MODE_ORDER.filter(m => b[m] || lv[m]);
-  const hrs = c ? Math.max(1, Math.round((rep.to - c.dataFrom) / 3600e3)) : rep.hours;
-  const liveTot = Object.values(lv).reduce((a, x) => ({ n: a.n + x.trades, p: a.p + x.pnl, o: a.o + x.open }), { n: 0, p: 0, o: 0 });
-  const trust = !c || !c.liveTrades ? "" : c.matched / c.liveTrades >= 0.7 && Math.abs(tot.n - c.liveTrades) <= Math.max(3, c.liveTrades * 0.5)
-    ? `<p class="note up">The replay reproduced ${c.matched} of the bot's ${c.liveTrades} real trades. Close enough to read the tests.</p>`
-    : `<p class="note" style="color:var(--gold)">The replay reproduced ${c.matched} of the bot's ${c.liveTrades} real trades and took ${tot.n} itself. Too far apart to trust the tests yet.</p>`;
-  const bc = c && c.byCandles;
-  $("labBase").innerHTML = `<div class="card lab"><div class="head"><div class="sym">Live rules, replayed <small class="dim">baseline</small></div><div class="gain ${tot.p >= 0 ? "up" : "down"}">${usd(tot.p, true)}<small>${tot.n} trades · ${tot.n ? Math.round(tot.w / tot.n * 100) : 0}% won</small></div></div>
-    <p class="note">Recorded data covers the last ${hrs}h.</p>
-    ${allModes.length ? `<table style="margin-top:6px"><tr><th>Mode</th><th>Replay</th><th>P&amp;L</th><th>Real bot</th><th>P&amp;L</th></tr>${allModes.map(m => { const r = b[m] || { trades: 0, pnl: 0 }, l = lv[m] || { trades: 0, pnl: 0, open: 0 }; return `<tr><td>${m}</td><td>${r.trades}</td><td class="${r.pnl >= 0 ? "up" : "down"}">${usd(r.pnl, true)}</td><td>${l.trades}${l.open ? `<span class="faint" style="font-size:12px"> (${l.open} open)</span>` : ""}</td><td class="${l.pnl >= 0 ? "up" : "down"}">${usd(l.pnl, true)}</td></tr>`; }).join("")}</table>` : `<p class="note">No trades in the window yet.</p>`}
-    ${trust}
-    ${bc ? `<p class="note">Entries on real candles: ${bc.real.trades}, ${usd(bc.real.pnl, true)}. On candles rebuilt from price ticks: ${bc.rebuilt.trades}, ${usd(bc.rebuilt.pnl, true)}. Rebuilt candles are rough, so trust the first number more.</p>` : ""}
-    ${c && c.missedByReplay.length ? `<details><summary>Real trades the replay didn't take</summary><div class="diff">${c.missedByReplay.map(x => `<div><span>${esc(x.symbol)} <span class="faint">${esc(x.mode)}</span></span><span class="${(x.pnl ?? 0) >= 0 ? "up" : "down"}">${x.pnl == null ? "open" : usd(x.pnl, true)}</span></div>`).join("")}</div></details>` : ""}
-    </div>`;
-  $("lab").innerHTML = rep.experiments.map(e => {
-    const t = e.totals, d = t.pnl - t.basePnl;
-    const same = !e.added.length && !e.dropped.length && Math.abs(d) < 0.005;
-    const thin = t.trades + t.baseTrades < 10;
-    return `<div class="card lab"><div class="head"><div class="sym">${esc(e.name)}</div><div class="gain ${same ? "dim" : d >= 0 ? "up" : "down"}">${same ? "no change" : usd(d, true)}<small>vs live</small></div></div>
-      ${e.why ? `<p class="note">${esc(e.why)}</p>` : ""}
-      ${e.error ? `<p class="note down">Failed: ${esc(e.error)}</p>` : `
-      <div class="grid"><div><span>Trades</span>${t.trades} <span class="faint" style="display:inline;font-size:12px;text-transform:none">vs ${t.baseTrades}</span></div><div><span>Won</span>${t.trades ? Math.round(t.wins / t.trades * 100) : 0}% <span class="faint" style="display:inline;font-size:12px;text-transform:none">vs ${t.baseTrades ? Math.round(t.baseWins / t.baseTrades * 100) : 0}%</span></div><div class="wide"><span>P&amp;L</span><b class="${t.pnl >= 0 ? "up" : "down"}" style="font-weight:500">${usd(t.pnl, true)}</b> <span class="faint" style="display:inline;font-size:12px;text-transform:none">vs ${usd(t.basePnl, true)}</span></div></div>
-      <div class="vs">${esc(e.modes.join(", "))}</div>
-      ${thin && !same ? `<div class="thin">Only ${t.trades + t.baseTrades} trades between them. Too few to call.</div>` : ""}
-      ${e.added.length || e.dropped.length ? `<details><summary>What changed</summary><div class="diff">${e.added.map(x => labTradeLine(x, "+")).join("")}${e.dropped.map(x => labTradeLine(x, "−")).join("")}</div></details>` : ""}`}
-    </div>`;
+  if (!rep) { $("labTrust").innerHTML = ""; $("lab").innerHTML = ""; $("labMeta").textContent = ""; return; }
+  $("labMeta").textContent = plural(rep.experiments.length, "test");
+
+  // 1. Can we trust it? The replay of today's rules should copy what the real bot did.
+  const b = rep.baseline.summary || {}, c = rep.check;
+  const replayN = Object.values(b).reduce((a, x) => a + x.trades, 0);
+  let trust;
+  if (!c) trust = `<div class="trust"><div class="q">Can we trust these results?</div><div class="a">Checking…</div><p>Run it again once the bot has updated.</p></div>`;
+  else if (!c.liveTrades) trust = `<div class="trust"><div class="q">Can we trust these results?</div><div class="a">Not yet</div><p>Your bot hasn't traded in the recorded window, so there's nothing to check the replay against.</p></div>`;
+  else {
+    const extra = replayN - c.matched;
+    const good = c.matched / c.liveTrades >= 0.7 && extra <= Math.max(3, c.liveTrades);
+    const lv = c.live || {};
+    const byMode = MODE_ORDER.filter(m => b[m] || lv[m]);
+    const worst = byMode.map(m => ({ m, gap: (b[m]?.trades || 0) - (lv[m]?.trades || 0) })).sort((x, y) => y.gap - x.gap)[0];
+    const hrs = Math.max(1, Math.round((rep.to - c.dataFrom) / 3600e3));
+    trust = `<div class="trust ${good ? "ok" : ""}"><div class="q">Can we trust these results?</div><div class="a">${good ? "Yes" : "Not yet"}</div>
+      <p>To check, the lab replays the bot's current rules. In the last ${hrs}h it copied <b>${c.matched} of your bot's ${c.liveTrades}</b> real trades${extra > 0 ? `, but also took <b>${extra}</b> your bot didn't${worst && worst.gap > 2 ? `, mostly in ${worst.m} (${b[worst.m].trades} vs ${lv[worst.m]?.trades || 0})` : ""}` : ""}.</p>
+      <details><summary>See the difference</summary>
+        <table class="mini"><tr><th>Mode</th><th>Lab</th><th>Your bot</th></tr>${byMode.map(m => `<tr><td>${m}</td><td>${b[m]?.trades || 0} <span class="${(b[m]?.pnl || 0) >= 0 ? "up" : "down"}" style="font-size:12px">${usd(b[m]?.pnl || 0, true)}</span></td><td>${lv[m]?.trades || 0} <span class="${(lv[m]?.pnl || 0) >= 0 ? "up" : "down"}" style="font-size:12px">${usd(lv[m]?.pnl || 0, true)}</span></td></tr>`).join("")}</table>
+        ${(c.extraByReplay || []).length ? `<div class="chg"><div class="k" style="border:0">Trades the lab took that your bot didn't, and what your bot said at the time</div>${c.extraByReplay.map(x => `<div class="said"><div class="top"><span>${esc(x.symbol)} <span class="faint">${esc(x.mode)}</span></span><span class="nw ${x.pnl >= 0 ? "up" : "down"}">${usd(x.pnl, true)}</span></div><div class="why">Your bot: ${esc(x.liveSaid)}</div></div>`).join("")}</div>` : ""}
+        ${(c.missedByReplay || []).length ? `<div class="chg"><div class="k" style="border:0">Real trades the lab missed</div>${c.missedByReplay.map(x => `<div><span>${esc(x.symbol)} <span class="faint">${esc(x.mode)}</span></span><span class="${(x.pnl ?? 0) >= 0 ? "up" : "down"}">${x.pnl == null ? "still open" : usd(x.pnl, true)}</span></div>`).join("")}</div>` : ""}
+        ${c.byCandles ? `<p class="faint" style="font-size:13px;margin-top:10px">Some old prices had to be rebuilt from rough data. Trades on good data: ${c.byCandles.real.trades} (${usd(c.byCandles.real.pnl, true)}). On rebuilt data: ${c.byCandles.rebuilt.trades} (${usd(c.byCandles.rebuilt.pnl, true)}).</p>` : ""}
+      </details></div>`;
+  }
+  $("labTrust").innerHTML = trust;
+
+  // 2. The tests, best news first. Tap one for the detail.
+  const rows = rep.experiments.map(e => ({ e, v: verdictOf(e) })).sort((x, y) => ORDER[x.v.k] - ORDER[y.v.k]);
+  $("lab").innerHTML = rows.map(({ e, v }) => {
+    const t = e.totals;
+    return `<details class="test"><summary><span class="name">${esc(e.name)}</span><span class="chip ${v.k}">${v.chip}</span><span class="line">${v.line}</span></summary>
+      <div class="body">
+        ${e.why ? `<p class="why">${esc(e.why)}</p>` : ""}
+        <div class="cmp"><span></span><span class="h">With the change</span><span class="h">Rules today</span>
+          <span class="h">Trades</span><b>${t.trades}</b><b>${t.baseTrades}</b>
+          <span class="h">Won</span><b>${t.trades ? Math.round(t.wins / t.trades * 100) : 0}%</b><b>${t.baseTrades ? Math.round(t.baseWins / t.baseTrades * 100) : 0}%</b>
+          <span class="h">Profit</span><b class="${t.pnl >= 0 ? "up" : "down"}">${usd(t.pnl, true)}</b><b class="${t.basePnl >= 0 ? "up" : "down"}">${usd(t.basePnl, true)}</b></div>
+        ${e.added.length ? `<div class="chg"><div class="k">Extra trades with the change</div>${e.added.map(x => tradeLine(x, "+")).join("")}</div>` : ""}
+        ${e.dropped.length ? `<div class="chg"><div class="k">Trades the change would have skipped</div>${e.dropped.map(x => tradeLine(x, "−")).join("")}</div>` : ""}
+      </div></details>`;
   }).join("");
 }
 
@@ -596,16 +648,23 @@ $("labRun").onclick = async () => {
 
 function demoLab() {
   const now = Date.now();
-  const tr = (symbol, mode, pnl, exit, leg) => ({ symbol, mode, pnl, exit, leg, pct: pnl / 4, at: now - 3e6 });
-  return { status: { running: false, lastRunAt: now - 2 * 3600e3 }, report: { ranAt: now - 2 * 3600e3, to: now - 2 * 3600e3, hours: 72, coins: 412,
-    check: { dataFrom: now - 20 * 3600e3, liveTrades: 4, matched: 1, live: { ride: { trades: 3, wins: 1, pnl: -2.29, open: 2 }, trusted: { trades: 1, wins: 1, pnl: 0.83, open: 1 } },
-      byCandles: { real: { trades: 8, wins: 4, pnl: 2.1 }, rebuilt: { trades: 13, wins: 4, pnl: -3.5 } }, missedByReplay: [{ mode: "ride", symbol: "YILONGMA", pnl: null }, { mode: "trusted", symbol: "Chillbaby", pnl: 0.83 }] },
-    baseline: { summary: {
-      trusted: { trades: 6, wins: 4, pnl: 3.1, realCandleShare: 0.4 }, ride: { trades: 14, wins: 7, pnl: 2.2, realCandleShare: 0.9 }, dip: { trades: 9, wins: 4, pnl: -1.4, realCandleShare: 0.8 }, pullback: { trades: 3, wins: 1, pnl: 0.6, realCandleShare: 0.7 } } },
+  const tr = (symbol, mode, pnl, leg) => ({ symbol, mode, pnl, leg, at: now - 3e6 });
+  const T = (trades, wins, pnl, baseTrades, baseWins, basePnl) => ({ trades, wins, pnl, baseTrades, baseWins, basePnl });
+  return { status: { running: false, lastRunAt: now - 10 * 60e3 }, report: { ranAt: now - 10 * 60e3, to: now - 10 * 60e3, hours: 72, coins: 728,
+    check: { dataFrom: now - 16 * 3600e3, liveTrades: 6, matched: 4,
+      live: { trusted: { trades: 2, wins: 1, pnl: 0.39, open: 1 }, ride: { trades: 3, wins: 1, pnl: -1.35, open: 1 }, pullback: { trades: 1, wins: 0, pnl: -1.96, open: 0 } },
+      byCandles: { real: { trades: 10, wins: 3, pnl: -6.75 }, rebuilt: { trades: 16, wins: 5, pnl: -4.81 } },
+      missedByReplay: [{ mode: "pullback", symbol: "KURP", pnl: -1.96 }],
+      extraByReplay: [{ mode: "dip", symbol: "PURR", pnl: -2.1, liveSaid: "score 51 below 55" }, { mode: "dip", symbol: "NEARKAT", pnl: -1.6, liveSaid: "dip found, waiting for a green 5m reclaim" }, { mode: "bounce", symbol: "GHOSTCAT", pnl: 0.4, liveSaid: "didn't check this coin then" }] },
+    baseline: { summary: { trusted: { trades: 2, wins: 1, pnl: -0.07 }, ride: { trades: 6, wins: 2, pnl: -1.87 }, dip: { trades: 11, wins: 2, pnl: -9.85 }, bounce: { trades: 7, wins: 3, pnl: 0.22 } } },
     experiments: [
-      { name: "Ride: tighter trails", why: "A ride core peaked at +62.6% and trailed back to breakeven.", modes: ["ride"], totals: { trades: 17, wins: 10, pnl: 4.9, baseTrades: 14, baseWins: 7, basePnl: 2.2 }, added: [tr("YILONGMA", "ride", 1.2, "trail 8% from peak close", "sleeve")], dropped: [tr("YILONGMA", "ride", -0.4, "close stop", "core")] },
-      { name: "Trusted: double size", why: "Wirelyss copies are winning at $2 to $4 a trade.", modes: ["trusted"], totals: { trades: 6, wins: 4, pnl: 6.2, baseTrades: 6, baseWins: 4, basePnl: 3.1 }, added: [], dropped: [] },
-      { name: "Fresh coins: allow top 10 up to 45%", why: "Only testable on data from 18 Oct on.", modes: ["pullback", "bounce", "dip", "ultra", "ride", "trusted"], totals: { trades: 32, wins: 16, pnl: 4.5, baseTrades: 32, baseWins: 16, basePnl: 4.5 }, added: [], dropped: [] },
+      { name: "Fresh coins: allow top 10 up to 45%", gate: true, why: "Coins under 2h old currently need top 10 under 35%.", modes: [], totals: T(26, 8, -11.57, 26, 8, -11.57), added: [], dropped: [] },
+      { name: "Ride: tighter trails", why: "A ride core peaked at +62.6% and trailed back to breakeven. Core trail 35% to 20%, sleeve 12% to 8%.", modes: ["ride"], totals: T(7, 3, -0.37, 6, 2, -1.87), added: [tr("YILONGMA", "ride", 0.6, "sleeve")], dropped: [tr("YILONGMA", "ride", -0.9, "core")] },
+      { name: "Ride: core trail starts at +15%", modes: ["ride"], totals: T(7, 3, -0.26, 6, 2, -1.87), added: [], dropped: [] },
+      { name: "Trusted: double size", modes: ["trusted"], totals: T(2, 1, 0.35, 2, 1, -0.07), added: [], dropped: [] },
+      { name: "Trusted: mcap ceiling $300k", modes: ["trusted"], totals: T(2, 1, -0.07, 2, 1, -0.07), added: [], dropped: [] },
+      { name: "Bounce: shallower dips from 25%", modes: ["bounce"], totals: T(8, 3, -0.69, 7, 3, 0.22), added: [tr("PEPO", "bounce", -0.8)], dropped: [] },
+      { name: "Dip: cap the loss at 15%", modes: ["dip"], totals: T(14, 1, -13.17, 11, 2, -9.85), added: [tr("ZCAT", "dip", -1.2)], dropped: [tr("ZCAT", "dip", 0.9)] },
     ] } };
 }
 

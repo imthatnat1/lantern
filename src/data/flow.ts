@@ -9,7 +9,8 @@
  *     and how many of the buys came from the same few wallets.
  */
 import { getJson } from "./http.js";
-import { db } from "../db.js";
+import { db, kv } from "../db.js";
+import { config } from "../config.js";
 
 export interface Trade { kind: "buy" | "sell"; usd: number; from: string; at: number }
 
@@ -77,6 +78,22 @@ db.exec(`CREATE TABLE IF NOT EXISTS flow_history (
 ) WITHOUT ROWID;`);
 const insFlow = db.prepare("INSERT OR IGNORE INTO flow_history(mint,at,micro,top3,buy_usd,sell_usd,buys,buyers,verdict) VALUES(?,?,?,?,?,?,?,?,?)");
 
+/**
+ * Coins caught with bot volume stay out for a day, so they don't sit on the Watching list waiting
+ * for a setup the buy check would refuse anyway. Permanent blocks come from config (Minter).
+ */
+const blocks = new Map<string, { until: number; why: string }>(kv.get<[string, { until: number; why: string }][]>("flow:blocks", []));
+export function blockMint(mint: string, why: string, hours = 24) {
+  blocks.set(mint, { until: Date.now() + hours * 3_600_000, why });
+  for (const [k, v] of blocks) if (v.until < Date.now()) blocks.delete(k);
+  kv.set("flow:blocks", [...blocks]);
+}
+export function blockedWhy(mint: string): string | null {
+  if (config.blocked.includes(mint)) return "blocked: bot-pumped volume (on the block list)";
+  const b = blocks.get(mint);
+  return b && b.until > Date.now() ? `blocked for ${Math.ceil((b.until - Date.now()) / 3_600_000)}h: ${b.why}` : null;
+}
+
 /** Recent trades on a pool from GeckoTerminal. Cached 2 minutes. Null when unavailable. */
 export async function flow(mint: string, pool: string): Promise<{ f: Flow; verdict: string | null } | null> {
   try {
@@ -89,6 +106,7 @@ export async function flow(mint: string, pool: string): Promise<{ f: Flow; verdi
     if (!trades.length) return null;
     const f = flowFromTrades(trades);
     const verdict = flowVerdict(f);
+    if (verdict) blockMint(mint, verdict);
     try { insFlow.run(mint, Date.now(), f.microBuyShare, f.top3BuyShare, f.buyUsd, f.sellUsd, f.buys, f.buyers, verdict); } catch { /* best effort */ }
     return { f, verdict };
   } catch {

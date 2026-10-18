@@ -8,7 +8,7 @@ import { isCopycat, isSlop } from "../engine/filters.js";
 import { cooldowns, audit, market, recorder, type Setup } from "../db.js";
 import { isCreativePair } from "../data/universe.js";
 import { buyersOf } from "../data/wallets.js";
-import { divergence, flow } from "../data/flow.js";
+import { blockedWhy, blockMint, divergence, flow } from "../data/flow.js";
 
 export interface Context {
   now: number;
@@ -53,6 +53,12 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   if (!pinned && (!s.mcapUsd || s.mcapUsd <= 0)) return { ok: false, why: "rejected: no market cap reported" };
   if (!s.onCurve && s.liquidityUsd <= 0) return { ok: false, why: "rejected: no liquidity reported" };
   if (cooldowns.active(mode, s.mint)) return { ok: false, why: "cooldown after a recent stop-out" };
+  if (!pinned) {
+    const b = blockedWhy(s.mint);
+    if (b) return { ok: false, why: `rejected: ${b}` };
+    const d = divergence(s);
+    if (d) { blockMint(s.mint, d); return { ok: false, why: `rejected: ${d}` }; }
+  }
   const safe = await rug.safety(s.mint, s.onCurve);
   if (!safe.ok) return { ok: false, why: `rejected: ${safe.reasons.join(", ")}` };
   const slop = pinned ? null : isSlop(s, safe.holders);
