@@ -130,7 +130,7 @@
   .control .stop { border-color: var(--coral); color: var(--coral); }
   .control .resume { border-color: var(--sage); color: var(--sage); }
   .control .what { font-size: 13px; color: var(--ivory-faint); flex: 1 1 100%; }
-  .activity { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin: 0 0 22px; }
+  .activity { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin: 0 0 12px; }
   .activity .lbl { font-size: 12px; color: var(--ivory-faint); letter-spacing: .04em; text-transform: uppercase; }
   .activity .nums { display: flex; gap: 18px; flex-wrap: wrap; margin: 4px 0 8px; font-size: 15px; color: var(--ivory-dim); }
   .activity .nums b { color: var(--ivory); font-size: 20px; font-weight: 500; margin-right: 4px; }
@@ -204,7 +204,6 @@
 
 <p class="verdict flat" id="verdict">Reading the book.</p>
 <p class="sub" id="sub"></p>
-<div class="activity" id="activity"></div>
 
 <div class="ranges" id="ranges"><button data-h="24" class="on">24h</button><button data-h="72">3d</button><button data-h="168">7d</button></div>
 <div class="chart" id="chart"><span class="range" id="chartRange"></span><svg viewBox="0 0 600 130" preserveAspectRatio="none" aria-label="Account value over time"></svg><div class="axis"><span id="ax0"></span><span id="ax1"></span></div></div>
@@ -243,6 +242,7 @@
 <div id="missed"></div>
 
 <h2>Looked at but didn't buy <small id="looksCount"></small></h2>
+<div class="activity" id="activity"></div>
 <p class="dim" style="font-size:13px;margin:0 0 6px">Coral stripe means the rug guard rejected it. The rest were clean but the setup never completed.</p>
 <details><summary>Show the list</summary><div id="looks"></div></details>
 
