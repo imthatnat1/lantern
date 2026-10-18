@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { log } from "./log.js";
-import { positions, cooldowns, kv, market, db, recorder } from "./db.js";
+import { positions, cooldowns, kv, market, db, recorder, hot } from "./db.js";
 import { startLab } from "./lab/scheduler.js";
 import { PumpPortal } from "./data/pumpportal.js";
 import * as dex from "./data/dexscreener.js";
@@ -188,6 +188,7 @@ async function main() {
   };
   tick();
   setInterval(heartbeat, 5 * 60_000);
+  setInterval(() => { try { hot.prune(); } catch { /* best effort */ } }, 3_600_000);
   setInterval(() => { try { recorder.prune(14); } catch (e) { log.warn({ err: String(e) }, "prune failed"); } }, 6 * 3_600_000);
   heartbeat();
 }
