@@ -11,6 +11,25 @@
       }
     },
     {
+      "name": "Launch: wider stop (35%)",
+      "why": "Launch buys the first leg of a fresh migration (19 Oct). First legs shake hard. Does a 35% stop keep more winners, or just lose more?",
+      "config": {
+        "launch": {
+          "stopPct": 0.35
+        }
+      }
+    },
+    {
+      "name": "Launch: smaller crowds (300+ holders, top 10 under 30%)",
+      "why": "Launch wants 500+ holders and top 10 under 25%. Are we too strict to catch them early?",
+      "config": {
+        "launch": {
+          "minHolders": 300,
+          "maxTop10": 30
+        }
+      }
+    },
+    {
       "name": "Fresh coins: allow top 10 up to 45%",
       "why": "Nat's question from 18 Oct. Coins under 2h old currently need top 10 under 35%. Only testable on data from 18 Oct on, when the gate's results started being recorded.",
       "gate": {

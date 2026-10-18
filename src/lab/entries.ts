@@ -19,6 +19,7 @@ import { pairScore } from "../strategies/base.js";
 import { isStonkPair } from "../data/universe.js";
 import { pullbackPattern, pullbackQualifies } from "../strategies/pullback.js";
 import { bounceFloor, bouncePattern } from "../strategies/bounce.js";
+import { cheapWhy as launchCheap, launchPattern } from "../strategies/launch.js";
 import { dipPattern, dipPlan } from "../strategies/dip.js";
 import { ultraPattern, ultraPlan, ultraWindow } from "../strategies/ultra.js";
 import { rideCorePlan, rideLeader, rideSleeve } from "../strategies/ride.js";
@@ -53,7 +54,7 @@ export interface LabTrade {
 
 export interface ModeSummary { trades: number; wins: number; pnl: number; best: number; worst: number; avgPct: number; realCandleShare: number }
 
-const ALL: Mode[] = ["pullback", "bounce", "dip", "ultra", "ride", "trusted"];
+const ALL: Mode[] = ["pullback", "bounce", "launch", "dip", "ultra", "ride", "trusted"];
 const STEP = 5 * 60_000;
 const SCAN_OFFSET = 2 * 60_000;      // the bot scans a couple of minutes into each 5m candle
 const thin = (liq: number) => liq < config.risk.thinPoolUsd;
@@ -145,6 +146,20 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
       if (!p.ok) continue;
       if ((h.holdersAt(now) ?? Infinity) < C.minHolders) continue;
       const c = enter(h, mode, now, `bounce from -${(p.dd * 100).toFixed(0)}% post-migration${floor.crowd ? ", early" : ""}`, p.plan, realShare, exp, floor.crowd ? { sizeUsd: C.crowdSizeUsd } : undefined);
+      if (c) { out.push(c); blockedUntil = c.exitAt + C.cooldownMs; }
+    } else if (mode === "launch") {
+      const C = cfg("launch", o);
+      if (migratedAt == null || now < migratedAt || now - migratedAt > C.maxSinceMigrationMin * 60_000) continue;
+      if (launchCheap(m, C, now)) continue;
+      if (!passesGate(h, now, ageH, m.change1h, m.change6h, g)) continue;
+      // Holders and top 10 from the recorded safety check; unknown = can't prove a crowd, skip.
+      const sa = h.safetyAt(now);
+      const holders = sa.holders ?? h.holdersAt(now);
+      if ((holders ?? 0) < C.minHolders || (sa.top10 ?? 100) > C.maxTop10) continue;
+      const { c5, realShare } = h.c5At(now);
+      const p = launchPattern(m, c5, migratedAt, now, C);
+      if (!p.ok) continue;
+      const c = enter(h, mode, now, `launch: first leg +${(p.gain15 * 100).toFixed(0)}% in 15m`, p.plan, realShare, exp);
       if (c) { out.push(c); blockedUntil = c.exitAt + C.cooldownMs; }
     } else if (mode === "dip") {
       const C = cfg("dip", o);
@@ -310,7 +325,7 @@ export class Lab {
     for (const mode of modes) {
       if (mode === "trusted") { cands.push(...trustedTrades(this.coins, this.from, this.to, exp, g)); continue; }
       if (mode === "ride") { cands.push(...rideTrades(this.coins, this.from, this.to, exp, g)); continue; }
-      for (const h of this.coins.values()) cands.push(...walk(h, mode, this.from, this.to, exp, g, mode === "bounce" ? this.migratedAt(h) : undefined));
+      for (const h of this.coins.values()) cands.push(...walk(h, mode, this.from, this.to, exp, g, mode === "bounce" || mode === "launch" ? this.migratedAt(h) : undefined));
     }
     return { trades: capOpen(cands, exp.config), modes };
   }

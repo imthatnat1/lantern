@@ -352,7 +352,7 @@ function stats(s) {
 }
 
 function chips(s) {
-  const modes = ["ride", "dip", "ultra", "bounce", "pullback", "trusted"];
+  const modes = ["launch", "ride", "dip", "ultra", "bounce", "pullback", "trusted"];
   const counts = { all: s.open.length };
   for (const m of modes) counts[m] = s.open.filter(o => o.mode === m).length;
   $("chips").innerHTML = ["all", ...modes].map(m => `<button data-m="${m}" class="${modeFilter === m ? "on" : ""}">${m === "all" ? "All" : m}<span>${counts[m] || ""}</span></button>`).join("");
@@ -676,7 +676,7 @@ function render(s) {
   document.querySelectorAll("[data-cp]").forEach(el => el.onclick = () => navigator.clipboard && navigator.clipboard.writeText(el.dataset.cp));
 }
 
-const MODE_ORDER = ["trusted", "ride", "dip", "pullback", "bounce", "ultra"];
+const MODE_ORDER = ["trusted", "launch", "ride", "dip", "pullback", "bounce", "ultra"];
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 /** One verdict per test, in plain words. */

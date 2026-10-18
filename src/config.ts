@@ -110,6 +110,7 @@ export const config = {
     dip: 0.20,
     ride: 0.15,
     pick: 0.10,
+    launch: 0.15,
   },
 
   minExitLiquidityUsd: <Record<Mode, number>>{
@@ -120,6 +121,7 @@ export const config = {
     dip: 20_000,
     ride: 50_000,
     pick: 10_000,
+    launch: 20_000,
   },
 
   modes: {
@@ -159,6 +161,20 @@ export const config = {
       // thousands of holders and $34k+ of liquidity; the rugs it caught (PRIME, NVIDIA, GREEN) had ~$2k. So a coin
       // with a real crowd can enter from $25k, at half size.
       crowdMcapMin: 25_000, crowdHolders: 1_000, crowdLiquidity: 25_000, crowdSizeUsd: 2,
+    },
+    // 19 Oct: buy the first leg of a fresh migration (strategies/launch.ts). Nat: "we need to try everything".
+    launch: {
+      scanEveryMs: 60_000,
+      cooldownMs: 2 * 3_600_000,
+      maxOpen: 3,
+      sizeUsd: 3,
+      checksPerScan: 10,
+      maxSinceMigrationMin: 60,
+      minLiquidity: 25_000, mcapMin: 60_000, mcapMax: 3_000_000,
+      minBuys5m: 40, minBuySell: 1.3,
+      minHolders: 500, maxTop10: 25,
+      maxOffHigh: 0.15, minGain15m: 0.10, maxCandleX: 1.6, minVolX: 1.0,
+      stopPct: 0.25, hardFloorPct: 0.40,
     },
     pullback: {
       scanEveryMs: 2 * 60_000,
