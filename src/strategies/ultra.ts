@@ -7,7 +7,7 @@ import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import { account } from "../engine/broker.js";
 import { db, cooldowns } from "../db.js";
-import { buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { watchedMints, watchedFirst, buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"ultra"> = config.modes.ultra;
 
@@ -21,15 +21,16 @@ export const ultra: Strategy = {
   everyMs: C.scanEveryMs,
   async scan(ctx: Context): Promise<Signal[]> {
     const out: Signal[] = [];
-    const mints = await allCandidates();
+    const watched = watchedMints("ultra", ctx.now);
+    const mints = [...new Set([...watched, ...await allCandidates()])];
     const snaps = await dex.snapshots(mints.slice(0, 90));
-    // Candles are the scarce resource (GeckoTerminal 30/min per IP). Check the most active coins first, cap per scan.
-    const ranked = [...snaps.values()].sort((a, b) => (b.volume1h || 0) - (a.volume1h || 0)).slice(0, 20);
+    // Candles are the scarce resource (GeckoTerminal 30/min per IP). Coins with a setup forming first, then the most active, cap per scan.
+    const ranked = watchedFirst(watched, [...snaps.values()], 20, (a, b) => (b.volume1h || 0) - (a.volume1h || 0));
     for (const s of ranked) {
       try {
         const sig = await check(s, ctx);
         if (sig) out.push(sig);
-      } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "ultra check failed"); }
+      } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "ultra check failed"); logLook("ultra", s, `couldn't check: ${String(e).replace(/^Error:\s*/, "").slice(0, 70)}`); }
     }
     return out;
   },

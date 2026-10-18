@@ -5,7 +5,7 @@ import * as rug from "../data/rugcheck.js";
 import * as jup from "../data/jupiter.js";
 import { config } from "../config.js";
 import { isCopycat, isSlop } from "../engine/filters.js";
-import { cooldowns, audit, market, recorder, type Setup } from "../db.js";
+import { db, cooldowns, audit, market, recorder, type Setup } from "../db.js";
 import { isCreativePair } from "../data/universe.js";
 import { buyersOf } from "../data/wallets.js";
 import { blockedWhy, blockMint, divergence, flow } from "../data/flow.js";
@@ -147,6 +147,24 @@ export function logSignal(sig: Signal, taken: boolean, why: string) {
 }
 
 /** Record a look that never became a signal (filtered before scoring). Shows up in "looked at but did not buy". */
+/**
+ * Coins this mode logged a forming setup for in the last 3h, newest first. Scans put these first, so a
+ * setup isn't dropped half way because newer coins out-traded it on 1h volume (Chaton, 18 Oct: setup at
+ * 11:36, never re-checked, price went through the trigger unseen).
+ */
+export function watchedMints(mode: Signal["mode"], now = Date.now(), max = 10): string[] {
+  return (db.prepare(`SELECT mint, max(at) AS t FROM signals_log WHERE mode=? AND taken=0 AND setup IS NOT NULL AND at > ?
+    GROUP BY mint ORDER BY t DESC LIMIT ?`).all(mode, now - 3 * 3_600_000, max) as { mint: string }[]).map(r => r.mint);
+}
+
+/** Watched coins first (up to two thirds of the cap), then the rest by the mode's own ranking. */
+export function watchedFirst(watched: string[], snaps: TokenSnapshot[], cap: number, rank: (a: TokenSnapshot, b: TokenSnapshot) => number): TokenSnapshot[] {
+  const w = new Set(watched);
+  const first = snaps.filter(s => w.has(s.mint)).sort((a, b) => watched.indexOf(a.mint) - watched.indexOf(b.mint)).slice(0, Math.ceil(cap * 2 / 3));
+  const taken = new Set(first.map(s => s.mint));
+  return [...first, ...snaps.filter(s => !taken.has(s.mint)).sort(rank)].slice(0, cap);
+}
+
 const lastLook = new Map<string, number>();
 export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, holders?: number, setup?: Setup) {
   const k = `${mode}:${s.mint}`;

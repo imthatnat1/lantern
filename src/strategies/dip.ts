@@ -4,7 +4,7 @@ import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
 import { allCandidates, isPinned, isQuality, isStonkPair } from "../data/universe.js";
-import { buySellRatio, candles5and15, dex, gate, dist, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { watchedMints, watchedFirst, buySellRatio, candles5and15, dex, gate, dist, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"dip"> = config.modes.dip;
 
@@ -23,14 +23,13 @@ export const dip: Strategy = {
   everyMs: C.scanEveryMs,
   async scan(ctx: Context): Promise<Signal[]> {
     const out: Signal[] = [];
-    const mints = await allCandidates();
+    const watched = watchedMints("dip", ctx.now);
+    const mints = [...new Set([...watched, ...await allCandidates()])];
     const snaps = await dex.snapshots(mints.slice(0, 120));
     // Candles are the scarce resource (GeckoTerminal 30/min per IP). Check the most active coins first, cap per scan.
     // Only coins dip is allowed to trade compete for the slots (pinned first), so junk doesn't crowd out ZCAT/PURR/the creative pairs.
-    const ranked = [...snaps.values()]
-      .filter(s => isPinned(s.mint) || isStonkPair(s) || isQuality(s))
-      .sort((a, b) => (Number(isPinned(b.mint)) - Number(isPinned(a.mint))) || (b.volume1h || 0) - (a.volume1h || 0))
-      .slice(0, 20);
+    const ranked = watchedFirst(watched, [...snaps.values()].filter(s => isPinned(s.mint) || isStonkPair(s) || isQuality(s)), 20,
+      (a, b) => (Number(isPinned(b.mint)) - Number(isPinned(a.mint))) || (b.volume1h || 0) - (a.volume1h || 0));
     for (const s of ranked) {
       try {
         const sig = await check(s, ctx);
