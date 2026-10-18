@@ -136,7 +136,9 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
     if (traps?.length) reasons.push(...traps.map(t => `honeypot: ${t}`));
   }
 
-  return { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator, sniperPct };
+  const out = { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator, sniperPct };
+  try { recorder.safety(mint, out); } catch { /* best effort */ }
+  return out;
 }
 
 /**

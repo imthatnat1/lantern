@@ -128,6 +128,15 @@
   .control .stop { border-color: var(--coral); color: var(--coral); }
   .control .resume { border-color: var(--sage); color: var(--sage); }
   .control .what { font-size: 13px; color: var(--ivory-faint); flex: 1 1 100%; }
+  .lab .head { grid-template-columns: 1fr auto; }
+  .lab .vs { font-size: 13px; color: var(--ivory-dim); margin-top: 4px; }
+  .lab .diff { font-size: 13px; margin-top: 10px; }
+  .lab .diff div { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
+  .lab .diff div:last-child { border-bottom: 0; }
+  .lab .diff i { font-style: normal; color: var(--ivory-faint); width: 14px; display: inline-block; }
+  .lab .thin { font-size: 12px; color: var(--gold); margin-top: 8px; }
+  .labbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; color: var(--ivory-dim); margin: 4px 0 6px; }
+  .labbar button { font-size: 13px; padding: 4px 12px; }
   .foot { margin-top: 28px; font-size: 13px; color: var(--ivory-faint); display: flex; justify-content: space-between; }
 
   /* login */
@@ -184,6 +193,12 @@
 
 <h2>By strategy <small>all time</small></h2>
 <div id="modes"></div>
+
+<h2>Lab <small id="labMeta"></small></h2>
+<p class="dim" style="font-size:13px;margin:0 0 6px">Each test replays the recorded market with one rule changed, through the same entry and exit code the bot runs, and compares it with the live rules over the same coins. Nothing here changes how the bot trades. Small samples lie: under 10 trades, treat it as a hint.</p>
+<div class="labbar"><span id="labStatus"></span><button id="labRun">Run now</button></div>
+<div id="labBase"></div>
+<div id="lab"></div>
 
 <h2>Runners we missed <small id="missedCount"></small></h2>
 <div id="missedTotals" class="totals"></div>
@@ -522,13 +537,69 @@ function render(s) {
   document.querySelectorAll("[data-cp]").forEach(el => el.onclick = () => navigator.clipboard && navigator.clipboard.writeText(el.dataset.cp));
 }
 
+const MODE_ORDER = ["trusted", "ride", "dip", "pullback", "bounce", "ultra"];
+function labTradeLine(t, sign) {
+  return `<div><span><i>${sign}</i>${esc(t.symbol)} <span class="faint">${esc(t.mode)}${t.leg ? " " + esc(t.leg) : ""} · ${esc(t.exit)}</span></span><span class="${t.pnl >= 0 ? "up" : "down"}">${usd(t.pnl, true)}</span></div>`;
+}
+function renderLab(L) {
+  const st = L.status || {}, rep = L.report;
+  $("labStatus").textContent = st.running ? "Running now, takes a minute or two." : st.lastError ? "Last run failed: " + st.lastError.slice(0, 90) : rep ? `Last run ${ago(Date.now() - rep.ranAt)} ago, ${rep.coins} coins, ${rep.hours}h of history.` : "No run yet. The first one starts 10 minutes after the bot updates.";
+  $("labRun").disabled = !!st.running;
+  if (!rep) { $("labBase").innerHTML = ""; $("lab").innerHTML = ""; $("labMeta").textContent = ""; return; }
+  $("labMeta").textContent = `${rep.experiments.length} tests`;
+  const b = rep.baseline.summary || {};
+  const modes = MODE_ORDER.filter(m => b[m]);
+  const tot = modes.reduce((a, m) => ({ n: a.n + b[m].trades, w: a.w + b[m].wins, p: a.p + b[m].pnl, r: a.r + b[m].realCandleShare * b[m].trades }), { n: 0, w: 0, p: 0, r: 0 });
+  $("labBase").innerHTML = `<div class="card lab"><div class="head"><div class="sym">Live rules, replayed <small class="dim">baseline</small></div><div class="gain ${tot.p >= 0 ? "up" : "down"}">${usd(tot.p, true)}<small>${tot.n} trades · ${tot.n ? Math.round(tot.w / tot.n * 100) : 0}% won</small></div></div>
+    ${modes.length ? `<table style="margin-top:10px"><tr><th>Mode</th><th>Trades</th><th>Won</th><th>P&amp;L</th></tr>${modes.map(m => `<tr><td>${m}</td><td>${b[m].trades}</td><td>${b[m].wins}</td><td class="${b[m].pnl >= 0 ? "up" : "down"}">${usd(b[m].pnl, true)}</td></tr>`).join("")}</table>` : `<p class="note">No trades in the window yet.</p>`}
+    <p class="note">Compare this with the real results above: if they're far apart, the replay is missing something and the tests below deserve less trust. ${tot.n ? Math.round(tot.r / tot.n * 100) + "% of entries saw real candles; the rest used candles rebuilt from price ticks." : ""}</p></div>`;
+  $("lab").innerHTML = rep.experiments.map(e => {
+    const t = e.totals, d = t.pnl - t.basePnl;
+    const same = !e.added.length && !e.dropped.length && Math.abs(d) < 0.005;
+    const thin = t.trades + t.baseTrades < 10;
+    return `<div class="card lab"><div class="head"><div class="sym">${esc(e.name)}</div><div class="gain ${same ? "dim" : d >= 0 ? "up" : "down"}">${same ? "no change" : usd(d, true)}<small>vs live</small></div></div>
+      ${e.why ? `<p class="note">${esc(e.why)}</p>` : ""}
+      ${e.error ? `<p class="note down">Failed: ${esc(e.error)}</p>` : `
+      <div class="grid"><div><span>Trades</span>${t.trades} <span class="faint" style="display:inline;font-size:12px;text-transform:none">vs ${t.baseTrades}</span></div><div><span>Won</span>${t.trades ? Math.round(t.wins / t.trades * 100) : 0}% <span class="faint" style="display:inline;font-size:12px;text-transform:none">vs ${t.baseTrades ? Math.round(t.baseWins / t.baseTrades * 100) : 0}%</span></div><div class="wide"><span>P&amp;L</span><b class="${t.pnl >= 0 ? "up" : "down"}" style="font-weight:500">${usd(t.pnl, true)}</b> <span class="faint" style="display:inline;font-size:12px;text-transform:none">vs ${usd(t.basePnl, true)}</span></div></div>
+      <div class="vs">${esc(e.modes.join(", "))}</div>
+      ${thin && !same ? `<div class="thin">Only ${t.trades + t.baseTrades} trades between them. Too few to call.</div>` : ""}
+      ${e.added.length || e.dropped.length ? `<details><summary>What changed</summary><div class="diff">${e.added.map(x => labTradeLine(x, "+")).join("")}${e.dropped.map(x => labTradeLine(x, "−")).join("")}</div></details>` : ""}`}
+    </div>`;
+  }).join("");
+}
+
+let lastLabAt = 0;
+async function loadLab(force) {
+  if (!force && Date.now() - lastLabAt < 5 * 60e3) return;
+  lastLabAt = Date.now();
+  if (location.search.includes("demo")) return renderLab(demoLab());
+  try { const r = await fetch("/api/lab", { cache: "no-store" }); if (r.ok) renderLab(await r.json()); } catch { /* the main view shows connection problems */ }
+}
+$("labRun").onclick = async () => {
+  $("labRun").disabled = true;
+  try { const r = await fetch("/api/lab", { method: "POST" }); if (r.ok) renderLab({ ...(await r.json()), report: null }); } catch { /* ignore */ }
+  setTimeout(() => loadLab(true), 90e3);
+};
+
+function demoLab() {
+  const now = Date.now();
+  const tr = (symbol, mode, pnl, exit, leg) => ({ symbol, mode, pnl, exit, leg, pct: pnl / 4, at: now - 3e6 });
+  return { status: { running: false, lastRunAt: now - 2 * 3600e3 }, report: { ranAt: now - 2 * 3600e3, hours: 72, coins: 412, baseline: { summary: {
+      trusted: { trades: 6, wins: 4, pnl: 3.1, realCandleShare: 0.4 }, ride: { trades: 14, wins: 7, pnl: 2.2, realCandleShare: 0.9 }, dip: { trades: 9, wins: 4, pnl: -1.4, realCandleShare: 0.8 }, pullback: { trades: 3, wins: 1, pnl: 0.6, realCandleShare: 0.7 } } },
+    experiments: [
+      { name: "Ride: tighter trails", why: "A ride core peaked at +62.6% and trailed back to breakeven.", modes: ["ride"], totals: { trades: 17, wins: 10, pnl: 4.9, baseTrades: 14, baseWins: 7, basePnl: 2.2 }, added: [tr("YILONGMA", "ride", 1.2, "trail 8% from peak close", "sleeve")], dropped: [tr("YILONGMA", "ride", -0.4, "close stop", "core")] },
+      { name: "Trusted: double size", why: "Wirelyss copies are winning at $2 to $4 a trade.", modes: ["trusted"], totals: { trades: 6, wins: 4, pnl: 6.2, baseTrades: 6, baseWins: 4, basePnl: 3.1 }, added: [], dropped: [] },
+      { name: "Fresh coins: allow top 10 up to 45%", why: "Only testable on data from 18 Oct on.", modes: ["pullback", "bounce", "dip", "ultra", "ride", "trusted"], totals: { trades: 32, wins: 16, pnl: 4.5, baseTrades: 32, baseWins: 16, basePnl: 4.5 }, added: [], dropped: [] },
+    ] } };
+}
+
 function fail(msg) {
   $("pulse").className = "pulse down"; $("status").textContent = "Not connected";
   $("verdict").className = "verdict flat"; $("verdict").innerHTML = `Can't reach the bot.`; $("sub").textContent = msg;
 }
 
 async function load() {
-  if (location.search.includes("demo")) return render(demo());
+  if (location.search.includes("demo")) { loadLab(); return render(demo()); }
   try {
     const r = await fetch("/api/state", { cache: "no-store" });
     if (r.status === 401) { $("login").style.display = "flex"; return; }
@@ -536,6 +607,7 @@ async function load() {
     if (!r.ok) return fail(s.error || "Unknown error");
     $("login").style.display = "none";
     render(s);
+    loadLab();
   } catch (e) { fail("Network error. Pull down to retry. (" + String(e).slice(0, 80) + ")"); }
 }
 

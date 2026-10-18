@@ -21,6 +21,18 @@ export interface Strategy {
   scan(ctx: Context): Promise<Signal[]>;
 }
 
+/**
+ * A mode's candle logic, kept free of I/O so the live bot and the replay run the same code.
+ * Not ok with no `why` means "skip silently"; with a `why` it becomes a look on the dashboard.
+ */
+export type Pattern<T> = { ok: false; why?: string; setup?: Setup } | ({ ok: true } & T);
+
+/** The market fields the patterns read. Live: a DexScreener snapshot. Replay: recorded ticks and candles. */
+export interface Mkt {
+  priceUsd: number; buys5m: number; sells5m: number; liquidityUsd: number; mcapUsd: number;
+  change1h: number; change6h: number; change24h: number; volume24h: number;
+}
+
 export interface Gate { ok: boolean; why?: string; holders?: number; top10?: number; sniperPct?: number }
 /** Score penalty for sniper/bundle concentration: -1 per percent, max -20. */
 export function sniperPenalty(g: Gate): number { return -Math.min(20, Math.round(g.sniperPct ?? 0)); }
@@ -136,7 +148,7 @@ export async function candles5and15(pair: string): Promise<{ c5: Candle[]; c15: 
   return { c5, c15 };
 }
 
-export function buySellRatio(s: TokenSnapshot): number {
+export function buySellRatio(s: Pick<Mkt, "buys5m" | "sells5m">): number {
   return s.sells5m > 0 ? s.buys5m / s.sells5m : s.buys5m > 0 ? 99 : 0;
 }
 

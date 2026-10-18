@@ -186,3 +186,7 @@ export const config = {
 } as const;
 
 export type Config = typeof config;
+
+/** A mode's settings with literal types widened, so replay variants can override any number. */
+type Widen<T> = { -readonly [K in keyof T]: T[K] extends number ? number : T[K] extends readonly unknown[] ? T[K] : T[K] extends object ? Widen<T[K]> : T[K] };
+export type ModeCfg<M extends keyof Config["modes"]> = Widen<Config["modes"][M]>;

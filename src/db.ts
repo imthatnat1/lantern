@@ -179,6 +179,14 @@ export const cooldowns = {
 // Migration for databases created before the setup column existed.
 try { db.exec("ALTER TABLE signals_log ADD COLUMN setup TEXT"); } catch { /* already there */ }
 try { db.exec("ALTER TABLE signals_log ADD COLUMN pair TEXT"); } catch { /* already there */ }
+// Recorded for the replay lab: which pair a tick came from (dust pools can be filtered out), when coins
+// migrated (bounce needs it), and what the safety gate saw (so gate rules can be replayed later).
+try { db.exec("ALTER TABLE ticks ADD COLUMN pair TEXT"); } catch { /* already there */ }
+db.exec(`CREATE TABLE IF NOT EXISTS migrations (mint TEXT PRIMARY KEY, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS safety_history (
+  mint TEXT NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL, top10 REAL, holders INTEGER, sniper REAL, reasons TEXT,
+  PRIMARY KEY (mint, at)
+) WITHOUT ROWID;`);
 try { db.exec("ALTER TABLE market ADD COLUMN image TEXT"); } catch { /* already there */ }
 
 export interface Setup {
@@ -220,18 +228,30 @@ export const market = {
   },
 };
 
-const insTick = db.prepare("INSERT OR IGNORE INTO ticks(mint,at,price,liquidity,mcap,vol5m,buys5m,sells5m) VALUES(?,?,?,?,?,?,?,?)");
+const insTick = db.prepare("INSERT OR IGNORE INTO ticks(mint,at,price,liquidity,mcap,vol5m,buys5m,sells5m,pair) VALUES(?,?,?,?,?,?,?,?,?)");
+const insMigration = db.prepare("INSERT OR IGNORE INTO migrations(mint,at) VALUES(?,?)");
+const insSafety = db.prepare("INSERT OR IGNORE INTO safety_history(mint,at,ok,top10,holders,sniper,reasons) VALUES(?,?,?,?,?,?,?)");
+const lastSafetyAt = new Map<string, number>();
 const insCandle = db.prepare("INSERT OR REPLACE INTO candles(pair,agg,t,o,h,l,c,v) VALUES(?,?,?,?,?,?,?,?)");
 const insHolders = db.prepare("INSERT OR IGNORE INTO holders_history(mint,at,holders) VALUES(?,?,?)");
 const updMarketHolders = db.prepare("UPDATE market SET holders=? WHERE mint=?");
 
 export const recorder = {
   tick(s: import("./types.js").TokenSnapshot) {
-    insTick.run(s.mint, s.fetchedAt, s.priceUsd, s.liquidityUsd, s.mcapUsd, s.volume5m, s.buys5m, s.sells5m);
+    insTick.run(s.mint, s.fetchedAt, s.priceUsd, s.liquidityUsd, s.mcapUsd, s.volume5m, s.buys5m, s.sells5m, s.pairAddress ?? null);
   },
   candles(pair: string, agg: number, cs: import("./types.js").Candle[]) {
     const tx = db.transaction((rows: import("./types.js").Candle[]) => { for (const k of rows) insCandle.run(pair, agg, k.t, k.o, k.h, k.l, k.c, k.v); });
     tx(cs);
+  },
+  migration(mint: string, at: number) { insMigration.run(mint, at); },
+  /** What the safety gate saw, at most once per coin per 10 minutes. */
+  safety(mint: string, r: { ok: boolean; top10Pct?: number; holders?: number; sniperPct?: number; reasons: string[] }) {
+    const now = Date.now();
+    if (now - (lastSafetyAt.get(mint) ?? 0) < 10 * 60_000) return;
+    lastSafetyAt.set(mint, now);
+    if (lastSafetyAt.size > 20_000) lastSafetyAt.clear();
+    insSafety.run(mint, now, r.ok ? 1 : 0, r.top10Pct ?? null, r.holders ?? null, r.sniperPct ?? null, r.reasons.join("; ") || null);
   },
   holders(mint: string, holders: number, at = Date.now()) { insHolders.run(mint, at, holders); updMarketHolders.run(holders, mint); },
   /** Holder growth over `windowMs`, as a fraction. null when we have fewer than two readings. */
@@ -246,6 +266,7 @@ export const recorder = {
     db.prepare("DELETE FROM ticks WHERE at < ?").run(cut);
     db.prepare("DELETE FROM candles WHERE t < ?").run(cut);
     db.prepare("DELETE FROM holders_history WHERE at < ?").run(cut);
+    db.prepare("DELETE FROM safety_history WHERE at < ?").run(cut);
   },
 };
 

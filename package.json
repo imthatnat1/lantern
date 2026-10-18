@@ -10,7 +10,8 @@
     "start": "node dist/main.js",
     "dev": "tsx src/main.ts",
     "test": "tsx --test test/*.test.ts",
-    "replay": "tsx src/replay.ts"
+    "replay": "tsx src/replay.ts",
+    "lab": "tsx src/lab/run.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

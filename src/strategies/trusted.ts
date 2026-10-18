@@ -1,14 +1,14 @@
-import { config } from "../config.js";
+import { config, type ModeCfg } from "../config.js";
 import { log } from "../log.js";
-import type { Signal, TokenSnapshot } from "../types.js";
+import type { ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import * as helius from "../data/helius.js";
 import { recentBuys as pushedBuys } from "../data/wallets.js";
 import { kv } from "../db.js";
-import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, sniperPenalty, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, sniperPenalty, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
-const C = config.modes.trusted;
+const C: ModeCfg<"trusted"> = config.modes.trusted;
 
 interface Seen { [sig: string]: number }
 
@@ -64,11 +64,28 @@ export const trusted: Strategy = {
   },
 };
 
+/** The copy filter before any I/O: mcap ceiling, no buying into a 5m pump, enough liquidity. */
+export function trustedFilter(m: Mkt & { change5m: number; onCurve: boolean }, who: string, C: ModeCfg<"trusted">): Pattern<{}> {
+  if (m.mcapUsd > C.mcapMax) return { ok: false, why: `${who}, but mcap $${(m.mcapUsd / 1000).toFixed(0)}k > $150k ceiling (copy latency: we'd buy their exit)` };
+  if (m.change5m / 100 > C.maxPump5m) return { ok: false, why: `${who}, but already up ${m.change5m.toFixed(0)}% in 5m` };
+  if (m.liquidityUsd < C.minLiquidity && !m.onCurve) return { ok: false, why: `${who}, but liquidity under $10k` };
+  return { ok: true };
+}
+
+export function trustedPlan(low: number, C: ModeCfg<"trusted">): (entry: number, atr15: number) => ExitPlan {
+  return (entry, atr15) => ({
+    hardFloorPct: 0.45,
+    closeStopPrice: structuralStop(entry, low, atr15, 1, 0.30),
+    takeProfits: [{ gain: 1.0, sell: 0.5 }],
+    trailPct: 0.30, trailAfterGain: 0.60,
+    maxHoldMs: C.backstopMs,
+  });
+}
+
 async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names: string[] = [], addrs: string[] = []): Promise<Signal | null> {
   const who = `${names.join(" + ") || walletCount + " trusted"} bought`;
-  if (s.mcapUsd > C.mcapMax) { logLook("trusted", s, `${who}, but mcap $${(s.mcapUsd / 1000).toFixed(0)}k > $150k ceiling (copy latency: we'd buy their exit)`); return null; }
-  if (s.change5m / 100 > C.maxPump5m) { logLook("trusted", s, `${who}, but already up ${s.change5m.toFixed(0)}% in 5m`); return null; }
-  if (s.liquidityUsd < C.minLiquidity && !s.onCurve) { logLook("trusted", s, `${who}, but liquidity under $10k`); return null; }
+  const f = trustedFilter(s, who, C);
+  if (!f.ok) { if (f.why) logLook("trusted", s, f.why); return null; }
   const pre = await prefilter(s, "trusted");
   if (!pre.ok) { logLook("trusted", s, pre.why!, pre.holders); return null; }
   const size = walletCount >= 2 ? C.sizeUsdTwoWallets : C.sizeUsd;
@@ -98,13 +115,7 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names:
     reason: `trusted copy: ${names.join(" + ") || walletCount + " wallets"} bought`,
     snapshot: s, candles15: c15,
     meta: { atr15: a15, walletCount, wallets: names, walletAddrs: addrs, holders: g.holders },
-    plan: (entry, atr15) => ({
-      hardFloorPct: 0.45,
-      closeStopPrice: structuralStop(entry, low, atr15, 1, 0.30),
-      takeProfits: [{ gain: 1.0, sell: 0.5 }],
-      trailPct: 0.30, trailAfterGain: 0.60,
-      maxHoldMs: C.backstopMs,
-    }),
+    plan: trustedPlan(low, C),
   };
   if (!g.ok) { logSignal(sig, false, g.why!); return null; }
   return sig;

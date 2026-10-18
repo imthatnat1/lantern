@@ -4,11 +4,14 @@ import * as broker from "./engine/broker.js";
 import { config } from "./config.js";
 import { ingest, scorecard, currentKols } from "./data/wallets.js";
 import { log } from "./log.js";
+import { labStatus, runLabNow } from "./lab/scheduler.js";
 
 /**
  * JSON API for the dashboard. Bearer token from DASHBOARD_TOKEN.
  *   GET  /api/state                  everything the dashboard shows
  *   POST /api/control {action}       "stop" halts new buys (exits keep running), "resume" lifts it
+ *   GET  /api/lab                    latest lab report (entry replay experiments) and run status
+ *   POST /api/lab {action:"run"}     start a lab run now
  */
 export function startServer(getMarks: () => Map<string, number>, getHealth: () => { feedDownS: number; dexStaleS: number }) {
   const token = process.env.DASHBOARD_TOKEN ?? "";
@@ -21,6 +24,15 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
     if (req.method === "GET" && req.url === "/api/state") {
       try { res.end(JSON.stringify(state(getMarks(), getHealth()))); }
       catch (e) { res.statusCode = 500; res.end(JSON.stringify({ error: String(e) })); }
+      return;
+    }
+    if (req.method === "GET" && req.url === "/api/lab") {
+      res.end(JSON.stringify({ status: labStatus(), report: kv.get("lab:report", null) }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/api/lab") {
+      const started = runLabNow("dashboard");
+      res.end(JSON.stringify({ ok: true, started, status: labStatus() }));
       return;
     }
     if (req.method === "POST" && req.url === "/api/wallet-events") {

@@ -1,0 +1,50 @@
+{
+  "hours": 72,
+  "experiments": [
+    {
+      "name": "Fresh coins: allow top 10 up to 45%",
+      "why": "Nat's question from 18 Oct. Coins under 2h old currently need top 10 under 35%. Only testable on data from 18 Oct on, when the gate's results started being recorded.",
+      "gate": { "freshTop10Max": 45 }
+    },
+    {
+      "name": "Fresh coins: 100 holders instead of 150",
+      "why": "Does the 150-holder minimum for coins under 2h keep us out of early winners?",
+      "gate": { "freshMinHolders": 100 }
+    },
+    {
+      "name": "Ride: tighter trails",
+      "why": "A ride core peaked at +62.6% and trailed back to breakeven. Core trail 35% to 20%, sleeve 12% to 8%.",
+      "config": { "ride": { "coreTrailPct": 0.20, "sleeveTrailPct": 0.08 } }
+    },
+    {
+      "name": "Ride: core trail starts at +15%",
+      "why": "Same problem from the other side: arm the core trail earlier (default +25%) and a bit tighter (25%).",
+      "config": { "ride": { "coreTrailAfterGain": 0.15, "coreTrailPct": 0.25 } }
+    },
+    {
+      "name": "Trusted: double size",
+      "why": "Wirelyss copies are winning but at $2 to $4 a trade they earn cents. What would 2x size have made, and lost?",
+      "config": { "trusted": { "sizeUsd": 8, "sizeUsdTwoWallets": 16 } }
+    },
+    {
+      "name": "Trusted: mcap ceiling $300k",
+      "why": "We skip trusted buys above $150k mcap. Are we missing good copies?",
+      "config": { "trusted": { "mcapMax": 300000 } }
+    },
+    {
+      "name": "Pullback: wider retrace window 15-50%",
+      "why": "Live waits for a 20-40% retrace. Does a wider window find more winners or more losers?",
+      "config": { "pullback": { "retraceMin": 0.15, "retraceMax": 0.50 } }
+    },
+    {
+      "name": "Bounce: shallower dips from 25%",
+      "why": "Live needs a 35% drop after migration before it looks for a bounce.",
+      "config": { "bounce": { "drawdownMin": 0.25 } }
+    },
+    {
+      "name": "Dip: cap the loss at 15%",
+      "why": "Dip's close stop allows up to 25%. Tighter cap, same entries.",
+      "exits": { "dip": { "maxLoss": 0.15 } }
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 import { log } from "./log.js";
 import { positions, cooldowns, kv, market, db, recorder } from "./db.js";
+import { startLab } from "./lab/scheduler.js";
 import { PumpPortal } from "./data/pumpportal.js";
 import * as dex from "./data/dexscreener.js";
 import * as gecko from "./data/gecko.js";
@@ -29,6 +30,7 @@ let lastDexOk = Date.now();
 const feed = new PumpPortal();
 feed.on("migration", (m: { mint: string; at: number }) => {
   migrations.set(m.mint, m.at);
+  try { recorder.migration(m.mint, m.at); } catch { /* best effort */ }
   for (const [k, v] of migrations) if (Date.now() - v > 12 * 3_600_000) migrations.delete(k);
   kv.set("migrations", [...migrations.entries()]);
 });
@@ -163,6 +165,7 @@ async function main() {
     feedDownS: Math.round(Math.min(feed.downForMs, 99_999_000) / 1000),
     dexStaleS: Math.round((Date.now() - Math.max(lastDexOk, dex.lastOkAt)) / 1000),
   }));
+  startLab();
   solPrice = await jup.solPrice();
   setInterval(async () => { solPrice = await jup.solPrice(); }, 60_000);
   const tick = async () => {

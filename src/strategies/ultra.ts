@@ -1,15 +1,15 @@
-import { config } from "../config.js";
+import { config, type ModeCfg } from "../config.js";
 import { allCandidates } from "../data/universe.js";
 import { log } from "../log.js";
-import type { Candle, Signal, TokenSnapshot } from "../types.js";
+import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import { account } from "../engine/broker.js";
 import { db, cooldowns } from "../db.js";
-import { buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, type Context, type Strategy } from "./base.js";
+import { buySellRatio, candles5and15, dex, dist, gate, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
-const C = config.modes.ultra;
+const C: ModeCfg<"ultra"> = config.modes.ultra;
 
 /**
  * ULTRA: second-leg runner. Dump, recovery >= 1.8x off the low, three higher lows, then a
@@ -84,39 +84,69 @@ async function reentry(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   };
 }
 
-async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
-  if (s.pairAddress && cooldowns.active("ultra", s.mint)) { const r = await reentry(s, ctx); if (r) return r; }
-  const age = ageHours(s, ctx.now);
-  const long = age > C.maxAgeH;
-  if (age < C.minAgeH || age > C.longWindowMaxAgeH) return null;
+/** Age and size window before any I/O. Returns the window used, or null when the coin doesn't fit. */
+export function ultraWindow(m: Mkt, ageH: number, C: ModeCfg<"ultra">): { long: boolean } | null {
+  const long = ageH > C.maxAgeH;
+  if (ageH < C.minAgeH || ageH > C.longWindowMaxAgeH) return null;
+  return { long };
+}
+
+/** The candle setup: 1.8x off the dump low, higher lows, a volume breakout of the 2h range, not chasing. */
+export function ultraPattern(m: Mkt, c5: Candle[], now: number, long: boolean, C: ModeCfg<"ultra">): Pattern<{ base: number; volX: number; lows: number; dumpLow: number; rangeTop: number; breakoutVol: number }> {
   const [mcMin, mcMax, liqMin] = long
     ? [C.longWindowMcapMin, C.longWindowMcapMax, C.longWindowMinLiquidity]
     : [C.mcapMin, C.mcapMax, C.minLiquidity];
-  const pre = await prefilter(s, "ultra");
-  if (!pre.ok) { logLook("ultra", s, pre.why!, pre.holders); return null; }
-  if (s.mcapUsd < mcMin || s.mcapUsd > mcMax || s.liquidityUsd < liqMin || !s.pairAddress) return null;
-
-  const { c5, c15 } = await candles5and15(s.pairAddress);
-  if (c5.length < 30) return null;
-  const dumpLow = lowestLow(c5, ctx.now - 12 * 3_600_000);
-  if (s.priceUsd < dumpLow * C.recoverFromLowX) { logLook("ultra", s, `only ${(s.priceUsd / dumpLow).toFixed(2)}x off the dump low, need 1.8x`, undefined, { need: `recover to ${(dumpLow * C.recoverFromLowX).toPrecision(3)} (1.8x the dump low)`, level: dumpLow * C.recoverFromLowX, distance: dist(s.priceUsd, dumpLow * C.recoverFromLowX) }); return null; }
+  if (m.mcapUsd < mcMin || m.mcapUsd > mcMax || m.liquidityUsd < liqMin) return { ok: false };
+  if (c5.length < 30) return { ok: false };
+  const dumpLow = lowestLow(c5, now - 12 * 3_600_000);
+  if (m.priceUsd < dumpLow * C.recoverFromLowX) return { ok: false, why: `only ${(m.priceUsd / dumpLow).toFixed(2)}x off the dump low, need 1.8x`, setup: { need: `recover to ${(dumpLow * C.recoverFromLowX).toPrecision(3)} (1.8x the dump low)`, level: dumpLow * C.recoverFromLowX, distance: dist(m.priceUsd, dumpLow * C.recoverFromLowX) } };
   const hl = higherLows(c5.slice(-40), C.higherLows, C.lowTolerance);
-  if (!hl.ok) { logLook("ultra", s, `recovered, but only ${hl.lows.length} higher lows`, undefined, { need: `print ${C.higherLows} higher lows`, progress: { done: hl.lows.length, of: C.higherLows } }); return null; }
-  if (hl.lows.at(-1)! < dumpLow * C.lastLowOverDumpX) { logLook("ultra", s, "last low too close to the dump low"); return null; }
+  if (!hl.ok) return { ok: false, why: `recovered, but only ${hl.lows.length} higher lows`, setup: { need: `print ${C.higherLows} higher lows`, progress: { done: hl.lows.length, of: C.higherLows } } };
+  if (hl.lows.at(-1)! < dumpLow * C.lastLowOverDumpX) return { ok: false, why: "last low too close to the dump low" };
 
   const range = c5.slice(-24, -1);
   const rangeTop = Math.max(...range.map(k => k.h));
   const rangeVol = range.reduce((a, k) => a + k.v, 0) / 2; // 2h of 5m candles
-  if (rangeVol < C.minRangeVolPerHour) return null;
+  if (rangeVol < C.minRangeVolPerHour) return { ok: false };
   const k = c5.at(-2)!;
   const avgV = range.reduce((a, b) => a + b.v, 0) / range.length;
   const volX = avgV ? k.v / avgV : 0;
-  if (!(k.c > rangeTop && volX >= C.breakoutVolX)) { logLook("ultra", s, `structure forming, waiting for a 1.3x volume close above ${rangeTop.toPrecision(3)}`, undefined, { need: `5m close above ${rangeTop.toPrecision(3)} on 1.3x volume`, level: rangeTop, distance: dist(s.priceUsd, rangeTop) }); return null; }
-  const bs = buySellRatio(s);
-  if (bs < C.buySellMin || bs > C.buySellMax) { logLook("ultra", s, `buy/sell ratio ${bs.toFixed(1)} outside 1-3`); return null; }
-  const above = s.priceUsd / rangeTop - 1;
-  const maxAbove = volX >= C.hotVolX && s.liquidityUsd >= C.hotMinLiq ? C.maxAboveRangeTopHot : C.maxAboveRangeTop;
-  if (above > maxAbove) { logLook("ultra", s, `breakout already ${(above * 100).toFixed(0)}% above the range top, chasing`); return null; }
+  if (!(k.c > rangeTop && volX >= C.breakoutVolX)) return { ok: false, why: `structure forming, waiting for a 1.3x volume close above ${rangeTop.toPrecision(3)}`, setup: { need: `5m close above ${rangeTop.toPrecision(3)} on 1.3x volume`, level: rangeTop, distance: dist(m.priceUsd, rangeTop) } };
+  const bs = buySellRatio(m);
+  if (bs < C.buySellMin || bs > C.buySellMax) return { ok: false, why: `buy/sell ratio ${bs.toFixed(1)} outside 1-3` };
+  const above = m.priceUsd / rangeTop - 1;
+  const maxAbove = volX >= C.hotVolX && m.liquidityUsd >= C.hotMinLiq ? C.maxAboveRangeTopHot : C.maxAboveRangeTop;
+  if (above > maxAbove) return { ok: false, why: `breakout already ${(above * 100).toFixed(0)}% above the range top, chasing` };
+  const base = 65 + Math.min(15, volX * 3) + (bs > 1.5 ? 10 : 0) + (long ? 5 : 10);
+  return { ok: true, base, volX, lows: hl.lows.length, dumpLow, rangeTop, breakoutVol: k.v };
+}
+
+export function ultraPlan(sixHLow: number): (entry: number, atr15: number) => ExitPlan {
+  return (entry, atr15) => ({
+    hardFloorPct: 0.55,
+    closeStopPrice: structuralStop(entry, sixHLow, atr15, 1, 0.50),
+    takeProfits: [{ gain: 1.0, sell: 0.33 }],
+    trailPct: 0.30, trailAfterGain: 0.50,
+    trailLadder: [{ peakGain: 1.0, trailPct: 0.35 }, { peakGain: 3.0, trailPct: Math.min(0.55, Math.max(0.40, (3 * atr15) / entry)) }],
+    maxHoldMs: 0,
+  });
+}
+
+async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
+  if (s.pairAddress && cooldowns.active("ultra", s.mint)) { const r = await reentry(s, ctx); if (r) return r; }
+  const w = ultraWindow(s, ageHours(s, ctx.now), C);
+  if (!w) return null;
+  const pre = await prefilter(s, "ultra");
+  if (!pre.ok) { logLook("ultra", s, pre.why!, pre.holders); return null; }
+  if (!s.pairAddress) return null;
+  const [mcMin, mcMax, liqMin] = w.long
+    ? [C.longWindowMcapMin, C.longWindowMcapMax, C.longWindowMinLiquidity]
+    : [C.mcapMin, C.mcapMax, C.minLiquidity];
+  if (s.mcapUsd < mcMin || s.mcapUsd > mcMax || s.liquidityUsd < liqMin) return null;
+
+  const { c5, c15 } = await candles5and15(s.pairAddress);
+  const p = ultraPattern(s, c5, ctx.now, w.long, C);
+  if (!p.ok) { if (p.why) logLook("ultra", s, p.why, undefined, p.setup); return null; }
 
   const eq = account().cash; // sizing on cash is conservative; fine for paper
   const size = Math.min(C.maxSizeUsd, eq * C.sizePctEquity);
@@ -124,21 +154,14 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
   if ((g.holders ?? 0) < C.minHolders) return null;
   const a15 = atr(c15);
   const sixHLow = lowestLow(c15, ctx.now - 6 * 3_600_000);
-  const score = 65 + Math.min(15, volX * 3) + (bs > 1.5 ? 10 : 0) + (long ? 5 : 10) + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
+  const score = p.base + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
 
   const sig: Signal = {
     mode: "ultra", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
-    reason: `second leg breakout, vol ${volX.toFixed(1)}x, ${hl.lows.length} higher lows`,
+    reason: `second leg breakout, vol ${p.volX.toFixed(1)}x, ${p.lows} higher lows`,
     snapshot: s, candles15: c15,
-    meta: { atr15: a15, dumpLow, rangeTop, breakoutVol: k.v, holders: g.holders },
-    plan: (entry, atr15) => ({
-      hardFloorPct: 0.55,
-      closeStopPrice: structuralStop(entry, sixHLow, atr15, 1, 0.50),
-      takeProfits: [{ gain: 1.0, sell: 0.33 }],
-      trailPct: 0.30, trailAfterGain: 0.50,
-      trailLadder: [{ peakGain: 1.0, trailPct: 0.35 }, { peakGain: 3.0, trailPct: Math.min(0.55, Math.max(0.40, (3 * atr15) / entry)) }],
-      maxHoldMs: 0,
-    }),
+    meta: { atr15: a15, dumpLow: p.dumpLow, rangeTop: p.rangeTop, breakoutVol: p.breakoutVol, holders: g.holders },
+    plan: ultraPlan(sixHLow),
   };
   if (!g.ok) { logSignal(sig, false, g.why!); return null; }
   return sig;
