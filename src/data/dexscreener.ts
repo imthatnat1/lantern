@@ -80,6 +80,7 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
     onCurve: isCurve(p.dexId),
     website: p.info?.websites?.[0]?.url,
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
+    telegram: p.info?.socials?.find(s => s.type === "telegram")?.url,
     imageUrl: p.info?.imageUrl,
     fetchedAt: Date.now(),
   };
@@ -112,6 +113,7 @@ export async function snapshotFromPair(mint: string, p: DsPair): Promise<TokenSn
     createdAt: p.pairCreatedAt ?? Date.now(), onCurve: isCurve(p.dexId),
     website: p.info?.websites?.[0]?.url,
     twitter: p.info?.socials?.find(s => s.type === "twitter")?.url,
+    telegram: p.info?.socials?.find(s => s.type === "telegram")?.url,
     imageUrl: p.info?.imageUrl,
     fetchedAt: Date.now(),
   };

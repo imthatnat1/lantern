@@ -36,6 +36,7 @@ export interface TokenSnapshot {
   onCurve: boolean;
   website?: string;
   twitter?: string;
+  telegram?: string;
   imageUrl?: string;
   fetchedAt: number;
 }
@@ -50,6 +51,8 @@ export interface SafetyResult {
   creator?: string;
   /** Share held by wallets RugCheck labels as snipers, bundles or fresh. Strategies take up to 20 points off. */
   sniperPct?: number;
+  /** Launch metadata JSON (pump.fun / LaunchLab), where the dev's twitter, telegram and website links live. */
+  metaUri?: string;
 }
 
 export interface ExitPlan {

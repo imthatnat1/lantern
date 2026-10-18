@@ -10,7 +10,8 @@ import { db, cooldowns, audit, market, recorder, hot, type Setup } from "../db.j
 import { isCreativePair } from "../data/universe.js";
 import { isStonkListed } from "../data/stonkfun.js";
 import { buyersOf } from "../data/wallets.js";
-import { blockedWhy, blockMint, divergence, fakeValuation, flow, microTrades } from "../data/flow.js";
+import { blockedWhy, blockMint, burnedWhy, divergence, fakeValuation, flow, microTrades } from "../data/flow.js";
+import { socialsWhy } from "../data/socials.js";
 
 export interface Context {
   now: number;
@@ -63,16 +64,34 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   // KKK, $CAT, PANIC (18 Oct): market caps of $11-21 and a few dollars of volume. Nothing to trade.
   if (!pinned && s.mcapUsd < 3_000) return { ok: false, why: `rejected: no real market, $${Math.round(s.mcapUsd)} market cap` };
   if (cooldowns.active(mode, s.mint)) return { ok: false, why: "cooldown after a recent stop-out" };
+  // Coins Nat hand-picked (watch list) and Stonk.fun's own listings keep their names out of the burned-names list.
+  const handPicked = config.watch.includes(s.mint);
+  const burnable = !handPicked && !isStonkListed(s.mint) ? s.name : undefined;
   if (!pinned) {
     const b = blockedWhy(s.mint);
     if (b) return { ok: false, why: `rejected: ${b}` };
+    const bn = burnable ? burnedWhy(s.name, s.mint) : null;
+    if (bn) return { ok: false, why: `rejected: ${bn}` };
     const d = divergence(s) ?? microTrades(s) ?? fakeValuation(s);
-    if (d) { blockMint(s.mint, d); return { ok: false, why: `rejected: ${d}` }; }
+    if (d) { blockMint(s.mint, d, 24, burnable); return { ok: false, why: `rejected: ${d}` }; }
+    // GTA 6 Coin (18 Oct 20:40): -97% in two minutes. A coin down 80% in the hour has been rugged.
+    if (s.change1h <= -80) {
+      const why = `crashed ${Math.round(-s.change1h)}% in an hour`;
+      blockMint(s.mint, why, 24, burnable);
+      return { ok: false, why: `rejected: ${why}` };
+    }
   }
   const safe = await rug.safety(s.mint, s.onCurve);
   if (!safe.ok) return { ok: false, why: `rejected: ${safe.reasons.join(", ")}` };
   const slop = pinned ? null : isSlop(s, safe.holders);
   if (slop) return { ok: false, why: `rejected: slop, ${slop}` };
+  // GTA 6 Coin had 88 holders at $64k. The 150-holder floor used to apply only to coins under 2h old.
+  if (!pinned && safe.holders !== undefined && safe.holders < 150) return { ok: false, why: `rejected: only ${safe.holders} holders` };
+  // No website, X or Telegram: no community forming (Nat, 18 Oct). Her hand-picked watch list is exempt.
+  if (!pinned && !handPicked) {
+    const sw = await socialsWhy(s.mint, { website: s.website, twitter: s.twitter, telegram: s.telegram }, safe.metaUri);
+    if (sw) return { ok: false, why: `rejected: ${sw}` };
+  }
   const ageH = (Date.now() - s.createdAt) / 3_600_000;
   if (!pinned && ageH < 2) {
     if ((safe.holders ?? 0) < 150) return { ok: false, why: `rejected: ${ageH.toFixed(1)}h old with only ${safe.holders ?? "?"} holders` };
@@ -108,7 +127,7 @@ export async function gate(s: TokenSnapshot, mode: Signal["mode"], sizeUsd: numb
       const d = divergence(s);
       if (d) return { ok: false, why: `rejected: ${d}`, holders: pre.holders };
       if (s.pairAddress) {
-        const fl = await flow(s.mint, s.pairAddress);
+        const fl = await flow(s.mint, s.pairAddress, s.name);
         if (fl?.verdict) return { ok: false, why: `rejected: ${fl.verdict}`, holders: pre.holders };
       }
     }

@@ -3,7 +3,8 @@ import { config } from "../config.js";
 import type { SafetyResult } from "../types.js";
 import { recorder, creators, kv } from "../db.js";
 import { setTax } from "./tax.js";
-import { isStonkReward } from "./stonkfun.js";
+import { isStonkReward, isStonkListed } from "./stonkfun.js";
+import { burnName } from "./flow.js";
 
 interface RcReport {
   rugged?: boolean;
@@ -19,6 +20,7 @@ interface RcReport {
   creator?: string;
   creatorBalance?: number;
   totalSupply?: number;
+  tokenMeta?: { name?: string; symbol?: string; uri?: string };
 }
 
 const LIQ_HOLDER_RISKS = /liquidity|lp|holder|single/i;
@@ -104,6 +106,7 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
   if (rep.rugged) {
     reasons.push("flagged rugged");
     if (rep.creator) { try { creators.markRugged(rep.creator, mint); } catch { /* best effort */ } }
+    if (rep.tokenMeta?.name && !isStonkListed(mint) && !config.watch.includes(mint)) burnName(rep.tokenMeta.name, mint, "was flagged rugged");
   }
   if (rep.creator && creators.isRugger(rep.creator)) reasons.push("creator has rugged before");
   if (rep.creator && rep.creatorBalance && rep.totalSupply && rep.creatorBalance / rep.totalSupply > 0.10) reasons.push(`creator holds ${(rep.creatorBalance / rep.totalSupply * 100).toFixed(0)}%`);
@@ -141,7 +144,7 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
     if (traps?.length) reasons.push(...traps.map(t => `honeypot: ${t}`));
   }
 
-  const out = { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator, sniperPct };
+  const out = { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator, sniperPct, metaUri: rep.tokenMeta?.uri };
   try { recorder.safety(mint, out); } catch { /* best effort */ }
   return out;
 }
