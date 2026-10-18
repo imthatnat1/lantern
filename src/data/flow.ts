@@ -42,6 +42,8 @@ export const FLOW = {
   fakeValuationX: 60, fakeValuationMaxAgeH: 7 * 24,
   /** No coin under 2h old is really worth this much. */
   youngMcapMax: 20_000_000, youngAgeH: 2,
+  /** A coin under a day old whose whole life's volume is under this share of its market cap never traded its way there. */
+  unbackedVolShare: 0.2, unbackedMaxAgeH: 24, unbackedMinMcap: 1_000_000,
 };
 
 /**
@@ -50,8 +52,12 @@ export const FLOW = {
  * because a few big trades sat among the cent-sized ones, so microTrades() alone missed it. Real coins on the
  * same list ran 3-40x their pool (old flagships ZCAT 40x, STONK 36x).
  */
-export function fakeValuation(s: { mcapUsd: number; liquidityUsd: number; createdAt: number; onCurve: boolean; buys5m: number; sells5m: number }, now = Date.now()): string | null {
+export function fakeValuation(s: { mcapUsd: number; liquidityUsd: number; createdAt: number; onCurve: boolean; buys5m: number; sells5m: number; volume24h?: number }, now = Date.now()): string | null {
   const ageH = s.createdAt ? (now - s.createdAt) / 3_600_000 : Infinity;
+  // Glow (18 Oct): $6.9M at 15 minutes old with $102k ever traded (1.5%). USDF: $171M on $686k (0.4%).
+  // Real young coins on the same list had traded 3-12x their market cap (TSI, SUPERCORE, NIP).
+  if (ageH < FLOW.unbackedMaxAgeH && s.mcapUsd >= FLOW.unbackedMinMcap && (s.volume24h ?? 0) < s.mcapUsd * FLOW.unbackedVolShare)
+    return `fake valuation: $${big(s.mcapUsd)} market cap but only $${big(s.volume24h ?? 0)} ever traded`;
   if (ageH < FLOW.youngAgeH && s.mcapUsd > FLOW.youngMcapMax)
     return `fake valuation: $${(s.mcapUsd / 1e6).toFixed(0)}M market cap at ${Math.round(ageH * 60)} minutes old`;
   if (!s.onCurve && s.liquidityUsd > 0 && ageH < FLOW.fakeValuationMaxAgeH && s.mcapUsd / s.liquidityUsd > FLOW.fakeValuationX)
