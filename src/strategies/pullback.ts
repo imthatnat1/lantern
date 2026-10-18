@@ -5,7 +5,7 @@ import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { ageHours } from "../engine/filters.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { scored, baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
+import { scored, watchedMints, watchedFirst, baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"pullback"> = config.modes.pullback;
 
@@ -23,15 +23,16 @@ export const pullback: Strategy = {
   everyMs: C.scanEveryMs,
   async scan(ctx: Context): Promise<Signal[]> {
     const out: Signal[] = [];
-    const mints = await allCandidates();
+    const watched = watchedMints("pullback", ctx.now);
+    const mints = [...new Set([...watched, ...await allCandidates()])];
     const snaps = await dex.snapshots(mints.slice(0, 90));
-    // Candles are the scarce resource (GeckoTerminal 30/min per IP). Check the most active coins first, cap per scan.
-    const ranked = [...snaps.values()].sort((a, b) => (b.volume1h || 0) - (a.volume1h || 0)).slice(0, 15);
+    // Candles are the scarce resource (GeckoTerminal 30/min per IP). Coins with a setup forming first, then the most active, cap per scan.
+    const ranked = watchedFirst(watched, [...snaps.values()], 15, (a, b) => (b.volume1h || 0) - (a.volume1h || 0));
     for (const s of ranked) {
       try {
         const sig = await check(s, ctx);
         if (sig) out.push(sig);
-      } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "pullback check failed"); }
+      } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "pullback check failed"); logLook("pullback", s, `couldn't check: ${String(e).replace(/^Error:\s*/, "").slice(0, 70)}`); }
     }
     return out;
   },

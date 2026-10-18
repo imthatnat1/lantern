@@ -171,6 +171,9 @@
   .fill .tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
   .fill.loss .tag::before { border-radius: 1px; transform: rotate(45deg); }
   .fill.buy .tag { color: var(--lantern); } .fill.win .tag { color: var(--sage); } .fill.loss .tag { color: var(--coral); }
+  .setup.stale { opacity: .6; border-style: dashed; }
+  .setup.stale .need b { color: var(--ivory-dim); }
+  .setup.stale .track { display: none; }
   .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ivory-dim); margin: 8px 0 2px; }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
   .fill .head .gain { font-size: 17px; }
@@ -602,6 +605,11 @@ function setupBlock(l) {
   if (st.progress) { pct = st.progress.done / st.progress.of; label = `${st.progress.done} of ${st.progress.of} candles`; }
   else if (st.distance != null) { pct = Math.max(0, 1 - Math.min(1, st.distance / 0.3)); label = st.distance < 0.005 ? "at the level now" : `${(st.distance * 100).toFixed(1)}% away`; }
   const far = pct != null && pct < 0.4;
+  // Setups refresh every 10 min while the bot is checking. Past 20 min the trigger and the distance are old news: say so, hide the bar.
+  if (Date.now() - l.at > 20 * 60e3) return `<div class="setup stale">
+    <div class="need"><b>${l.mode}</b> needed: ${esc(st.need)}</div>
+    <div class="meta"><span>not re-checked since ${hhmm(l.at)}</span><span>watching ${ago(Date.now() - (l.watchedSince || l.at))}</span></div>
+  </div>`;
   return `<div class="setup">
     <div class="need"><b>${l.mode}</b> needs: ${esc(st.need)}</div>
     ${pct != null ? `<div class="track ${far ? "far" : ""}"><b style="width:${Math.round(pct * 100)}%"></b></div>` : ""}
@@ -612,7 +620,7 @@ function setupBlock(l) {
 function hotRows(looks, open) {
   const held = new Set(open.map(o => o.mint));
   // Watching = passed every safety check and a setup is forming. Rejected coins live in "Looked at" below.
-  const closeness = l => l.setup ? (l.setup.progress ? l.setup.progress.done / l.setup.progress.of : l.setup.distance != null ? 1 - Math.min(1, l.setup.distance / 0.3) : 0) : -1;
+  const closeness = l => (l.setup && Date.now() - l.at > 20 * 60e3 ? -1 : 0) + (l.setup ? (l.setup.progress ? l.setup.progress.done / l.setup.progress.of : l.setup.distance != null ? 1 - Math.min(1, l.setup.distance / 0.3) : 0) : -1);
   const rows = looks.filter(l => l.market && l.watching).sort((a, b) => closeness(b) - closeness(a) || b.at - a.at).slice(0, 12);
   if (!rows.length) return `<div class="empty">Nothing clean on the radar yet.</div>`;
   return rows.map(l => {
