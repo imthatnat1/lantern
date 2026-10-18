@@ -33,8 +33,8 @@ export const bounce: Strategy = {
 
 /** The candle setup: 35-70% off the post-migration high, base holds, green reclaim on 1.5x volume. */
 export function bouncePattern(m: Mkt, c5: Candle[], migratedAt: number, C: ModeCfg<"bounce">): Pattern<{ base: number; dd: number; lo: number; plan: (entry: number, atr15: number) => ExitPlan }> {
-  if (m.liquidityUsd < C.minLiquidity) return { ok: false };
-  if (c5.length < 8) return { ok: false };
+  if (m.liquidityUsd < C.minLiquidity) return { ok: false, why: `too thin, $${Math.round(m.liquidityUsd / 1000)}k liquidity` };
+  if (c5.length < 8) return { ok: false, why: `${c5.length * 5} minutes of trading since migration, needs 40 to read a dip` };
   const hi = highestHigh(c5, migratedAt);
   const lo = lowestLow(c5, migratedAt);
   const dd = 1 - lo / hi;
@@ -61,7 +61,7 @@ export function bouncePattern(m: Mkt, c5: Candle[], migratedAt: number, C: ModeC
 async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promise<Signal | null> {
   const pre = await prefilter(s, "bounce");
   if (!pre.ok) { logLook("bounce", s, pre.why!, pre.holders); return null; }
-  if (s.liquidityUsd < C.minLiquidity || !s.pairAddress) return null;
+  if (s.liquidityUsd < C.minLiquidity || !s.pairAddress) { logLook("bounce", s, s.pairAddress ? `too thin, $${Math.round(s.liquidityUsd / 1000)}k liquidity (needs $${C.minLiquidity / 1000}k)` : "too thin, no pool yet"); return null; }
   const { c5, c15 } = await candles5and15(s.pairAddress);
   const p = bouncePattern(s, c5, migratedAt, C);
   if (!p.ok) { if (p.why) logLook("bounce", s, p.why, undefined, p.setup); return null; }

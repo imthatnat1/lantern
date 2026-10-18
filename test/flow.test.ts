@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 process.env.DB_PATH = ":memory:";
-const { divergence, flowFromTrades, flowVerdict } = await import("../src/data/flow.js");
+const { divergence, flowFromTrades, flowVerdict, microTrades } = await import("../src/data/flow.js");
 
 test("Minter on 18 Oct: 6,820 buys vs 2,963 sells in the hour, price -24.8%, is flagged", () => {
   assert.match(divergence({ buys1h: 6820, sells1h: 2963, change1h: -24.82 })!, /bot buys: 2\.3 buys per sell/);
@@ -51,4 +51,19 @@ test("Minter is on the block list, and a coin caught with bot buys is blocked fo
   assert.equal(blockedWhy("FRESHxxxx"), null);
   blockMint("FRESHxxxx", "bot buys: 2.3 buys per sell");
   assert.match(blockedWhy("FRESHxxxx")!, /blocked for 24h: bot buys/);
+});
+
+test("micro-trade bots are caught from the snapshot alone (18 Oct hot list)", () => {
+  const snap = (b5: number, s5: number, v5: number) => ({ buys5m: b5, sells5m: s5, volume5m: v5, volume1h: 0 });
+  // Bots: thousands of trades averaging cents to a dollar or two.
+  assert.match(microTrades(snap(1995, 1894, 6534))!, /bot volume: 3889 trades in 5m averaging \$1\.68/);   // FOMO
+  assert.ok(microTrades(snap(2261, 1685, 1915)));   // GTA 6 Coin, $0.49
+  assert.ok(microTrades(snap(1143, 576, 2765)));    // ₽, $1.61
+  // Real coins on the same list: $25-150 a trade.
+  assert.equal(microTrades(snap(262, 175, 29131)), null);   // SUPERCORE $67
+  assert.equal(microTrades(snap(187, 168, 36674)), null);   // TSI $103
+  assert.equal(microTrades(snap(10, 10, 493)), null);       // VELUM, quiet
+  assert.equal(microTrades(snap(40, 30, 50)), null, "too few trades to judge");
+  // Hour view when 5m is quiet.
+  assert.ok(microTrades({ buys5m: 5, sells5m: 5, volume5m: 20, buys1h: 500, sells1h: 400, volume1h: 2000 }));
 });

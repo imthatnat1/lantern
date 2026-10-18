@@ -9,7 +9,7 @@ import { db, cooldowns, audit, market, recorder, hot, type Setup } from "../db.j
 import { isCreativePair } from "../data/universe.js";
 import { isStonkListed } from "../data/stonkfun.js";
 import { buyersOf } from "../data/wallets.js";
-import { blockedWhy, blockMint, divergence, flow } from "../data/flow.js";
+import { blockedWhy, blockMint, divergence, flow, microTrades } from "../data/flow.js";
 
 export interface Context {
   now: number;
@@ -63,11 +63,13 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   if (cc) return { ok: false, why: `rejected: copycat ${cc}` };
   if (!pinned && (!s.mcapUsd || s.mcapUsd <= 0)) return { ok: false, why: "rejected: no market cap reported" };
   if (!s.onCurve && s.liquidityUsd <= 0) return { ok: false, why: "rejected: no liquidity reported" };
+  // KKK, $CAT, PANIC (18 Oct): market caps of $11-21 and a few dollars of volume. Nothing to trade.
+  if (!pinned && s.mcapUsd < 3_000) return { ok: false, why: `rejected: no real market, $${Math.round(s.mcapUsd)} market cap` };
   if (cooldowns.active(mode, s.mint)) return { ok: false, why: "cooldown after a recent stop-out" };
   if (!pinned) {
     const b = blockedWhy(s.mint);
     if (b) return { ok: false, why: `rejected: ${b}` };
-    const d = divergence(s);
+    const d = divergence(s) ?? microTrades(s);
     if (d) { blockMint(s.mint, d); return { ok: false, why: `rejected: ${d}` }; }
   }
   const safe = await rug.safety(s.mint, s.onCurve);
@@ -174,7 +176,8 @@ export function watchedMints(mode: Signal["mode"], now = Date.now(), max = 10): 
   // Then the hot list: coins that passed safety for this mode in the last 30 min and weren't rejected since,
   // so a coin "on its way" is re-checked every scan and gets bid the moment it meets the criteria.
   const onWay = (db.prepare(`SELECT mint FROM clean_seen WHERE mode=? AND at > ? AND (status IS NULL OR (status NOT LIKE 'rejected%'
-      AND status NOT LIKE '%dead%' AND status NOT LIKE 'cooldown%' AND status NOT LIKE 'no sell route%'))
+      AND status NOT LIKE '%dead%' AND status NOT LIKE 'cooldown%' AND status NOT LIKE 'no sell route%'
+      AND status NOT LIKE '%deeper than%' AND status NOT LIKE '%too deep%' AND status NOT LIKE 'too thin%'))
     ORDER BY at DESC LIMIT ?`).all(mode, now - 30 * 60_000, max) as { mint: string }[]).map(r => r.mint);
   return [...new Set([...setups, ...onWay])].slice(0, max);
 }
