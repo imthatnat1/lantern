@@ -6,6 +6,7 @@ import { ingest, scorecard, currentKols } from "./data/wallets.js";
 import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
+import { liveCandleStats } from "./data/livecandles.js";
 import { isFlagship, isStonkPair } from "./data/universe.js";
 import { isStonkListed } from "./data/stonkfun.js";
 
@@ -112,7 +113,7 @@ export function activity(now = Date.now(), windowMs = 3_600_000) {
   const seenMints = db.prepare(`SELECT DISTINCT s.mint, m.quote FROM (SELECT mint FROM signals_log WHERE at > ? UNION SELECT mint FROM clean_seen WHERE at > ?) s
     LEFT JOIN market m ON m.mint=s.mint`).all(since, since) as { mint: string; quote: string | null }[];
   const stonk = seenMints.filter(r => isStonkListed(r.mint) || isStonkPair({ mint: r.mint, quoteSymbol: r.quote ?? undefined })).length;
-  return { windowMs, checked, looked: rows.length, setups, rejected: nRejected, rejectedBy: rejected, bought, stonk };
+  return { windowMs, checked, looked: rows.length, setups, rejected: nRejected, rejectedBy: rejected, bought, stonk, charts: liveCandleStats(now) };
 }
 
 /**

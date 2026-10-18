@@ -1,6 +1,7 @@
 import type { Candle, Signal, TokenSnapshot } from "../types.js";
 import * as dex from "../data/dexscreener.js";
 import * as gecko from "../data/gecko.js";
+import * as live from "../data/livecandles.js";
 import * as rug from "../data/rugcheck.js";
 import * as jup from "../data/jupiter.js";
 import { config } from "../config.js";
@@ -202,15 +203,14 @@ export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, hol
 export function dist(price: number, level: number): number { return Math.abs(level - price) / price; }
 
 /**
- * One GeckoTerminal call per coin, not two: 180 five-minute candles (15h), with the 15m candles rolled up from
- * them. GeckoTerminal allows ~30 calls a minute per server (we keep to 15, Blossom shares the IP); with two calls
- * per check the scans asked for far more, the host kept "cooling", and checks failed (18 Oct: every flagship
- * dip check failed with "cooling api.geckoterminal.com").
+ * 5m candles (last 100, about 8h) and 15m candles rolled up from them. Built by data/livecandles.ts from DexScreener
+ * samples every 20s, with GeckoTerminal only for history the first time a coin is seen or after a break. Before
+ * 18 Oct evening every check was a GeckoTerminal call, and the shared 30/min limit kept "cooling" and failing checks.
  */
 export async function candles5and15(pair: string): Promise<{ c5: Candle[]; c15: Candle[] }> {
-  const all5 = await gecko.candles(pair, 5, 180);
+  const { c5: all5 } = await live.candles5(pair);
   const c15 = gecko.rollUp(all5).slice(-60);
-  try { if (c15.length) recorder.candles(pair, 15, c15); } catch { /* best effort, the lab reads these */ }
+  try { if (c15.length > 1) recorder.candles(pair, 15, c15.slice(0, -1)); } catch { /* best effort, the lab reads these */ }
   return { c5: all5.slice(-100), c15 };
 }
 

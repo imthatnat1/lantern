@@ -11,7 +11,9 @@ import * as rug from "./data/rugcheck.js";
 import { readPrice } from "./engine/price.js";
 import { evaluate } from "./engine/exits.js";
 import * as broker from "./engine/broker.js";
-import { logSignal, type Context, type Strategy } from "./strategies/base.js";
+import { candles5and15, logSignal, type Context, type Strategy } from "./strategies/base.js";
+import * as liveCandles from "./data/livecandles.js";
+import type { Candle } from "./types.js";
 import { ultra } from "./strategies/ultra.js";
 import { bounce } from "./strategies/bounce.js";
 import { pullback } from "./strategies/pullback.js";
@@ -50,8 +52,9 @@ async function exitLoop() {
       if (read.confirmed) markPrices.set(p.mint, read.price);
       const snap = await dex.snapshot(p.mint);
       if (snap) market.upsert(snap, p.meta.holders as number | undefined);
-      let c15: Awaited<ReturnType<typeof gecko.candles>> = [];
-      if (snap?.pairAddress) { try { c15 = await gecko.candles(snap.pairAddress, 15, 10); } catch { /* rate limited, judge on ticks only */ } }
+      // 15m closes from our own live candles (fresh every 20s), not a GeckoTerminal call per position.
+      let c15: Candle[] = [];
+      if (snap?.pairAddress) { try { c15 = (await candles5and15(snap.pairAddress)).c15; } catch { /* no history yet: judge on ticks only */ } }
       const lastClosed = c15.length >= 2 ? c15.at(-2) : undefined;
       const actions = evaluate(p, read, lastClosed, now);
       // Trusted copies mirror the wallet's exit: if any wallet that bought it has sold since we entered, we sell too.
@@ -181,6 +184,13 @@ async function main() {
     feedHealthy: Date.now() - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs,
   }));
   startLab();
+  // Live candles: price every wanted pair from DexScreener every 20s (see data/livecandles.ts).
+  let polling = false;
+  setInterval(async () => {
+    if (polling) return;
+    polling = true;
+    try { await liveCandles.poll(); } catch (e) { log.debug({ err: String(e) }, "live candles poll failed"); } finally { polling = false; }
+  }, liveCandles.POLL_MS);
   solPrice = await jup.solPrice();
   setInterval(async () => { solPrice = await jup.solPrice(); }, 60_000);
   const tick = async () => {
