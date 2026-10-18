@@ -23,6 +23,9 @@ export interface TokenSnapshot {
   volume5m: number;
   buys5m: number;
   sells5m: number;
+  /** Last hour's transaction counts. Optional: older recorded snapshots don't have them. */
+  buys1h?: number;
+  sells1h?: number;
   change5m: number;   // percent
   change1h: number;
   change6h: number;

@@ -8,6 +8,7 @@ import { isCopycat, isSlop } from "../engine/filters.js";
 import { cooldowns, audit, market, recorder, type Setup } from "../db.js";
 import { isCreativePair } from "../data/universe.js";
 import { buyersOf } from "../data/wallets.js";
+import { divergence, flow } from "../data/flow.js";
 
 export interface Context {
   now: number;
@@ -80,6 +81,16 @@ export async function gate(s: TokenSnapshot, mode: Signal["mode"], sizeUsd: numb
     const ts = await jup.testSell(s.mint, qty);
     if (!ts.routable) return { ok: false, why: "no sell route" };
     if (ts.impactPct > config.fees.exitImpactWarnPct) return { ok: false, why: `exit impact ${(ts.impactPct * 100).toFixed(1)}%` };
+    // Is the buying real? Bot micro-buys inflate buy counts and volume (Minter, 18 Oct).
+    const pinned = config.pinned.includes(s.mint);
+    if (!pinned) {
+      const d = divergence(s);
+      if (d) return { ok: false, why: `rejected: ${d}`, holders: pre.holders };
+      if (s.pairAddress) {
+        const fl = await flow(s.mint, s.pairAddress);
+        if (fl?.verdict) return { ok: false, why: `rejected: ${fl.verdict}`, holders: pre.holders };
+      }
+    }
   }
   return { ok: true, holders: pre.holders, top10: pre.top10, sniperPct: pre.sniperPct };
 }

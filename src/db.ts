@@ -267,6 +267,7 @@ export const recorder = {
     db.prepare("DELETE FROM candles WHERE t < ?").run(cut);
     db.prepare("DELETE FROM holders_history WHERE at < ?").run(cut);
     db.prepare("DELETE FROM safety_history WHERE at < ?").run(cut);
+    try { db.prepare("DELETE FROM flow_history WHERE at < ?").run(cut); } catch { /* table made by data/flow.ts */ }
   },
 };
 
