@@ -64,6 +64,37 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
   srv.listen(port, "0.0.0.0", () => log.info({ port }, "dashboard api listening"));
 }
 
+/**
+ * What the bot did in the last hour, so a quiet dashboard reads as "busy and choosy" rather than dead.
+ * checked = coins priced (every snapshot is recorded as a tick); the rest come from the looks log,
+ * counted per coin, with rejections grouped into plain-language reasons.
+ */
+const REJECT_GROUPS: [string, RegExp][] = [
+  ["bot volume", /bot volume|bot buys|real money is selling|blocked/i],
+  ["honeypot", /honeypot|freeze authority|mint authority|transfer fee|no sell route/i],
+  ["rug risk", /top 10|insiders|snipers|creator|danger|rugged|LP locked/i],
+  ["copycat or slop", /copycat|slop/i],
+  ["too new or thin", /holders|no liquidity|no market cap|exit impact|liquidity under/i],
+  ["overheated", /overheated|vertical launch|chasing|pump|ceiling/i],
+];
+export function activity(now = Date.now(), windowMs = 3_600_000) {
+  const since = now - windowMs;
+  const checked = (db.prepare("SELECT COUNT(DISTINCT mint) AS n FROM ticks WHERE at > ?").get(since) as { n: number }).n;
+  const rows = db.prepare(`SELECT s.mint, s.reason, s.setup, s.taken FROM signals_log s JOIN (SELECT mint, max(at) AS at FROM signals_log WHERE at > ? GROUP BY mint) l
+    ON l.mint=s.mint AND l.at=s.at`).all(since) as { mint: string; reason: string; setup: string | null; taken: number }[];
+  const rejected: Record<string, number> = {};
+  let nRejected = 0, setups = 0;
+  for (const r of rows) {
+    if (/^rejected/i.test(r.reason)) {
+      nRejected++;
+      const g = REJECT_GROUPS.find(([, re]) => re.test(r.reason))?.[0] ?? "other checks";
+      rejected[g] = (rejected[g] ?? 0) + 1;
+    } else if (r.setup && !blockedWhy(r.mint)) setups++;
+  }
+  const bought = (db.prepare("SELECT COUNT(*) AS n FROM positions WHERE entry_at > ?").get(since) as { n: number }).n;
+  return { windowMs, checked, looked: rows.length, setups, rejected: nRejected, rejectedBy: rejected, bought };
+}
+
 export function snapshotEquity(marks: Map<string, number>) {
   const a = broker.account();
   db.prepare("INSERT OR REPLACE INTO equity_history(at, equity, cash, vault) VALUES(?,?,?,?)")
@@ -149,7 +180,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
   const openPnl = open.reduce((s, o) => s + o.pnlUsd, 0);
 
   return {
-    at: now, paused: kv.get("paused", false),
+    at: now, paused: kv.get("paused", false), activity: activity(now),
     account: {
       cash: a.cash, vault: a.vault, equity: eq, peakEquity: a.peakEquity, startingCapital: config.startingCapital,
       realizedToday: broker.realizedToday(), openPnl, closedCount: closedAll.n, closedWins: closedAll.wins, closedPnl: closedAll.pnl,
