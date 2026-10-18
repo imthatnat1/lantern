@@ -4,7 +4,7 @@ import type { TokenSnapshot } from "../types.js";
 import { config } from "../config.js";
 import { log } from "../log.js";
 import { kv } from "../db.js";
-import { isStonkReward, stonkfunMints } from "./stonkfun.js";
+import { isStonkReward, stonkfunMints, stonkfunFresh, stonkFlagships } from "./stonkfun.js";
 
 /**
  * Where candidate coins come from. v1 found good coins (ZCAT, PURR, swordcat, the Stonk.fun
@@ -72,11 +72,28 @@ export async function trendingMints(): Promise<string[]> {
   try { return await dex.trendingSolana(); } catch { return []; }
 }
 
-/** Union of all sources, deduped, pinned first. */
+/**
+ * Union of all sources, deduped, pinned first, then the sources taken in turn: new Stonk.fun pairs, DexScreener
+ * trending, Stonk.fun's top coins, creative-pair searches. Scans take the first 90-120, so interleaving gives
+ * every source a fair share instead of letting the first list fill the slice.
+ */
 export async function allCandidates(): Promise<string[]> {
-  const [stonk, sf, trend] = await Promise.all([stonkMints(), stonkfunMints().catch(() => [] as string[]), trendingMints()]);
-  return [...new Set([...config.pinned, ...sf, ...stonk, ...trend])];
+  const [stonk, sf, fresh, trend] = await Promise.all([stonkMints(), stonkfunMints().catch(() => [] as string[]), stonkfunFresh().catch(() => [] as string[]), trendingMints()]);
+  return [...new Set([...config.pinned, ...interleave([fresh, trend, sf, stonk])])];
 }
+
+/** Round-robin merge: a1, b1, c1, a2, b2, c2, ... */
+export function interleave(lists: string[][]): string[] {
+  const out: string[] = [];
+  for (let i = 0; lists.some(l => i < l.length); i++) for (const l of lists) if (i < l.length) out.push(l[i]);
+  return out;
+}
+
+/** Flagships for dip-watching: the pinned coins plus Stonk.fun's biggest coins with a real pool. */
+export function flagshipMints(): string[] {
+  return [...new Set([...config.pinned, ...stonkFlagships()])];
+}
+export function isFlagship(mint: string): boolean { return flagshipMints().includes(mint); }
 
 export function isQuality(s: TokenSnapshot, holders?: number): boolean {
   const ageDays = (Date.now() - s.createdAt) / 86_400_000;

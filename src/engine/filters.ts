@@ -21,7 +21,8 @@ export function isSlop(s: TokenSnapshot, holders: number | undefined): string | 
   if (s.website) {
     try {
       const u = new URL(s.website);
-      if (/\.(com\.co|xyz|top|icu|click|buzz|rest|monster)$/i.test(u.hostname)) return `cheap domain ${u.hostname}`;
+      // stonkfun.xyz is the launchpad's own page for the coin, not a cheap template site.
+      if (/\.(com\.co|xyz|top|icu|click|buzz|rest|monster)$/i.test(u.hostname) && !/(^|\.)stonkfun\.xyz$/i.test(u.hostname)) return `cheap domain ${u.hostname}`;
       if (/x\.com\/i\/communities|twitter\.com\/i\/communities|facebook\.com/i.test(s.website)) return "social link as website";
     } catch { /* ignore bad urls */ }
   }

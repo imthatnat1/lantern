@@ -19,6 +19,7 @@ import { dip } from "./strategies/dip.js";
 import { ride } from "./strategies/ride.js";
 import { startServer, snapshotEquity } from "./server.js";
 import { ensureWebhook, soldSince, rotateKols } from "./data/wallets.js";
+import { takeGraduations } from "./data/stonkfun.js";
 
 const strategies: Strategy[] = [ride, dip, ultra, bounce, pullback, trusted];
 const lastRun = new Map<string, number>();
@@ -28,12 +29,13 @@ let solPrice = 150;
 let lastDexOk = Date.now();
 
 const feed = new PumpPortal();
-feed.on("migration", (m: { mint: string; at: number }) => {
+function addMigration(m: { mint: string; at: number }) {
   migrations.set(m.mint, m.at);
   try { recorder.migration(m.mint, m.at); } catch { /* best effort */ }
   for (const [k, v] of migrations) if (Date.now() - v > 12 * 3_600_000) migrations.delete(k);
   kv.set("migrations", [...migrations.entries()]);
-});
+}
+feed.on("migration", addMigration);
 
 async function exitLoop() {
   const open = positions.open();
@@ -81,7 +83,9 @@ async function missedRunnersLoop() {
   if (now - lastMissedAt < 20 * 60_000) return;
   lastMissedAt = now;
   const since = now - 48 * 3_600_000;
-  const rows = db.prepare(`SELECT DISTINCT mint, COALESCE(pair, '') AS pair FROM signals_log WHERE at > ? AND taken=0 ORDER BY at DESC LIMIT 120`).all(since) as { mint: string; pair: string }[];
+  // Would-have-bought signals from paused modes first, so their outcome is always tracked; then the latest looks.
+  const rows = db.prepare(`SELECT mint, COALESCE(pair, '') AS pair, MAX(reason LIKE '%paused: watching only%') AS w, MAX(at) AS t FROM signals_log
+    WHERE at > ? AND taken=0 GROUP BY mint, COALESCE(pair, '') ORDER BY w DESC, t DESC LIMIT 120`).all(since) as { mint: string; pair: string }[];
   if (!rows.length) return;
   const byMint = await dex.pairsByMint([...new Set(rows.map(r => r.mint))].slice(0, 90));
   const upd = db.prepare(`UPDATE signals_log SET last_price=?, peak_price=MAX(peak_price, ?), peak_checked_at=? WHERE mint=? AND COALESCE(pair, '')=? AND at > ?`);
@@ -121,13 +125,16 @@ async function holdersLoop() {
 async function scanLoop() {
   const now = Date.now();
   if (kv.get("paused", false)) return;
+  // Stonk.fun graduations (seen in its API every 10 min) go to bounce the same way pump.fun migrations do.
+  for (const g of takeGraduations()) { addMigration(g); log.info({ mint: g.mint }, "stonkfun graduation"); }
   const ctx: Context = { now, solPrice, migrations };
   const feedHealthy = now - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs;
   for (const s of strategies) {
     // Paused modes still watch (at a third of the pace, to spare GeckoTerminal) so their setups show on
     // the dashboard and their candles get recorded for the lab. They just never buy.
     const paused = config.pausedModes.includes(s.name);
-    if (now - (lastRun.get(s.name) ?? 0) < s.everyMs * (paused ? 3 : 1)) continue;
+    // Paused dip still runs at full pace: it's the flagship dip watch (fewer coins, flagships first, see dip.ts).
+    if (now - (lastRun.get(s.name) ?? 0) < s.everyMs * (paused && s.name !== "dip" ? 3 : 1)) continue;
     lastRun.set(s.name, now);
     let sigs;
     try { sigs = await s.scan(ctx); } catch (e) { log.warn({ mode: s.name, err: String(e) }, "scan failed"); continue; }
