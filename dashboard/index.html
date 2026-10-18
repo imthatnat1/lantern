@@ -219,6 +219,10 @@
 <p class="dim" style="font-size:13px;margin:0 0 6px">Clean coins with a setup forming. The bar shows how close price is to the trigger. Closest first.</p>
 <div id="hot"></div>
 
+<h2>Would have bought <small id="wouldCount"></small></h2>
+<p class="dim" style="font-size:13px;margin:0 0 6px">Paused modes keep looking. Dip is paused, so it watches flagships (your pinned coins and Stonk.fun's biggest) and logs where it would have bought. No money used. How these play out decides when dip comes back.</p>
+<div id="would"></div>
+
 <h2>Today's trades <small id="tradesSummary"></small></h2>
 <div class="legend"><span><i style="background:var(--blossom)"></i>bought</span><span><i style="background:var(--sage)"></i>sold at a profit</span><span><i style="background:var(--coral)"></i>sold at a loss</span></div>
 <div class="chips" id="tradeChips" style="margin-top:6px"></div>
@@ -420,6 +424,22 @@ function setupBlock(l) {
   </div>`;
 }
 
+function wouldRows(rows) {
+  const done = rows.filter(r => r.nowX != null);
+  const up = done.filter(r => r.nowX > 1.0001).length;
+  $("wouldCount").textContent = rows.length ? `${rows.length} in 48h · ${up} up now` : "";
+  if (!rows.length) return `<div class="empty">No would-buys yet. Dip checks flagships every 5 minutes.</div>`;
+  return rows.map(r => {
+    const now = r.nowX == null ? null : r.nowX - 1, peak = r.peakX == null ? null : r.peakX - 1;
+    return `<div class="card">
+      <div class="head">${av(r.symbol, r.market)}<div class="sym">${esc(r.symbol)}<small>${esc(r.mode)}</small>${r.flagship ? '<small class="dim">flagship</small>' : ""}</div>
+        <div class="gain ${now == null ? "" : now >= 0 ? "up" : "down"}">${now == null ? "—" : pct(now)}<small>since the signal</small></div>
+        ${links(r.mint, r.market)}</div>
+      <div class="note">Would have bought at ${px(r.price)}${r.mcap ? ` (${big(r.mcap)})` : ""} · ${ago(Date.now() - r.at)} ago · best since ${peak == null ? "—" : pct(peak)} · score ${Math.round(r.score)}</div>
+    </div>`;
+  }).join("");
+}
+
 function hotRows(looks, open) {
   const held = new Set(open.map(o => o.mint));
   // Watching = passed every safety check and a setup is forming. Rejected coins live in "Looked at" below.
@@ -577,6 +597,7 @@ function render(s) {
   $("open").innerHTML = openRows(s.open);
   $("hotCount").textContent = "updated " + ago(Date.now() - s.at) + " ago";
   $("hot").innerHTML = hotRows(s.looks, s.open);
+  $("would").innerHTML = wouldRows(s.wouldBuy || []);
   $("trades").innerHTML = tradeRows(s.fills);
   $("modes").innerHTML = modeTable(s.byMode);
   $("wallets").innerHTML = walletTable(s.wallets || []);
@@ -757,6 +778,10 @@ function demo() {
     ],
     equity: eq,
     byMode: [{ mode: "pullback", n: 6, wins: 3, pnl: 14.2, open: 1 }, { mode: "ultra", n: 4, wins: 2, pnl: 3.1, open: 1 }, { mode: "bounce", n: 5, wins: 2, pnl: -2.6, open: 0 }, { mode: "trusted", n: 3, wins: 2, pnl: 1.9, open: 1 }],
+    wouldBuy: [
+      { mode: "dip", mint: "6GmAFSYs4gk3FDao5FzzySQpPZaWsa4rUJHacpMpUNgx", symbol: "STONK", score: 68, at: now - 5 * 3600e3, price: 0.0021, peak_price: 0.00246, last_price: 0.00232, mcap: 2.1e6, peakX: 1.17, nowX: 1.105, flagship: true, market: mk("STONK", "SOL", 0.00232, 2.3e6, 310000, [1, 6, 12], 9100, 60 * 24, 900000) },
+      { mode: "dip", mint: "8RNUw4N655VSrZKuhGdywhbSMDTrheguFPfxbpE2NZHQ", symbol: "PURR", score: 61, at: now - 11 * 3600e3, price: 0.0181, peak_price: 0.0188, last_price: 0.0163, mcap: 1.8e6, peakX: 1.04, nowX: 0.9, flagship: true, market: mk("PURR", "HYPE", 0.0163, 1.6e6, 220000, [-2, -6, -9], 5200, 40 * 24, 410000) },
+    ],
     looks: [
       { mode: "trusted", mint: "6VsnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpGjm", symbol: "SOUVENIR", score: 0, reason: "1 trusted wallet bought, but mcap $246k > $150k ceiling (copy latency: we'd buy their exit)", at: now - 2.4 * 3600e3, market: mk("SOUVENIR", "SOL", 0.000273, 265000, 45400, [3.4, 20, 59], 1200, 13 * 24, 220000, ["1 trusted bought"]) },
       { mode: "pullback", mint: "Hmqnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxfart", symbol: "SEXCOIN", score: 0, reason: "watching: only 9% off the high, waiting for a 20-40% retrace", at: now - 12 * 60e3, watchedSince: now - 95 * 60e3, setup: { need: "pull back to 0.000212 (20% off the 1h high)", level: 0.000212, distance: 0.11 }, market: mk("SEXCOIN", "SOL", 0.000233, 228000, 43100, [11, 434, 434], 800, 1.7, 1.49e6, ["1 KOL buy"]) },

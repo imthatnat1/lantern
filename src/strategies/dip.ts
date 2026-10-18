@@ -3,7 +3,7 @@ import { log } from "../log.js";
 import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
-import { allCandidates, isPinned, isQuality, isStonkPair } from "../data/universe.js";
+import { allCandidates, flagshipMints, isFlagship, isPinned, isQuality, isStonkPair } from "../data/universe.js";
 import { watchedMints, watchedFirst, buySellRatio, candles5and15, dex, gate, dist, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"dip"> = config.modes.dip;
@@ -24,12 +24,15 @@ export const dip: Strategy = {
   async scan(ctx: Context): Promise<Signal[]> {
     const out: Signal[] = [];
     const watched = watchedMints("dip", ctx.now);
-    const mints = [...new Set([...watched, ...await allCandidates()])];
+    const mints = [...new Set([...watched, ...flagshipMints(), ...await allCandidates()])];
     const snaps = await dex.snapshots(mints.slice(0, 120));
     // Candles are the scarce resource (GeckoTerminal 30/min per IP). Check the most active coins first, cap per scan.
     // Only coins dip is allowed to trade compete for the slots (pinned first), so junk doesn't crowd out ZCAT/PURR/the creative pairs.
-    const ranked = watchedFirst(watched, [...snaps.values()].filter(s => isPinned(s.mint) || isStonkPair(s) || isQuality(s)), 20,
-      (a, b) => (Number(isPinned(b.mint)) - Number(isPinned(a.mint))) || (b.volume1h || 0) - (a.volume1h || 0));
+    // Paused, dip is the flagship dip watch: fewer slots, flagships first (pinned + Stonk.fun's biggest coins).
+    // Its would-buys are logged and tracked, never bought (main.ts).
+    const paused = config.pausedModes.includes("dip");
+    const ranked = watchedFirst(watched, [...snaps.values()].filter(s => isFlagship(s.mint) || isStonkPair(s) || isQuality(s)), paused ? 12 : 20,
+      (a, b) => (Number(isFlagship(b.mint)) - Number(isFlagship(a.mint))) || (Number(isPinned(b.mint)) - Number(isPinned(a.mint))) || (b.volume1h || 0) - (a.volume1h || 0));
     for (const s of ranked) {
       try {
         const sig = await check(s, ctx);

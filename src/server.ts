@@ -6,6 +6,7 @@ import { ingest, scorecard, currentKols } from "./data/wallets.js";
 import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
+import { isFlagship } from "./data/universe.js";
 
 /**
  * JSON API for the dashboard. Bearer token from DASHBOARD_TOKEN.
@@ -167,6 +168,13 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       watchedSince: (db.prepare("SELECT min(at) AS t FROM signals_log WHERE mode=? AND mint=? AND at > ?").get(r.mode, r.mint, now - 24 * 3_600_000) as any)?.t ?? r.at, market: mkt(r.mint) }));
 
   // Missed runners: anything we declined in 48h that then went 2x or more from the look price.
+  // Would have bought: full signals from paused modes (dip = the flagship dip watch), latest per coin in 48h,
+  // with how price went after. Paper money is never used; this is how a paused mode earns its way back.
+  const wouldBuy = (db.prepare(`SELECT s.mode, s.mint, s.symbol, s.score, s.at, s.price, s.peak_price, s.last_price, s.mcap FROM signals_log s
+    JOIN (SELECT mode, mint, max(at) AS at FROM signals_log WHERE at > ? AND taken=0 AND reason LIKE '%paused: watching only%' GROUP BY mode, mint) l
+    ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at ORDER BY s.at DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
+    .map(r => ({ ...r, peakX: r.price ? r.peak_price / r.price : null, nowX: r.price ? r.last_price / r.price : null, flagship: isFlagship(r.mint), market: mkt(r.mint) }));
+
   const missed = (db.prepare(`SELECT mode, mint, symbol, reason, at, price, peak_price, last_price, mcap FROM signals_log
     WHERE taken=0 AND at > ? AND mcap >= 5000 AND peak_price >= price * 2 ORDER BY peak_price / price DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
     .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, market: mkt(r.mint) }));
@@ -189,7 +197,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     health: { ...health, rejectedTicks24h: rejected.n, rejected: rejectedRows, startedAt: kv.get("startedAt", now), uptimeMs: now - kv.get("startedAt", now),
       helius: { keyLooksValid: /^[0-9a-f-]{36}$/.test(config.keys.helius ?? ""), lastOkAt: kv.get("helius:lastOkAt", 0), lastErr: kv.get("helius:lastErr", "") }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
-    open, closed, fills, equity, byMode, looks, missed: [...missed, ...stoppedThenRan],
+    open, closed, fills, equity, byMode, looks, wouldBuy, missed: [...missed, ...stoppedThenRan],
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
   };
 }

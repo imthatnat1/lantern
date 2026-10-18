@@ -7,6 +7,7 @@ import { config } from "../config.js";
 import { isCopycat, isSlop } from "../engine/filters.js";
 import { db, cooldowns, audit, market, recorder, type Setup } from "../db.js";
 import { isCreativePair } from "../data/universe.js";
+import { isStonkListed } from "../data/stonkfun.js";
 import { buyersOf } from "../data/wallets.js";
 import { blockedWhy, blockMint, divergence, flow } from "../data/flow.js";
 
@@ -48,7 +49,9 @@ export function sniperPenalty(g: Gate): number { return -Math.min(20, Math.round
  */
 export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise<Gate> {
   const pinned = config.pinned.includes(s.mint);
-  const cc = pinned ? null : isCopycat(s);
+  // Stonk.fun coins are themed on stocks and brands (xStocks, OPENAI, SPCX pairs). That's the platform, not a copy,
+  // so coins Stonk.fun itself lists skip the name check. Every rug check below still applies.
+  const cc = pinned || isStonkListed(s.mint) ? null : isCopycat(s);
   if (cc) return { ok: false, why: `rejected: copycat ${cc}` };
   if (!pinned && (!s.mcapUsd || s.mcapUsd <= 0)) return { ok: false, why: "rejected: no market cap reported" };
   if (!s.onCurve && s.liquidityUsd <= 0) return { ok: false, why: "rejected: no liquidity reported" };
