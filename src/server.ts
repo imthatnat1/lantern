@@ -87,9 +87,13 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
  * counted per coin, with rejections grouped into plain-language reasons.
  */
 const REJECT_GROUPS: [string, RegExp][] = [
+  ["scam relaunch", /scam relaunch/i],
+  ["no socials", /no website or socials|no community, only/i],
+  ["socials unreadable", /couldn't read its socials/i],
+  ["rug risk", /crashed \d+% in an hour/i],
   ["bot volume", /bot volume|bot buys|real money is selling|blocked/i],
   ["honeypot", /honeypot|freeze authority|mint authority|transfer fee|no sell route/i],
-  ["rug risk", /top 10|insiders|snipers|creator|danger|rugged|LP locked/i],
+  ["rug risk", /top 10|insiders|snipers|creator|danger|rugged|LP locked|crashed/i],
   ["copycat or slop", /copycat|slop/i],
   ["too new or thin", /holders|no liquidity|no market cap|exit impact|liquidity under|bounce floor|no real market/i],
   ["overheated", /overheated|vertical launch|chasing|pump|ceiling/i],

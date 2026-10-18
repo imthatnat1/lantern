@@ -132,10 +132,34 @@ const insFlow = db.prepare("INSERT OR IGNORE INTO flow_history(mint,at,micro,top
  * for a setup the buy check would refuse anyway. Permanent blocks come from config (Minter).
  */
 const blocks = new Map<string, { until: number; why: string }>(kv.get<[string, { until: number; why: string }][]>("flow:blocks", []));
-export function blockMint(mint: string, why: string, hours = 24) {
+export function blockMint(mint: string, why: string, hours = 24, name?: string) {
   blocks.set(mint, { until: Date.now() + hours * 3_600_000, why });
   for (const [k, v] of blocks) if (v.until < Date.now()) blocks.delete(k);
   kv.set("flow:blocks", [...blocks]);
+  if (name) burnName(name, mint, why);
+}
+
+/**
+ * Burned names. GTA 6 Coin (18 Oct): caught as a cent-trade bot coin at 17:00, then a new mint with the same name
+ * showed up on the hot list at 20:38 and rugged 97% two minutes later. Scammers relaunch a name that drew attention.
+ * When a coin is caught botting, flagged rugged, or crashes 80% in an hour, any OTHER coin with the same name is
+ * refused for 48 hours. Names are compared without case, spaces or symbols ("GTA 6 Coin" = "gta6coin").
+ */
+type Burn = { at: number; until: number; why: string; name: string; mint: string };
+const burned = new Map<string, Burn>(kv.get<[string, Burn][]>("flow:burnedNames", []));
+export function nameKey(name: string): string { return name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, ""); }
+export function burnName(name: string, mint: string, why: string, hours = 48) {
+  const k = nameKey(name);
+  if (k.length < 4) return;   // "CAT", "AI": too common to burn
+  burned.set(k, { at: Date.now(), until: Date.now() + hours * 3_600_000, why, name, mint });
+  for (const [x, v] of burned) if (v.until < Date.now()) burned.delete(x);
+  kv.set("flow:burnedNames", [...burned]);
+}
+export function burnedWhy(name: string, mint: string): string | null {
+  const b = burned.get(nameKey(name));
+  if (!b || b.until < Date.now() || b.mint === mint) return null;
+  const ago = Math.max(1, Math.round((Date.now() - b.at) / 3_600_000));
+  return `scam relaunch: a coin called "${b.name}" was caught ${ago}h ago (${b.why})`;
 }
 export function blockedWhy(mint: string): string | null {
   if (config.blocked.includes(mint)) return "blocked: bot-pumped volume (on the block list)";
@@ -144,7 +168,7 @@ export function blockedWhy(mint: string): string | null {
 }
 
 /** Recent trades on a pool from GeckoTerminal. Cached 2 minutes. Null when unavailable. */
-export async function flow(mint: string, pool: string): Promise<{ f: Flow; verdict: string | null } | null> {
+export async function flow(mint: string, pool: string, name?: string): Promise<{ f: Flow; verdict: string | null } | null> {
   try {
     const r = await getJson<{ data?: { attributes: { kind: string; volume_in_usd: string; tx_from_address: string; block_timestamp: string } }[] }>(
       `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pool}/trades`, { ttlMs: 2 * 60_000 });
@@ -155,10 +179,13 @@ export async function flow(mint: string, pool: string): Promise<{ f: Flow; verdi
     if (!trades.length) return null;
     const f = flowFromTrades(trades);
     const verdict = flowVerdict(f);
-    if (verdict) blockMint(mint, verdict);
+    if (verdict) blockMint(mint, verdict, 24, name);
     try { insFlow.run(mint, Date.now(), f.microBuyShare, f.top3BuyShare, f.buyUsd, f.sellUsd, f.buys, f.buyers, verdict); } catch { /* best effort */ }
     return { f, verdict };
   } catch {
     return null;
   }
 }
+
+/** Test helper. */
+export function _resetBlocks() { blocks.clear(); burned.clear(); }
