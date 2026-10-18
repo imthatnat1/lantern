@@ -47,8 +47,10 @@ export const config = {
    * budget for the other modes. Open positions keep being managed. PAUSED_MODES in .env adds more.
    * dip (18 Oct): the lab replayed 12 dip trades, 2 winners, -$11.31; the live bot only avoided
    * them because it was rate-limited or not checking those coins.
+   * ride (19 Oct): live 6 trades, -$8.67; lab 17 trades, 2 winners, -$17.88. Its coins ($1M+) never ran past 1.8x.
+   * Paused modes still scan and log would-buys, so nothing it would have caught goes unseen.
    */
-  pausedModes: ["dip", ...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
+  pausedModes: ["dip", "ride", ...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
   /**
    * Always checked, like pinned coins, but with every safety check still applied (pinned coins skip
    * RugCheck and the copycat filter). For coins Nat wants eyes on but hasn't vouched for.
@@ -153,6 +155,10 @@ export const config = {
       maxAboveLowX: 1.6,
       // Nat, 18 Oct: no bounce entries under $45k. Fresh graduations start ~$60k; well under that it has already dumped.
       mcapMin: 45_000,
+      // 19 Oct: the floor cost us PIERRE (26x from $32k), mucron (18x from $43k), MEGA (10x), OPEQ (6.5x). Each had
+      // thousands of holders and $34k+ of liquidity; the rugs it caught (PRIME, NVIDIA, GREEN) had ~$2k. So a coin
+      // with a real crowd can enter from $25k, at half size.
+      crowdMcapMin: 25_000, crowdHolders: 1_000, crowdLiquidity: 25_000, crowdSizeUsd: 2,
     },
     pullback: {
       scanEveryMs: 2 * 60_000,

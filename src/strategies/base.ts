@@ -90,7 +90,10 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   // No website, X or Telegram: no community forming (Nat, 18 Oct). Her hand-picked watch list is exempt.
   if (!pinned && !handPicked) {
     const links = { website: s.website, twitter: s.twitter, telegram: s.telegram };
-    const sw = isStonkListed(s.mint) ? await socialsWhy(s.mint, links, safe.metaUri) : dexProfileWhy(links);
+    // PIERRE (19 Oct, 2.1h old, 7,612 holders) was refused for no DexScreener links, then ran 8x: a team rarely sets up
+    // DexScreener in the first hours. Under 3h old with 1,000+ holders, the launch links count, as for Stonk.fun coins.
+    const young = ageHours(s) < 3 && (safe.holders ?? 0) >= 1_000;
+    const sw = isStonkListed(s.mint) || young ? await socialsWhy(s.mint, links, safe.metaUri) : dexProfileWhy(links);
     if (sw) return { ok: false, why: `rejected: ${sw}` };
     // TTP (18 Oct 21:25): holders +8,330% in 10 minutes, an hour after launch. Real coins don't grow 6x in holders in
     // ten minutes once they're past the launch rush; that's a wallet farm faking a crowd to beat holder floors.
@@ -207,12 +210,24 @@ export function watchedMints(mode: Signal["mode"], now = Date.now(), max = 10): 
   return [...new Set([...setups, ...onWay])].slice(0, max);
 }
 
-/** Watched coins first (up to two thirds of the cap), then the rest by the mode's own ranking. */
-export function watchedFirst(watched: string[], snaps: TokenSnapshot[], cap: number, rank: (a: TokenSnapshot, b: TokenSnapshot) => number): TokenSnapshot[] {
+const lastChecked = new Map<string, number>();
+/**
+ * Which coins a scan fully checks. Watched coins first (up to half the cap), then a quarter of the slots for coins this
+ * mode hasn't checked in the last hour, then the rest by the mode's own ranking.
+ * 19 Oct: Watching turned over too slowly. Watched coins took two thirds of the slots and the open ones went to the
+ * same top-volume coins every scan, so new coins rarely got a look. The fresh slots make room for them.
+ */
+export function watchedFirst(watched: string[], snaps: TokenSnapshot[], cap: number, rank: (a: TokenSnapshot, b: TokenSnapshot) => number, mode = "", now = Date.now()): TokenSnapshot[] {
   const w = new Set(watched);
-  const first = snaps.filter(s => w.has(s.mint)).sort((a, b) => watched.indexOf(a.mint) - watched.indexOf(b.mint)).slice(0, Math.ceil(cap * 2 / 3));
+  const first = snaps.filter(s => w.has(s.mint)).sort((a, b) => watched.indexOf(a.mint) - watched.indexOf(b.mint)).slice(0, Math.ceil(cap / 2));
   const taken = new Set(first.map(s => s.mint));
-  return [...first, ...snaps.filter(s => !taken.has(s.mint)).sort(rank)].slice(0, cap);
+  const rest = snaps.filter(s => !taken.has(s.mint)).sort(rank);
+  const fresh = rest.filter(s => now - (lastChecked.get(`${mode}:${s.mint}`) ?? 0) > 3_600_000).slice(0, Math.ceil(cap / 4));
+  for (const s of fresh) taken.add(s.mint);
+  const out = [...first, ...fresh, ...rest.filter(s => !taken.has(s.mint))].slice(0, cap);
+  for (const s of out) lastChecked.set(`${mode}:${s.mint}`, now);
+  if (lastChecked.size > 20_000) for (const [k, t] of lastChecked) if (now - t > 3_600_000) lastChecked.delete(k);
+  return out;
 }
 
 const lastLook = new Map<string, number>();

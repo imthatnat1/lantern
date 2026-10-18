@@ -32,7 +32,7 @@ export const dip: Strategy = {
     // Its would-buys are logged and tracked, never bought (main.ts).
     const paused = config.pausedModes.includes("dip");
     const ranked = watchedFirst(watched, [...snaps.values()].filter(s => isFlagship(s.mint) || isStonkPair(s) || isQuality(s)), paused ? 12 : 20,
-      (a, b) => (Number(isFlagship(b.mint)) - Number(isFlagship(a.mint))) || (Number(isPinned(b.mint)) - Number(isPinned(a.mint))) || (b.volume1h || 0) - (a.volume1h || 0));
+      (a, b) => (Number(isFlagship(b.mint)) - Number(isFlagship(a.mint))) || (Number(isPinned(b.mint)) - Number(isPinned(a.mint))) || (b.volume1h || 0) - (a.volume1h || 0), "dip");
     for (const s of ranked) {
       try {
         const sig = await check(s, ctx);

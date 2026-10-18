@@ -18,7 +18,7 @@ import type { Mode } from "../types.js";
 import { pairScore } from "../strategies/base.js";
 import { isStonkPair } from "../data/universe.js";
 import { pullbackPattern, pullbackQualifies } from "../strategies/pullback.js";
-import { bouncePattern } from "../strategies/bounce.js";
+import { bounceFloor, bouncePattern } from "../strategies/bounce.js";
 import { dipPattern, dipPlan } from "../strategies/dip.js";
 import { ultraPattern, ultraPlan, ultraWindow } from "../strategies/ultra.js";
 import { rideCorePlan, rideLeader, rideSleeve } from "../strategies/ride.js";
@@ -82,9 +82,10 @@ function passesGate(h: CoinHistory, now: number, ageH: number, change1h: number,
 
 interface Candidate { trade: LabTrade; exitAt: number }
 
-function sizeFor(mode: Mode, liq: number, o?: ModeOverrides, extra?: { leg?: string; wallets?: number }): number {
+function sizeFor(mode: Mode, liq: number, o?: ModeOverrides, extra?: { leg?: string; wallets?: number; sizeUsd?: number }): number {
   let size: number;
-  if (mode === "ultra") { const C = cfg("ultra", o); size = Math.min(C.maxSizeUsd, config.startingCapital * C.sizePctEquity); }
+  if (extra?.sizeUsd) size = extra.sizeUsd;
+  else if (mode === "ultra") { const C = cfg("ultra", o); size = Math.min(C.maxSizeUsd, config.startingCapital * C.sizePctEquity); }
   else if (mode === "ride") { const C = cfg("ride", o); size = extra?.leg === "core" ? C.coreSizeUsd : C.sleeveSizeUsd; }
   else if (mode === "trusted") { const C = cfg("trusted", o); size = (extra?.wallets ?? 1) >= 2 ? C.sizeUsdTwoWallets : C.sizeUsd; }
   else size = (cfg(mode, o) as { sizeUsd: number }).sizeUsd;
@@ -92,7 +93,7 @@ function sizeFor(mode: Mode, liq: number, o?: ModeOverrides, extra?: { leg?: str
 }
 
 function enter(h: CoinHistory, mode: Mode, now: number, why: string, plan: (e: number, a: number) => import("../types.js").ExitPlan,
-  realShare: number, exp: Experiment, extra?: { leg?: string; wallets?: number }): Candidate | null {
+  realShare: number, exp: Experiment, extra?: { leg?: string; wallets?: number; sizeUsd?: number }): Candidate | null {
   const fill = h.tickAfter(now, 6 * 60_000);
   if (!fill) return null;
   const size = sizeFor(mode, fill.liquidity, exp.config, extra);
@@ -135,13 +136,15 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
     } else if (mode === "bounce") {
       const C = cfg("bounce", o);
       if (migratedAt == null || now < migratedAt || now - migratedAt > C.maxSinceMigrationH * 3_600_000) continue;
-      if ((m.mcapUsd ?? 0) < (C.mcapMin ?? 0)) continue;
+      // Holders unknown in the replay = can't prove a crowd, so under $45k it's treated as 0 holders.
+      const floor = bounceFloor(m.mcapUsd ?? 0, m.liquidityUsd ?? 0, h.holdersAt(now) ?? 0, C);
+      if (floor.why) continue;
       if (!passesGate(h, now, ageH, m.change1h, m.change6h, g)) continue;
       const { c5, realShare } = h.c5At(now);
       const p = bouncePattern(m, c5, migratedAt, C);
       if (!p.ok) continue;
       if ((h.holdersAt(now) ?? Infinity) < C.minHolders) continue;
-      const c = enter(h, mode, now, `bounce from -${(p.dd * 100).toFixed(0)}% post-migration`, p.plan, realShare, exp);
+      const c = enter(h, mode, now, `bounce from -${(p.dd * 100).toFixed(0)}% post-migration${floor.crowd ? ", early" : ""}`, p.plan, realShare, exp, floor.crowd ? { sizeUsd: C.crowdSizeUsd } : undefined);
       if (c) { out.push(c); blockedUntil = c.exitAt + C.cooldownMs; }
     } else if (mode === "dip") {
       const C = cfg("dip", o);

@@ -69,3 +69,20 @@ test("stablecoin tickers are rejected as copycats, real names aren't", async () 
   for (const t of ["USDF", "USDT", "USDC", "$USD1", "PYUSD", "FDUSD", "DAI", "EURC"]) assert.ok(re.test(t), t);
   for (const t of ["USDUC", "TSI", "DAIKON", "USDFUN", "SUPERCORE", "BUSDY2"]) assert.ok(!re.test(t), t);
 });
+
+test("Watching is for coins near a buy: far setups and breaking-down coins leave, new arrivals get a tag", () => {
+  const far = (mint: string, distance: number) => db.prepare("INSERT INTO signals_log(mode,mint,symbol,score,taken,reason,price,at,setup) VALUES('ultra',?,?,0,0,'watching: x',1,?,?)")
+    .run(mint, mint, NOW - M, JSON.stringify({ need: "recover to 1.8x the dump low", level: 1, distance }));
+  // TSI at 22:41 on 18 Oct: an ultra setup 35.9% away, refreshed every check, so it never left the list.
+  hot.clean("ultra", "TSIFAR", "TSIFAR", 1, NOW - 3 * M); far("TSIFAR", 0.359);
+  hot.clean("ultra", "NEAR", "NEAR", 1, NOW - 3 * M); far("NEAR", 0.08);
+  hot.clean("ride", "BROKE", "BROKE", 1, NOW - 3 * M); hot.status("ride", "BROKE", "printed a 1h lower low, structure broken", NOW - 2 * M);
+  const h = hotList(NOW);
+  const mints = h.map(x => x.mint);
+  assert.ok(!mints.includes("TSIFAR"), "more than 25% from its trigger");
+  assert.ok(!mints.includes("BROKE"), "the mode says it's breaking down");
+  assert.ok(mints.includes("NEAR"));
+  assert.equal(h.find(x => x.mint === "NEAR")!.chips[0], "new", "joined in the last 30 minutes");
+  // Still checked first behind the scenes, so it comes back on its own when it gets close.
+  assert.ok(watchedMints("ultra", NOW).includes("TSIFAR"));
+});

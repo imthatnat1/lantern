@@ -25,7 +25,7 @@ export const ultra: Strategy = {
     const mints = [...new Set([...watched, ...await allCandidates()])];
     const snaps = await dex.snapshots(mints.slice(0, 90));
     // Candles are the scarce resource (GeckoTerminal 30/min per IP). Coins with a setup forming first, then the most active, cap per scan.
-    const ranked = watchedFirst(watched, [...snaps.values()], 20, (a, b) => (b.volume1h || 0) - (a.volume1h || 0));
+    const ranked = watchedFirst(watched, [...snaps.values()], 20, (a, b) => (b.volume1h || 0) - (a.volume1h || 0), "ultra");
     for (const s of ranked) {
       try {
         const sig = await check(s, ctx);

@@ -58,17 +58,36 @@ export function bouncePattern(m: Mkt, c5: Candle[], migratedAt: number, C: ModeC
   };
 }
 
+/**
+ * The market cap floor. $45k for everyone; from $25k for a coin with a real crowd (1,000+ holders, $25k+ liquidity),
+ * which then enters at half size. `holders` undefined = not known yet: pass on liquidity alone and check again later.
+ * Shared by the live scan and the lab.
+ */
+export function bounceFloor(mcap: number, liquidity: number, holders: number | undefined, C: ModeCfg<"bounce">): { why: string | null; crowd: boolean } {
+  if (mcap >= C.mcapMin) return { why: null, crowd: false };
+  const k = (n: number) => `$${Math.round(n / 1000)}k`;
+  const floor = C.crowdMcapMin ?? C.mcapMin;
+  if (mcap < floor) return { why: `rejected: ${k(mcap)} market cap, under the ${k(floor)} bounce floor`, crowd: false };
+  if (liquidity < (C.crowdLiquidity ?? 0)) return { why: `rejected: ${k(mcap)} market cap with ${k(liquidity)} liquidity, under the ${k(C.mcapMin)} bounce floor without a ${k(C.crowdLiquidity)} pool`, crowd: false };
+  if (holders !== undefined && holders < (C.crowdHolders ?? 0)) return { why: `rejected: ${k(mcap)} market cap with ${holders} holders, under the ${k(C.mcapMin)} bounce floor without ${C.crowdHolders.toLocaleString("en-US")} holders`, crowd: false };
+  return { why: null, crowd: true };
+}
+
 async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promise<Signal | null> {
   // Checked before the safety calls, so coins under the floor cost nothing and never reach the hot list.
-  if (s.mcapUsd < C.mcapMin) { logLook("bounce", s, `rejected: $${Math.round(s.mcapUsd / 1000)}k market cap, under the $${C.mcapMin / 1000}k bounce floor`); return null; }
+  const early = bounceFloor(s.mcapUsd, s.liquidityUsd, undefined, C);
+  if (early.why) { logLook("bounce", s, early.why); return null; }
   const pre = await prefilter(s, "bounce");
   if (!pre.ok) { logLook("bounce", s, pre.why!, pre.holders); return null; }
+  const floor = bounceFloor(s.mcapUsd, s.liquidityUsd, pre.holders ?? 0, C);
+  if (floor.why) { logLook("bounce", s, floor.why, pre.holders); return null; }
+  const size = floor.crowd ? C.crowdSizeUsd : C.sizeUsd;
   if (s.liquidityUsd < C.minLiquidity || !s.pairAddress) { logLook("bounce", s, s.pairAddress ? `too thin, $${Math.round(s.liquidityUsd / 1000)}k liquidity (needs $${C.minLiquidity / 1000}k)` : "too thin, no pool yet"); return null; }
   const { c5, c15 } = await candles5and15(s.pairAddress);
   const p = bouncePattern(s, c5, migratedAt, C);
   if (!p.ok) { if (p.why) logLook("bounce", s, p.why, undefined, p.setup); return null; }
 
-  const g = await gate(s, "bounce", C.sizeUsd);
+  const g = await gate(s, "bounce", size);
   if ((g.holders ?? 0) < C.minHolders) return null;
   const a15 = atr(c15);
   const hv = holderVelocity(s.mint);
@@ -76,8 +95,8 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   const score = p.base + ((g.holders ?? 0) > 200 ? 10 : 0) + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
 
   const sig: Signal = {
-    mode: "bounce", mint: s.mint, symbol: s.symbol, sizeUsd: C.sizeUsd, score,
-    reason: `bounce from -${(p.dd * 100).toFixed(0)}% post-migration`,
+    mode: "bounce", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
+    reason: `bounce from -${(p.dd * 100).toFixed(0)}% post-migration${floor.crowd ? `, early ($${Math.round(s.mcapUsd / 1000)}k, ${pre.holders} holders, half size)` : ""}`,
     snapshot: s, candles15: c15,
     meta: { atr15: a15, baseLow: p.lo, migratedAt, holders: g.holders },
     plan: p.plan,

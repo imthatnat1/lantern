@@ -2,6 +2,15 @@
   "hours": 72,
   "experiments": [
     {
+      "name": "Bounce: old $45k floor for everyone",
+      "why": "19 Oct the floor dropped to $25k for coins with 1,000+ holders and a $25k pool (PIERRE 26x, mucron 18x, MEGA 10x were all refused at $32-43k). This puts the old floor back. If this row says Helps, the new floor is losing money and should go.",
+      "config": {
+        "bounce": {
+          "crowdMcapMin": 45000
+        }
+      }
+    },
+    {
       "name": "Fresh coins: allow top 10 up to 45%",
       "why": "Nat's question from 18 Oct. Coins under 2h old currently need top 10 under 35%. Only testable on data from 18 Oct on, when the gate's results started being recorded.",
       "gate": {

@@ -43,7 +43,7 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
       let body = "";
       req.on("data", c => body += c);
       req.on("end", () => {
-        try { const arr = JSON.parse(body || "[]"); let n = 0; for (const tx of Array.isArray(arr) ? arr : [arr]) n += ingest(tx); res.end(JSON.stringify({ ok: true, n })); }
+        try { const arr = JSON.parse(body || "[]"); let n = 0; for (const tx of Array.isArray(arr) ? arr : [arr]) n += ingest(tx); kv.set("helius:lastPushAt", Date.now()); res.end(JSON.stringify({ ok: true, n })); }
         catch (e) { res.statusCode = 400; res.end(JSON.stringify({ error: String(e) })); }
       });
       return;
@@ -139,6 +139,13 @@ export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
     const m = mkt(r.mint);
     // Crashing in the hour (DAE -84%, corndog -70% on 18 Oct): a rug in progress, not a coin to watch.
     if (Number(m?.ch1h ?? 0) <= -50) continue;
+    // 19 Oct (Nat): "I want to be focused on potential runners." Watching is for coins close to a buy. A coin down 30%+
+    // in the hour, a setup more than 25% from its trigger, or one the mode says is breaking down leaves the list.
+    // It's still checked first behind the scenes (watchedMints) and comes back on its own when it gets close.
+    if (Number(m?.ch1h ?? 0) <= -30) continue;
+    const su = r.setup ? JSON.parse(r.setup) : null;
+    if (su && !su.progress && su.distance != null && su.distance > 0.25) continue;
+    if (/structure broken|still making new lows|more than a dip/i.test(r.status ?? "")) continue;
     const labels: string[] = m?.labels ?? [];
     const chips: string[] = [];
     let heat = r.setup ? 100 : 0;
@@ -152,10 +159,11 @@ export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
     }
     if (isFlagship(r.mint)) { heat += 5; chips.push("flagship"); }
     if (isStonkListed(r.mint)) chips.push("Stonk.fun");
+    if (r.first_at && now - r.first_at < 30 * 60_000) { heat += 10; chips.unshift("new"); }
     const entry = {
       mint: r.mint, symbol: r.symbol, mode: r.mode, group: r.setup ? "setup" : "onway", heat: Math.round(heat),
       status: String(r.status ?? "").replace(/^watching:\s*/i, "") || "clean, no entry pattern yet",
-      setup: r.setup ? JSON.parse(r.setup) : null, checkedAt: r.at, since: r.first_at, chips, market: m,
+      setup: su, checkedAt: r.at, since: r.first_at, chips, market: m,
       paused: config.pausedModes.includes(r.mode),
     };
     const prev = best.get(r.mint);
@@ -275,7 +283,9 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     },
     guardrails: { dailyLossStopUsd: config.risk.dailyLossStopUsd, drawdownHaltAt: a.peakEquity * (1 - config.risk.drawdownHaltPct), capitalAtRisk: broker.openValueUsd(marks), maxCapitalAtRisk: config.risk.maxCapitalAtRiskUsd },
     health: { ...health, rejectedTicks24h: rejected.n, rejected: rejectedRows, startedAt: kv.get("startedAt", now), uptimeMs: now - kv.get("startedAt", now),
-      helius: { keyLooksValid: /^[0-9a-f-]{36}$/.test(config.keys.helius ?? ""), lastOkAt: kv.get("helius:lastOkAt", 0), lastErr: kv.get("helius:lastErr", "") }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
+      helius: { keyLooksValid: /^[0-9a-f-]{36}$/.test(config.keys.helius ?? ""), lastOkAt: kv.get("helius:lastOkAt", 0), lastErr: kv.get("helius:lastErr", ""),
+        // lastOkAt/lastErr are the backup poller, which only runs when the webhook has been quiet for an hour. lastPushAt is the webhook.
+        lastPushAt: kv.get("helius:lastPushAt", 0) }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
     open, closed, fills, equity, byMode, looks, wouldBuy, hot: hotList(now, new Set(open.map(o => o.mint))), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
