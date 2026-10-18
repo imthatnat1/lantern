@@ -11,6 +11,7 @@ import { isStonkReward, stonkfunMints, stonkfunFresh, stonkFlagships } from "./s
  * ZEC/HYPE/xStock pairs); Lantern keeps that universe and only changes how it manages them.
  *
  *  - pinned:    coins Nat likes, from config. Always in scope.
+ *  - watch:     coins Nat wants checked every scan, safety checks still on.
  *  - stonk:     Stonk.fun ecosystem, found by searching DexScreener for pairs whose quote token
  *               is ZEC, HYPE or an xStock (TSLAx, NVDAx, GLDx...). Refreshed every 10 min.
  *  - stonkfun:  Stonk.fun's own list (busiest and biggest launches), from its public API.
@@ -79,7 +80,7 @@ export async function trendingMints(): Promise<string[]> {
  */
 export async function allCandidates(): Promise<string[]> {
   const [stonk, sf, fresh, trend] = await Promise.all([stonkMints(), stonkfunMints().catch(() => [] as string[]), stonkfunFresh().catch(() => [] as string[]), trendingMints()]);
-  return [...new Set([...config.pinned, ...interleave([fresh, trend, sf, stonk])])];
+  return [...new Set([...config.pinned, ...config.watch, ...interleave([fresh, trend, sf, stonk])])];
 }
 
 /** Round-robin merge: a1, b1, c1, a2, b2, c2, ... */

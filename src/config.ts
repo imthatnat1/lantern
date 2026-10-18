@@ -49,6 +49,16 @@ export const config = {
    * them because it was rate-limited or not checking those coins.
    */
   pausedModes: ["dip", ...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
+  /**
+   * Always checked, like pinned coins, but with every safety check still applied (pinned coins skip
+   * RugCheck and the copycat filter). For coins Nat wants eyes on but hasn't vouched for.
+   * WATCH_MINTS in .env adds more.
+   */
+  watch: [
+    "3ZvEeeLxo55nKRwHywyxqBpKVouRV4gARNDUCQpapump", // TSI (Tetsuo Super Intelligence), AgenC pair; one of 7+ same-name launches 18 Oct
+    "Dib6cs8ty4XGphHQxrTBQGV51BZ4oVzr23LzDnzMpump", // TSI (Tetsuo Super Intelligence), AgenC pair; one of 7+ same-name launches 18 Oct
+    ...env("WATCH_MINTS").split(",").map(s => s.trim()).filter(Boolean),
+  ] as string[],
   /** Never trade or watch these. BLOCKED_MINTS in .env adds more. */
   blocked: [
     "3NxfWMHmfQg8NJFW5AG1ti2xACdczWz24e9SKyk1pump", // Minter: cent-sized bot buys, 2.3 buys per sell while price fell 25% (18 Oct)
