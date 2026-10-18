@@ -135,6 +135,7 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
     } else if (mode === "bounce") {
       const C = cfg("bounce", o);
       if (migratedAt == null || now < migratedAt || now - migratedAt > C.maxSinceMigrationH * 3_600_000) continue;
+      if ((m.mcapUsd ?? 0) < (C.mcapMin ?? 0)) continue;
       if (!passesGate(h, now, ageH, m.change1h, m.change6h, g)) continue;
       const { c5, realShare } = h.c5At(now);
       const p = bouncePattern(m, c5, migratedAt, C);

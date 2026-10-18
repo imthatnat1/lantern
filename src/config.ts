@@ -139,6 +139,8 @@ export const config = {
       reclaimVolX: 1.5,
       minLiquidity: 8_000, minHolders: 50, maxHolderDrop: 0.25,
       maxAboveLowX: 1.6,
+      // Nat, 18 Oct: no bounce entries under $45k. Fresh graduations start ~$60k; well under that it has already dumped.
+      mcapMin: 45_000,
     },
     pullback: {
       scanEveryMs: 2 * 60_000,

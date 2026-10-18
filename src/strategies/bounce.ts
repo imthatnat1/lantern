@@ -59,6 +59,8 @@ export function bouncePattern(m: Mkt, c5: Candle[], migratedAt: number, C: ModeC
 }
 
 async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promise<Signal | null> {
+  // Checked before the safety calls, so coins under the floor cost nothing and never reach the hot list.
+  if (s.mcapUsd < C.mcapMin) { logLook("bounce", s, `rejected: $${Math.round(s.mcapUsd / 1000)}k market cap, under the $${C.mcapMin / 1000}k bounce floor`); return null; }
   const pre = await prefilter(s, "bounce");
   if (!pre.ok) { logLook("bounce", s, pre.why!, pre.holders); return null; }
   if (s.liquidityUsd < C.minLiquidity || !s.pairAddress) { logLook("bounce", s, s.pairAddress ? `too thin, $${Math.round(s.liquidityUsd / 1000)}k liquidity (needs $${C.minLiquidity / 1000}k)` : "too thin, no pool yet"); return null; }

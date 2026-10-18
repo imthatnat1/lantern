@@ -76,7 +76,7 @@ const REJECT_GROUPS: [string, RegExp][] = [
   ["honeypot", /honeypot|freeze authority|mint authority|transfer fee|no sell route/i],
   ["rug risk", /top 10|insiders|snipers|creator|danger|rugged|LP locked/i],
   ["copycat or slop", /copycat|slop/i],
-  ["too new or thin", /holders|no liquidity|no market cap|exit impact|liquidity under/i],
+  ["too new or thin", /holders|no liquidity|no market cap|exit impact|liquidity under|bounce floor|no real market/i],
   ["overheated", /overheated|vertical launch|chasing|pump|ceiling/i],
 ];
 export function activity(now = Date.now(), windowMs = 3_600_000) {
@@ -142,7 +142,11 @@ export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
     if (!prev || entry.heat > prev.heat) best.set(r.mint, { ...entry, modes: [...new Set([...(prev?.modes ?? []), r.mode])] });
     else prev.modes = [...new Set([...prev.modes, r.mode])];
   }
-  return [...best.values()].sort((a, b) => b.heat - a.heat).slice(0, max);
+  // Bounce sees every new graduation and would fill the list on its own: at most 5 spots, unless it's in a setup.
+  let bounce = 0;
+  return [...best.values()].sort((a, b) => b.heat - a.heat)
+    .filter(e => e.group === "setup" || !(e.modes.length === 1 && e.modes[0] === "bounce") || ++bounce <= 5)
+    .slice(0, max);
 }
 
 export function snapshotEquity(marks: Map<string, number>) {
