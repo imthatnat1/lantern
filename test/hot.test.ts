@@ -53,3 +53,12 @@ test("a coin crashing in the hour stays off the hot list", async () => {
     buys5m: 1, sells5m: 1, change5m: -20, change1h: -70, change6h: -70, change24h: -70, createdAt: NOW, onCurve: false, fetchedAt: NOW } as any);
   assert.ok(!hotList(NOW).some(x => x.mint === "RUGGING"));
 });
+
+test("bounce takes at most 5 hot list spots unless a coin is in a setup", () => {
+  for (let i = 0; i < 8; i++) hot.clean("bounce", "NEWPAIR" + i, "NEWPAIR" + i, 1, NOW - M);
+  hot.clean("ultra", "PROVEN", "PROVEN", 1, NOW - M);
+  const h = hotList(NOW, new Set(), 30);
+  const onlyBounce = h.filter(x => x.group !== "setup" && x.modes.length === 1 && x.modes[0] === "bounce");
+  assert.equal(onlyBounce.length, 5);
+  assert.ok(h.some(x => x.mint === "PROVEN"));
+});
