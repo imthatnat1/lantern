@@ -120,11 +120,19 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
   for (const m of Object.keys(config.allocation)) if (!byMode.find(x => x.mode === m)) byMode.push({ mode: m, n: 0, wins: 0, pnl: 0 });
   for (const m of byMode) m.open = open.filter(o => o.mode === m.mode).length;
 
-  // Looks in the last 24h: latest per (mode, mint). Hot = highest score first.
-  const looks = (db.prepare(`SELECT s.* FROM signals_log s JOIN (SELECT mode, mint, max(at) AS at FROM signals_log WHERE at > ? GROUP BY mode, mint) l
-    ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at WHERE s.taken=0 ORDER BY s.at DESC LIMIT 80`).all(now - 24 * 3_600_000) as any[])
+  // Looks in the last 24h: latest per (mode, mint). Two pulls, so the flood of pump.fun rejections can't
+  // push forming setups off the Watching list: the latest 80 looks of any kind, plus every coin with a
+  // setup forming in the last 3h.
+  const latest = `SELECT s.* FROM signals_log s JOIN (SELECT mode, mint, max(at) AS at FROM signals_log WHERE at > ? GROUP BY mode, mint) l
+    ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at WHERE s.taken=0`;
+  const recent = db.prepare(`${latest} ORDER BY s.at DESC LIMIT 80`).all(now - 24 * 3_600_000) as any[];
+  const forming = db.prepare(`${latest} AND s.setup IS NOT NULL AND s.reason NOT LIKE 'rejected%' AND s.at > ? ORDER BY s.at DESC LIMIT 40`).all(now - 24 * 3_600_000, now - 3 * 3_600_000) as any[];
+  const seen = new Set<string>();
+  const looks = [...forming, ...recent].filter(r => { const k = `${r.mode}:${r.mint}`; if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => b.at - a.at)
     .map(r => ({ mode: r.mode, mint: r.mint, symbol: r.symbol, score: r.score, reason: r.reason, at: r.at, priceThen: r.price, rejected: /^rejected/i.test(r.reason), setup: r.setup ? JSON.parse(r.setup) : null,
       watching: !/^rejected/i.test(r.reason) && !!r.setup && now - r.at < 3 * 3_600_000 && !blockedWhy(r.mint),
+      paused: config.pausedModes.includes(r.mode),
       watchedSince: (db.prepare("SELECT min(at) AS t FROM signals_log WHERE mode=? AND mint=? AND at > ?").get(r.mode, r.mint, now - 24 * 3_600_000) as any)?.t ?? r.at, market: mkt(r.mint) }));
 
   // Missed runners: anything we declined in 48h that then went 2x or more from the look price.

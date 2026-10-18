@@ -124,13 +124,16 @@ async function scanLoop() {
   const ctx: Context = { now, solPrice, migrations };
   const feedHealthy = now - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs;
   for (const s of strategies) {
-    if (config.pausedModes.includes(s.name)) continue;
-    if (now - (lastRun.get(s.name) ?? 0) < s.everyMs) continue;
+    // Paused modes still watch (at a third of the pace, to spare GeckoTerminal) so their setups show on
+    // the dashboard and their candles get recorded for the lab. They just never buy.
+    const paused = config.pausedModes.includes(s.name);
+    if (now - (lastRun.get(s.name) ?? 0) < s.everyMs * (paused ? 3 : 1)) continue;
     lastRun.set(s.name, now);
     let sigs;
     try { sigs = await s.scan(ctx); } catch (e) { log.warn({ mode: s.name, err: String(e) }, "scan failed"); continue; }
     sigs.sort((a, b) => b.score - a.score);
     for (const sig of sigs) {
+      if (paused) { logSignal(sig, false, `${sig.mode} is paused: watching only`); continue; }
       const cfg = (config.modes as any)[sig.mode];
       if (broker.modeOpenCount(sig.mode) >= cfg.maxOpen) { logSignal(sig, false, "mode full"); continue; }
       const r = broker.canOpen(sig, markPrices, feedHealthy);
