@@ -34,6 +34,8 @@ export const FLOW = {
   minBuys: 40,
   /** Snapshot check: this many buys per sell in the hour while price is down this much = bot buys. */
   divergenceRatio: 1.8, divergenceDrop1h: -15, divergenceMinBuys: 200,
+  /** Snapshot check: this many trades with an average under this size = a bot spraying cents. */
+  microAvgUsd: 5, microMinTrades5m: 150, microMinTrades1h: 600,
 };
 
 export function flowFromTrades(trades: Trade[]): Flow {
@@ -59,6 +61,22 @@ export function flowVerdict(f: Flow): string | null {
   if (f.microBuyShare >= FLOW.microShareMax) return `bot volume: ${Math.round(f.microBuyShare * 100)}% of the last ${f.buys} buys were under $1`;
   if (f.top3BuyShare >= FLOW.top3ShareMax) return `bot volume: 3 wallets made ${Math.round(f.top3BuyShare * 100)}% of the last ${f.buys} buys`;
   if (f.buyUsd > 0 && f.sellUsd >= f.buyUsd * FLOW.sellOverBuyMax) return `real money is selling: $${Math.round(f.sellUsd)} sold vs $${Math.round(f.buyUsd)} bought in the last ${f.trades} trades`;
+  return null;
+}
+
+/**
+ * Free check from the snapshot: thousands of trades averaging cents. FOMO (18 Oct): ~3,900 trades in 5m
+ * averaging $1.68, price a dead-straight staircase up 2,400% in the hour, 33 holders on DexScreener.
+ * Real coins on the same list averaged $25-150 a trade. The trade-level check at the gate would have
+ * caught it before a buy, but this runs first, so the coin never reaches the hot list.
+ */
+export function microTrades(s: { buys5m: number; sells5m: number; volume5m: number; buys1h?: number; sells1h?: number; volume1h: number }): string | null {
+  const t5 = (s.buys5m ?? 0) + (s.sells5m ?? 0);
+  if (t5 >= FLOW.microMinTrades5m && s.volume5m / t5 < FLOW.microAvgUsd)
+    return `bot volume: ${t5} trades in 5m averaging $${(s.volume5m / t5).toFixed(2)}`;
+  const t1 = (s.buys1h ?? 0) + (s.sells1h ?? 0);
+  if (t1 >= FLOW.microMinTrades1h && s.volume1h / t1 < FLOW.microAvgUsd)
+    return `bot volume: ${t1} trades in the hour averaging $${(s.volume1h / t1).toFixed(2)}`;
   return null;
 }
 

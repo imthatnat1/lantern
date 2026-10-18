@@ -115,7 +115,7 @@ export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
   for (const r of rows) {
     if (held.has(r.mint) || blockedWhy(r.mint)) continue;
     // Cleared safety but the mode has since written it off (dead, no exit route, cooling down): not hot.
-    if (/dead|no sell route|exit impact|cooldown|holders shrinking/i.test(r.status ?? "")) continue;
+    if (/dead|deeper than|too deep|too thin|no sell route|exit impact|cooldown|holders shrinking/i.test(r.status ?? "")) continue;
     const m = mkt(r.mint);
     const labels: string[] = m?.labels ?? [];
     const chips: string[] = [];
