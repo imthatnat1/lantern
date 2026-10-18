@@ -850,6 +850,7 @@ function activityStrip(a) {
   const groups = Object.entries(a.rejectedBy || {}).sort((x, y) => y[1] - x[1]);
   return `<div class="lbl">Last hour</div>
     <div class="nums"><span><b>${a.checked}</b>coins checked</span>${a.stonk != null ? `<span><b>${a.stonk}</b>Stonk.fun coins</span>` : ""}<span><b>${a.setups}</b>setups forming</span><span class="buy"><b>${a.bought}</b>bought</span></div>
+    ${a.charts ? `<div class="why" style="margin-bottom:4px">Charts: <b style="color:var(--ivory);font-weight:500">${a.charts.own}</b> from our own prices, <b style="color:var(--ivory);font-weight:500">${a.charts.geckoCalls}</b> fetched from GeckoTerminal${a.charts.geckoFailed ? `, <b style="color:var(--coral);font-weight:500">${a.charts.geckoFailed}</b> blocked` : ""} · tracking ${a.charts.tracking} coins live</div>` : ""}
     ${a.rejected ? `<div class="why">Turned down ${a.rejected}: ${groups.map(([k, n]) => `<span><b>${n}</b> ${esc(k)}</span>`).join("")}</div>` : `<div class="why">Nothing turned down this hour.</div>`}`;
 }
 
@@ -1029,7 +1030,7 @@ function demo() {
   const mk = (sym, quote, price, mcap, liq, ch, holders, created, vol24, labels = []) => ({ symbol: sym, quote, price, mcap, liquidity: liq, ch5m: ch[0], ch1h: ch[0], ch6h: ch[1], ch24h: ch[2], holders, created_at: now - created * 3600e3, vol24h: vol24, vol1h: vol24 / 24 * 2.1, pair: "demo", labels });
   return {
     at: now, paused: false,
-    activity: { checked: 284, looked: 118, setups: 12, rejected: 96, bought: 0, stonk: 23, rejectedBy: { "rug risk": 38, "bot volume": 21, "overheated": 17, "too new or thin": 11, "copycat or slop": 6, "honeypot": 3 } },
+    activity: { charts: { tracking: 64, charts: 512, own: 497, geckoCalls: 15, geckoFailed: 0 }, checked: 284, looked: 118, setups: 12, rejected: 96, bought: 0, stonk: 23, rejectedBy: { "rug risk": 38, "bot volume": 21, "overheated": 17, "too new or thin": 11, "copycat or slop": 6, "honeypot": 3 } },
     account: { cash: 275.1, vault: 6.2, equity: 303.7, peakEquity: 312, startingCapital: 300, realizedToday: 7.4, openPnl: 6.1, closedCount: 18, closedWins: 9, closedPnl: 16.6, dayStartValue: 302.1 },
     stats: (() => {
       const P = (n, wins, pnl, avgWin, avgLoss, pf, bought, looked, byMode) => ({ n, wins, pnl, avgWin, avgLoss, profitFactor: pf, avgHoldMs: 3.4 * 3600e3, bought, looked, byMode });

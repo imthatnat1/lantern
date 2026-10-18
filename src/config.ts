@@ -22,6 +22,7 @@ const DEFAULT_PINNED = [
   "AGi2s9zPRPHs3zEDPhPTroumTEXK5ufymYSfEFndCSSW", // LEVERCAT (xSOL pair)
   "HTmQz7My6MehV7bjhJ6jde8nDND1yvsz68d24LP7YgUQ", // GP (GLDx pair)
   "DFMt2FyLpB6ekPNAzVErLXgpSnJ9CRf1VnxBAkTLpump", // FTR
+  "5yC9BM8KUsJTPbWPLfA2N8qH1s9V8DQ3Vcw1G6Jdpump", // AgenC (the real Tetsuo dev's coin; Nat, 18 Oct)
 ];
 
 /** Trusted wallets Nat follows on pump.fun. Public addresses; TRUSTED_WALLETS in .env adds to these. */
@@ -48,6 +49,15 @@ export const config = {
    * them because it was rate-limited or not checking those coins.
    */
   pausedModes: ["dip", ...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
+  /**
+   * Always checked, like pinned coins, but with every safety check still applied (pinned coins skip
+   * RugCheck and the copycat filter). For coins Nat wants eyes on but hasn't vouched for.
+   * WATCH_MINTS in .env adds more.
+   */
+  watch: [
+    "AcV6CcpMGFrA1dhRFiCKNiVNje8QE6ZXR9ep9jh7pump", // TSI (Tetsuo Super Intelligence), the real one per Nat, SOL pair (18 Oct)
+    ...env("WATCH_MINTS").split(",").map(s => s.trim()).filter(Boolean),
+  ] as string[],
   /** Never trade or watch these. BLOCKED_MINTS in .env adds more. */
   blocked: [
     "3NxfWMHmfQg8NJFW5AG1ti2xACdczWz24e9SKyk1pump", // Minter: cent-sized bot buys, 2.3 buys per sell while price fell 25% (18 Oct)
