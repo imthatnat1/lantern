@@ -55,8 +55,7 @@ export const config = {
    * WATCH_MINTS in .env adds more.
    */
   watch: [
-    "3ZvEeeLxo55nKRwHywyxqBpKVouRV4gARNDUCQpapump", // TSI (Tetsuo Super Intelligence), AgenC pair; one of 7+ same-name launches 18 Oct
-    "Dib6cs8ty4XGphHQxrTBQGV51BZ4oVzr23LzDnzMpump", // TSI (Tetsuo Super Intelligence), AgenC pair; one of 7+ same-name launches 18 Oct
+    "AcV6CcpMGFrA1dhRFiCKNiVNje8QE6ZXR9ep9jh7pump", // TSI (Tetsuo Super Intelligence), the real one per Nat, SOL pair (18 Oct)
     ...env("WATCH_MINTS").split(",").map(s => s.trim()).filter(Boolean),
   ] as string[],
   /** Never trade or watch these. BLOCKED_MINTS in .env adds more. */
