@@ -62,3 +62,10 @@ test("bounce takes at most 5 hot list spots unless a coin is in a setup", () => 
   assert.equal(onlyBounce.length, 5);
   assert.ok(h.some(x => x.mint === "PROVEN"));
 });
+
+test("stablecoin tickers are rejected as copycats, real names aren't", async () => {
+  const src = (await import("node:fs")).readFileSync(new URL("../src/strategies/base.ts", import.meta.url), "utf8");
+  const re = new RegExp(src.match(/const STABLE_TICKER = \/(.*)\/i;/)![1], "i");
+  for (const t of ["USDF", "USDT", "USDC", "$USD1", "PYUSD", "FDUSD", "DAI", "EURC"]) assert.ok(re.test(t), t);
+  for (const t of ["USDUC", "TSI", "DAIKON", "USDFUN", "SUPERCORE", "BUSDY2"]) assert.ok(!re.test(t), t);
+});

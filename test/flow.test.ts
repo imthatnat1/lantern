@@ -67,3 +67,20 @@ test("micro-trade bots are caught from the snapshot alone (18 Oct hot list)", ()
   // Hour view when 5m is quiet.
   assert.ok(microTrades({ buys5m: 5, sells5m: 5, volume5m: 20, buys1h: 500, sells1h: 400, volume1h: 2000 }));
 });
+
+test("fake valuations are caught from the snapshot (USDF, 18 Oct)", async () => {
+  const { fakeValuation } = await import("../src/data/flow.js");
+  const NOW = Date.now(), H = 3_600_000;
+  const c = (mcap: number, liq: number, ageH: number, b5 = 100, s5 = 100, onCurve = false) => fakeValuation({ mcapUsd: mcap, liquidityUsd: liq, createdAt: NOW - ageH * H, onCurve, buys5m: b5, sells5m: s5 }, NOW);
+  assert.match(c(171_291_005, 1_116_375, 0.24, 2381, 218)!, /\$171M market cap at 14 minutes old/);
+  assert.match(c(30e6, 400_000, 5)!, /75x the pool/, "older than 2h but 75x its pool");
+  assert.match(c(800_000, 60_000, 3, 2381, 218)!, /bot buys: 2381 buys to 218 sells/);
+  // Real coins from the same list stay.
+  assert.equal(c(353_106, 58_399, 5.9, 47, 60), null);            // TSI 6x
+  assert.equal(c(75_406, 22_636, 0.65, 206, 173), null);          // NIP 3x
+  assert.equal(c(704_065, 78_960, 5.25, 216, 217), null);         // SUPERCORE 9x
+  assert.equal(c(42_334_570, 1_057_433, 1159, 0, 1), null);       // ZCAT 40x, old flagship
+  assert.equal(c(79_943_450, 2_195_097, 1779, 3, 0), null);       // STONK 36x
+  assert.equal(c(120e6, 1e6, 2000), null, "old big coins are judged by other rules");
+  assert.equal(c(900, 0, 0.1, 10, 0, true), null);
+});

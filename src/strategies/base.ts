@@ -9,7 +9,7 @@ import { db, cooldowns, audit, market, recorder, hot, type Setup } from "../db.j
 import { isCreativePair } from "../data/universe.js";
 import { isStonkListed } from "../data/stonkfun.js";
 import { buyersOf } from "../data/wallets.js";
-import { blockedWhy, blockMint, divergence, flow, microTrades } from "../data/flow.js";
+import { blockedWhy, blockMint, divergence, fakeValuation, flow, microTrades } from "../data/flow.js";
 
 export interface Context {
   now: number;
@@ -55,12 +55,16 @@ export function sniperPenalty(g: Gate): number { return -Math.min(20, Math.round
  *   slop (cheap domain, social-as-website, thin holders at size), fresh-coin rules (< 2h old needs
  *   150+ holders and top-10 under 35%), honeypot smell (20+ buys and zero sells in 5m).
  */
+const STABLE_TICKER = /^\$?(USD[A-Z0-9]?|[A-Z]{0,2}USD[A-Z0-9]?|EURC|EUROC|DAI|PYUSD|TUSD|FDUSD)$/i;
+
 export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise<Gate> {
   const pinned = config.pinned.includes(s.mint);
   // Stonk.fun coins are themed on stocks and brands (xStocks, OPENAI, SPCX pairs). That's the platform, not a copy,
   // so coins Stonk.fun itself lists skip the name check. Every rug check below still applies.
   const cc = pinned || isStonkListed(s.mint) ? null : isCopycat(s);
   if (cc) return { ok: false, why: `rejected: copycat ${cc}` };
+  // USDF (18 Oct): a meme coin wearing a stablecoin ticker. Real stablecoins aren't what this bot trades.
+  if (!pinned && !isStonkListed(s.mint) && STABLE_TICKER.test(s.symbol.trim())) return { ok: false, why: `rejected: copycat stablecoin ticker ${s.symbol}` };
   if (!pinned && (!s.mcapUsd || s.mcapUsd <= 0)) return { ok: false, why: "rejected: no market cap reported" };
   if (!s.onCurve && s.liquidityUsd <= 0) return { ok: false, why: "rejected: no liquidity reported" };
   // KKK, $CAT, PANIC (18 Oct): market caps of $11-21 and a few dollars of volume. Nothing to trade.
@@ -69,7 +73,7 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   if (!pinned) {
     const b = blockedWhy(s.mint);
     if (b) return { ok: false, why: `rejected: ${b}` };
-    const d = divergence(s) ?? microTrades(s);
+    const d = divergence(s) ?? microTrades(s) ?? fakeValuation(s);
     if (d) { blockMint(s.mint, d); return { ok: false, why: `rejected: ${d}` }; }
   }
   const safe = await rug.safety(s.mint, s.onCurve);
