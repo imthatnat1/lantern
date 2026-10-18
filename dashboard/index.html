@@ -209,7 +209,7 @@
   .hint { font-size: 12px; line-height: 1.5; color: var(--ivory-faint); margin: 8px 0 0; }
   .empty { color: var(--ivory-dim); padding: 18px 0; font-size: 15px; }
 
-  .activity { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin: 0 0 22px; }
+  .activity { background: var(--night-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin: 0 0 12px; }
   .activity .lbl { font-size: 12px; color: var(--ivory-faint); letter-spacing: .04em; text-transform: uppercase; }
   .activity .nums { display: flex; gap: 18px; flex-wrap: wrap; margin: 4px 0 8px; font-size: 15px; color: var(--ivory-dim); }
   .activity .nums b { color: var(--ivory); font-size: 20px; font-weight: 500; margin-right: 4px; }
@@ -288,7 +288,6 @@
   <p class="verdict flat" id="verdict">Reading the book.</p>
   <p class="sub" id="sub"></p>
 </div>
-<div class="activity" id="activity"></div>
 
 <h2>How it's going</h2>
 <div class="tiles" id="tiles"></div>
@@ -338,6 +337,7 @@
 <div id="lab"></div>
 
 <h2>Looked, didn't buy <small id="looksCount"></small></h2>
+<div class="activity" id="activity"></div>
 <p class="hint" style="margin:0 0 6px">Diamond means the rug guard said no. The rest were clean but the setup never completed.</p>
 <details><summary>Show the list</summary><div id="looks"></div></details>
 
