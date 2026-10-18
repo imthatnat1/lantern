@@ -119,7 +119,7 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   try {
     hot.clean(mode, s.mint, s.symbol, s.priceUsd);
     // Keep the hot list's market numbers (1h change, volume, labels) fresh; at most once a minute per coin.
-    if (Date.now() - (lastMkt.get(s.mint) ?? 0) > 60_000) { lastMkt.set(s.mint, Date.now()); market.upsert(s, safe.holders, [...velocityLabel(s.mint), ...walletLabels(s.mint)]); }
+    if (Date.now() - (lastMkt.get(s.mint) ?? 0) > 60_000) { lastMkt.set(s.mint, Date.now()); market.upsert(s, safe.holders, [...velocityLabel(s.mint), ...walletLabels(s.mint), ...churnLabel(s)]); }
   } catch { /* best effort */ }
   return { ok: true, holders: safe.holders, top10: safe.top10Pct };
 }
@@ -177,6 +177,19 @@ export function holderScore(mint: string): number {
   if (v >= 0.10) return 10;
   if (v <= -0.05) return -10;
   return 0;
+}
+
+/**
+ * Possible bot churn on a fresh coin: under an hour old, 4x+ its market cap traded in the hour, and buys within 20% of
+ * sells (safufun, 19 Oct: 3,545 buys / 3,418 sells and 4x its market cap in 19 minutes, then -40% in 5 minutes).
+ * A warning chip on Watching for now, not a rejection: real launches trade hard too, so we watch how these do first.
+ */
+export function churnLabel(s: Pick<TokenSnapshot, "createdAt" | "mcapUsd" | "volume1h" | "buys1h" | "sells1h">, now = Date.now()): string[] {
+  const b = s.buys1h ?? 0, x = s.sells1h ?? 0;
+  if (now - s.createdAt > 3_600_000 || !s.mcapUsd || b + x < 500 || !x) return [];
+  const turn = s.volume1h / s.mcapUsd, ratio = b / x;
+  if (turn < 4 || ratio < 0.83 || ratio > 1.2) return [];
+  return [`churn? ${turn.toFixed(0)}x its market cap traded in 1h, buys ≈ sells`];
 }
 
 function velocityLabel(mint: string): string[] {
@@ -239,7 +252,7 @@ export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, hol
   if (Date.now() - (lastLook.get(k) ?? 0) < gap) return;
   lastLook.set(k, Date.now());
   audit.signal(mode, s.mint, s.symbol, 0, false, why, s.priceUsd, s.mcapUsd, s.liquidityUsd, setup, s.pairAddress);
-  market.upsert(s, holders, [...velocityLabel(s.mint), ...walletLabels(s.mint)]);
+  market.upsert(s, holders, [...velocityLabel(s.mint), ...walletLabels(s.mint), ...churnLabel(s)]);
 }
 
 /** Distance helper: how far price must move to reach `level`, as a positive fraction. */

@@ -17,6 +17,9 @@ export interface Links { website?: string; twitter?: string; telegram?: string }
 /** Sites that are a launchpad, chart or explorer page, not the coin's own website. */
 const NOT_A_WEBSITE = /(^|\.)(pump\.fun|dexscreener\.com|stonkfun\.xyz|raydium\.io|letsbonk\.fun|bonk\.fun|solscan\.io|birdeye\.so|gmgn\.ai|photon-sol\.tinyastro\.io|jup\.ag|x\.com|twitter\.com|t\.me|telegram\.me|ipfs\.io)$/i;
 
+/** Link-in-bio and hosted-page services: anyone can make a page there in a minute, so it isn't the coin's own site. */
+const LINK_HUB = /(^|\.)(usepaid\.app|linktr\.ee|beacons\.ai|bio\.link|lnk\.bio|link3\.to|taplink\.cc|campsite\.bio|solo\.to|linkin\.bio|hoo\.be|withkoji\.com)$/i;
+
 function url(u: unknown): URL | null {
   if (typeof u !== "string" || !u.trim()) return null;
   try { return new URL(/^https?:\/\//i.test(u.trim()) ? u.trim() : `https://${u.trim()}`); } catch { return null; }
@@ -35,7 +38,14 @@ export function judge(l: Links): { real: string[]; why: string | null } {
   const tg = url(l.telegram);
   if (tg && /(^|\.)(t\.me|telegram\.me)$/i.test(tg.hostname) && tg.pathname.replace(/\/+$/, "").length > 1) real.push("telegram");
   const web = url(l.website);
-  if (web && !NOT_A_WEBSITE.test(web.hostname) && web.hostname.includes(".")) real.push("website");
+  let hosted: string | null = null;
+  if (web && !NOT_A_WEBSITE.test(web.hostname) && web.hostname.includes(".")) {
+    // safufun (19 Oct): its "website" was usepaid.app/t/zbcjs6hc, a page on someone else's app. A coin's own site lives
+    // at its own domain's root (or one page deep, like /home). Deeper paths and link-in-bio hubs are someone else's site.
+    const depth = web.pathname.split("/").filter(Boolean).length;
+    if (depth >= 2 || LINK_HUB.test(web.hostname)) hosted = web.hostname.replace(/^www\./, "");
+    else real.push("website");
+  }
   // A website field holding an X or Telegram link still counts as that link.
   if (web && !real.length) {
     const j = judge({ twitter: /(x|twitter)\.com$/i.test(web.hostname) ? l.website : undefined, telegram: /t\.me$/i.test(web.hostname) ? l.website : undefined });
@@ -43,6 +53,7 @@ export function judge(l: Links): { real: string[]; why: string | null } {
     if (j.why?.startsWith("no community")) borrowed = true;
   }
   if (real.length) return { real, why: null };
+  if (hosted) return { real, why: `no website of its own, only a page on ${hosted}${borrowed ? " and a link to someone else's tweet" : ""}` };
   return { real, why: borrowed ? "no community, only a link to someone else's tweet" : "no website or socials" };
 }
 
@@ -89,6 +100,7 @@ export async function launchLinks(mint: string, uri: string | undefined): Promis
 export function dexProfileWhy(dex: Links): string | null {
   const j = judge(dex);
   if (!j.why) return null;
+  if (j.why.startsWith("no website of its own")) return `${j.why} (DexScreener)`;
   return j.why.startsWith("no community") ? "no community on DexScreener, only a link to someone else's tweet" : "no links on DexScreener (no website, X or Telegram)";
 }
 

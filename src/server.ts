@@ -88,7 +88,7 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
  */
 const REJECT_GROUPS: [string, RegExp][] = [
   ["scam relaunch", /scam relaunch/i],
-  ["no socials", /no links on DexScreener|no website or socials|no community/i],
+  ["no socials", /no links on DexScreener|no website or socials|no community|no website of its own/i],
   ["bot volume", /fake holders/i],
   ["socials unreadable", /couldn't read its socials/i],
   ["rug risk", /crashed \d+% in an hour/i],
@@ -158,7 +158,8 @@ export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
     if (vx >= 1.5) { heat += 15; chips.push(`vol ${vx.toFixed(1)}x`); }
     for (const l of labels) {
       if (/holders \+/i.test(l)) { heat += 15; chips.push(l); }
-      else if (/trusted|KOL|bought/i.test(l)) { heat += 20; chips.push(l); }   // "wirelyss bought" is a trusted wallet's label
+      else if (/trusted|KOL|bought/i.test(l)) { heat += 20; chips.push(l); }
+      else if (/^churn\?/i.test(l)) { heat -= 30; chips.push(l); }   // "wirelyss bought" is a trusted wallet's label
     }
     if (isFlagship(r.mint)) { heat += 5; chips.push("flagship"); }
     if (isStonkListed(r.mint)) chips.push("Stonk.fun");

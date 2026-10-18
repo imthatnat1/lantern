@@ -92,3 +92,26 @@ test("a DexScreener profile with an X account, Telegram or website passes", () =
 test("a DexScreener profile that only links someone else's tweet is refused", () => {
   assert.match(dexProfileWhy({ twitter: "https://x.com/elonmusk/status/1846000000000000000" })!, /only a link to someone else's tweet/);
 });
+
+test("safufun (19 Oct): a page on someone else's app is not the coin's website", () => {
+  // DexScreener showed Website = usepaid.app/t/zbcjs6hc and Twitter = a status link. It fell 40% in 5 minutes at 45 min old.
+  const why = dexProfileWhy({ website: "https://usepaid.app/t/zbcjs6hc", twitter: "https://x.com/river100x/status/2111930895623983362" });
+  assert.equal(why, "no website of its own, only a page on usepaid.app and a link to someone else's tweet (DexScreener)");
+  assert.match(judge({ website: "https://linktr.ee/somecoin" }).why!, /only a page on linktr\.ee/);
+  assert.match(judge({ website: "https://otcdesks.cash/coin/DFMt2FyLpB6ekPNAzVErLXgpSnJ9CRf1VnxBAkTLpump" }).why!, /only a page on otcdesks\.cash/);
+});
+
+test("a coin's own site still counts at its root or one page deep, and a real X account still carries a hosted page", () => {
+  for (const w of ["https://agenc.tech/", "https://xcoinsol.lol", "https://bwigitte.fun/home", "minter.live"]) assert.equal(judge({ website: w }).why, null, w);
+  // FTR: website is an otcdesks.cash page, but it has its own X account
+  assert.equal(judge({ website: "https://otcdesks.cash/coin/DFMt", twitter: "https://x.com/FTRonPUMP" }).why, null);
+});
+
+test("churn warning: safufun's first 19 minutes get the chip, a buy-heavy launch doesn't", async () => {
+  const { churnLabel } = await import("../src/strategies/base.js");
+  const now = Date.now();
+  const safufun = { createdAt: now - 19 * 60_000, mcapUsd: 83_000, volume1h: 345_000, buys1h: 3_545, sells1h: 3_418 };
+  assert.match(churnLabel(safufun, now)[0], /^churn\? 4x/);
+  assert.deepEqual(churnLabel({ ...safufun, buys1h: 5_000, sells1h: 2_500 }, now), [], "buyers outnumber sellers 2:1");
+  assert.deepEqual(churnLabel({ ...safufun, createdAt: now - 2 * 3_600_000 }, now), [], "older than an hour");
+});
