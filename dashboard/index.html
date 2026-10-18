@@ -172,6 +172,7 @@
   .fill.loss .tag::before { border-radius: 1px; transform: rotate(45deg); }
   .fill.buy .tag { color: var(--lantern); } .fill.win .tag { color: var(--sage); } .fill.loss .tag { color: var(--coral); }
   .setup.stale { opacity: .6; border-style: dashed; }
+  .setup.notyet .need b { color: var(--ivory-dim); }
   .setup.stale .need b { color: var(--ivory-dim); }
   .setup.stale .track { display: none; }
   .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ivory-dim); margin: 8px 0 2px; }
@@ -314,7 +315,7 @@
 <div id="open"></div>
 
 <h2>Watching <small id="hotCount"></small></h2>
-<p class="hint" style="margin:0 0 6px">Passed every safety check, setup forming. The bar shows how close it is to a buy. Closest first.</p>
+<p class="hint" style="margin:0 0 6px">The hot list: coins that passed every safety check in the last 30 minutes. <b>In a setup</b> shows how close price is to the trigger. <b>Not yet</b> says what we're waiting for. These are re-checked first every scan, so the moment one meets every rule it gets bought.</p>
 <div id="hot"></div>
 
 <h2>Would have bought <small id="wouldCount"></small></h2>
@@ -637,7 +638,36 @@ function wouldRows(rows) {
   }).join("");
 }
 
-function hotRows(looks, open) {
+function hotCard(h) {
+  const m = h.market || {};
+  const l = { mode: h.mode, setup: h.setup, at: h.checkedAt, watchedSince: h.since, reason: h.status };
+  const where = h.setup
+    ? setupBlock(l)
+    : `<div class="setup notyet"><div class="need"><b>Not yet</b> (${esc(h.mode)}): ${esc(h.status)}</div>
+        <div class="meta"><span>clean since ${hhmm(h.since)}</span><span>checked ${ago(Date.now() - h.checkedAt)} ago</span></div></div>`;
+  return `<div class="card">
+    <div class="head">
+      ${av(h.symbol, m)}
+      <div class="sym">${esc(h.symbol)}${(h.modes || [h.mode]).map(x => mt(x)).join("")}${h.paused ? '<small class="dim" style="white-space:nowrap">watch only</small>' : ""}${rewardFlag(m)}</div>
+      <div class="gain">${m.ch1h != null ? `<span class="${m.ch1h >= 0 ? "up" : "down"}">${pct(m.ch1h / 100)}</span>` : "·"}<small style="white-space:nowrap">${big(m.mcap)} · 1h</small></div>
+      ${links(h.mint, m)}
+    </div>
+    ${where}
+    ${h.chips && h.chips.length ? `<div class="labels">${h.chips.map(x => `<span class="${/trusted|KOL|holders \+|Stonk/i.test(x) ? "hot" : ""}">${esc(x)}</span>`).join("")}</div>` : ""}
+    ${h.setup ? marketGrid(m, `<div class="wide"><span>market cap</span>${big(m.mcap)}</div>`) : ""}
+  </div>`;
+}
+
+function hotRows(looks, open, hot) {
+  if (hot) {
+    // One list, each card says where it stands: setups first (closest to the trigger first), then the rest by heat.
+    const close = h => h.setup ? (h.setup.progress ? h.setup.progress.done / h.setup.progress.of : h.setup.distance != null ? 1 - Math.min(1, h.setup.distance / 0.3) : 0) : -1;
+    const rows = [...hot].sort((a, b) => (b.setup ? 1 : 0) - (a.setup ? 1 : 0) || close(b) - close(a) || b.heat - a.heat);
+    const n = rows.filter(h => h.setup).length;
+    $("hotCount").textContent = rows.length ? `${n} in a setup · ${rows.length - n} not yet` : "";
+    if (!rows.length) return `<div class="empty">Nothing has cleared safety in the last 30 minutes. See "Looked, didn't buy" for why.</div>`;
+    return rows.map(hotCard).join("");
+  }
   const held = new Set(open.map(o => o.mint));
   // Watching = passed every safety check and a setup is forming. Rejected coins live in "Looked at" below.
   const closeness = l => (l.setup && Date.now() - l.at > 20 * 60e3 ? -1 : 0) + (l.setup ? (l.setup.progress ? l.setup.progress.done / l.setup.progress.of : l.setup.distance != null ? 1 - Math.min(1, l.setup.distance / 0.3) : 0) : -1);
@@ -708,13 +738,15 @@ function modeTable(byMode) {
 
 function missedRows(missed) {
   $("missedCount").textContent = missed.length ? `(${missed.length})` : "";
-  if (!missed.length) { $("missedTotals").innerHTML = ""; return `<div class="empty">Nothing we passed on has run 2x in the last two days. Good.</div>`; }
+  if (!missed.length) { $("missedTotals").innerHTML = ""; return `<div class="empty">Nothing we passed on has run 2x (or bounced 25% for a flagship) in the last two days. Good.</div>`; }
   const byReason = {};
-  for (const m of missed) { const k = m.soldEarly ? "stopped out, then it ran" : reasonBucket(m.reason); byReason[k] = (byReason[k] || 0) + 1; }
+  for (const m of missed) { const k = m.flagshipBounce ? "flagship bounce" : m.soldEarly ? "stopped out, then it ran" : reasonBucket(m.reason); byReason[k] = (byReason[k] || 0) + 1; }
   $("missedTotals").innerHTML = Object.entries(byReason).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${esc(k)}: cost us <b>${n}</b>`).join(" · ");
   return missed.map(m => {
-    const why = m.soldEarly ? "sold early" : "skipped";
-    const lesson = m.soldEarly
+    const why = m.flagshipBounce ? "flagship bounce" : m.soldEarly ? "sold early" : "skipped";
+    const lesson = m.flagshipBounce
+      ? `A flagship bounced +${Math.round((m.peakX - 1) * 100)}% after we passed (${esc(m.reason)}). Deep flagship dips fall outside every rule today; this is the case for a deep-dip test.`
+      : m.soldEarly
       ? `Stopped out (${esc(m.reason)}), then it ran ${m.peakX.toFixed(1)}x. Check whether the close stop was under the right low.`
       : /watching|waiting|forming/i.test(m.reason) ? `We were waiting for a setup that never came, then it ran ${m.peakX.toFixed(1)}x. The pullback entry may need a looser trigger.`
       : /mcap|ceiling/i.test(m.reason) ? `Blocked on market cap, then it ran ${m.peakX.toFixed(1)}x.`
@@ -783,7 +815,7 @@ function activityStrip(a) {
   if (!a) return "";
   const groups = Object.entries(a.rejectedBy || {}).sort((x, y) => y[1] - x[1]);
   return `<div class="lbl">Last hour</div>
-    <div class="nums"><span><b>${a.checked}</b>coins checked</span><span><b>${a.setups}</b>setups forming</span><span class="buy"><b>${a.bought}</b>bought</span></div>
+    <div class="nums"><span><b>${a.checked}</b>coins checked</span>${a.stonk != null ? `<span><b>${a.stonk}</b>Stonk.fun coins</span>` : ""}<span><b>${a.setups}</b>setups forming</span><span class="buy"><b>${a.bought}</b>bought</span></div>
     ${a.rejected ? `<div class="why">Turned down ${a.rejected}: ${groups.map(([k, n]) => `<span><b>${n}</b> ${esc(k)}</span>`).join("")}</div>` : `<div class="why">Nothing turned down this hour.</div>`}`;
 }
 
@@ -803,9 +835,8 @@ function render(s) {
   chips(s);
   $("openCount").textContent = `${s.open.length} position${s.open.length === 1 ? "" : "s"}`;
   $("open").innerHTML = openRows(s.open);
-  const clean = s.looks.filter(l => l.market && l.watching).length;
-  $("hotCount").textContent = `${clean} clean`;
-  $("hot").innerHTML = hotRows(s.looks, s.open);
+  $("hotCount").textContent = "updated " + ago(Date.now() - s.at) + " ago";
+  $("hot").innerHTML = hotRows(s.looks, s.open, s.hot);
   $("would").innerHTML = wouldRows(s.wouldBuy || []);
   $("trades").innerHTML = tradeRows(s.fills);
   $("wallets").innerHTML = walletTable(s.wallets || []);
@@ -964,7 +995,7 @@ function demo() {
   const mk = (sym, quote, price, mcap, liq, ch, holders, created, vol24, labels = []) => ({ symbol: sym, quote, price, mcap, liquidity: liq, ch5m: ch[0], ch1h: ch[0], ch6h: ch[1], ch24h: ch[2], holders, created_at: now - created * 3600e3, vol24h: vol24, vol1h: vol24 / 24 * 2.1, pair: "demo", labels });
   return {
     at: now, paused: false,
-    activity: { checked: 284, looked: 118, setups: 12, rejected: 96, bought: 0, rejectedBy: { "rug risk": 38, "bot volume": 21, "overheated": 17, "too new or thin": 11, "copycat or slop": 6, "honeypot": 3 } },
+    activity: { checked: 284, looked: 118, setups: 12, rejected: 96, bought: 0, stonk: 23, rejectedBy: { "rug risk": 38, "bot volume": 21, "overheated": 17, "too new or thin": 11, "copycat or slop": 6, "honeypot": 3 } },
     account: { cash: 275.1, vault: 6.2, equity: 303.7, peakEquity: 312, startingCapital: 300, realizedToday: 7.4, openPnl: 6.1, closedCount: 18, closedWins: 9, closedPnl: 16.6, dayStartValue: 302.1 },
     stats: (() => {
       const P = (n, wins, pnl, avgWin, avgLoss, pf, bought, looked, byMode) => ({ n, wins, pnl, avgWin, avgLoss, profitFactor: pf, avgHoldMs: 3.4 * 3600e3, bought, looked, byMode });
@@ -1007,7 +1038,15 @@ function demo() {
       { mode: "pullback", mint: "Hmqnxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxfart", symbol: "SEXCOIN", score: 64, watching: true, reason: "watching: only 9% off the high, waiting for a 20-40% retrace", at: now - 12 * 60e3, watchedSince: now - 95 * 60e3, setup: { need: "pull back to 0.000212 (20% off the 1h high)", level: 0.000212, distance: 0.11 }, market: mk("SEXCOIN", "SOL", 0.000233, 228000, 43100, [11, 434, 434], 800, 1.7, 1.49e6, ["1 KOL buy"]) },
       { mode: "ultra", mint: "2kuYxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "dev/null", score: 0, watching: true, reason: "recovered, but only 2 higher lows", at: now - 30 * 60e3, watchedSince: now - 4 * 3600e3, setup: { need: "print 3 higher lows", progress: { done: 2, of: 3 } }, market: mk("dev/null", "SOL", 0.0000942, 87800, 27000, [-24, 123, 123], 600, 5.3, 1.93e6) },
     ],
+    hot: [
+      { mint: "Chatxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "CHATON", mode: "pullback", modes: ["pullback"], group: "setup", heat: 131, status: "base holding, waiting for a green reclaim on volume", setup: { need: "green 5m close above 0.000674 on 1.3x volume", level: 0.000674, distance: 0.031 }, checkedAt: now - 60e3, since: now - 26 * 60e3, chips: ["holders +18% 1h", "vol 2.3x"], market: mk("CHATON", "SOL", 0.000654, 654000, 90000, [8, 40, 210], 2400, 9, 1.4e6) },
+      { mint: "Yilxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "YILONGMA", mode: "pullback", modes: ["pullback", "ultra"], group: "setup", heat: 118, status: "retrace low not held for 3 candles yet", setup: { need: "hold above 0.00218 for 3 closed 5m candles", level: 0.00218, distance: 0.04, progress: { done: 2, of: 3 } }, checkedAt: now - 2 * 60e3, since: now - 14 * 60e3, chips: ["trusted: Cupsey"], market: mk("YILONGMA", "SOL", 0.00227, 2.27e6, 210000, [-6, 60, 400], 5100, 20, 4e6) },
+      { mint: "Stnkxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxstnk", symbol: "MOONCAT", mode: "dip", modes: ["dip"], group: "onway", heat: 42, status: "only 3.1% off the 24h high", setup: null, checkedAt: now - 3 * 60e3, since: now - 2 * 3600e3, chips: ["flagship", "Stonk.fun"], market: mk("MOONCAT", "BLOOM", 0.081, 8.1e6, 600000, [2, 9, 30], 9100, 400, 2.2e6), paused: true },
+      { mint: "Runrxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "GRUG", mode: "pullback", modes: ["pullback"], group: "onway", heat: 36, status: "near the high, ran 2.4x today, waiting for a 20% pullback", setup: null, checkedAt: now - 60e3, since: now - 9 * 60e3, chips: ["vol 1.8x"], market: mk("GRUG", "SOL", 0.0041, 4.1e6, 300000, [24, 140, 240], 3800, 30, 5e6) },
+      { mint: "Stdyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "STEADY", mode: "ride", modes: ["ride"], group: "onway", heat: 12, status: "clean, no entry pattern yet", setup: null, checkedAt: now - 4 * 60e3, since: now - 22 * 60e3, chips: [], market: mk("STEADY", "SOL", 0.012, 12e6, 800000, [4, 12, 35], 11000, 200, 3e6) },
+    ],
     missed: [
+      { mode: "dip", mint: "Flagxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxstnk", symbol: "STONKS", reason: "52% off the 24h high, more than a dip", at: now - 7 * 3600e3, price: 1, peak_price: 1.46, last_price: 1.31, mcap: 9e6, peakX: 1.46, nowX: 1.31, flagshipBounce: true, market: mk("STONKS", "BLOOM", 0.04, 9e6, 700000, [5, 20, -30], 12000, 500, 3e6) },
       { mode: "pullback", mint: "3rF2xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "XTO", reason: "watching: only 12% off the high, waiting for a 20-40% retrace", at: now - 13 * 3600e3, price: 1, peak_price: 39.4, last_price: 39.1, mcap: 7e6, peakX: 39.4, nowX: 39.1, market: mk("XTO", "SOL", 0.27, 273800000, 4e6, [1, 30, 2900], 90000, 14, 60e6) },
       { mode: "ultra", mint: "8uxtxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", symbol: "FTR", reason: "copycat: brand clone", at: now - 21 * 3600e3, price: 1, peak_price: 2.1, last_price: 2.0, mcap: 6e6, peakX: 2.1, nowX: 2.0, market: mk("FTR", "SOL", 0.012, 12e6, 500000, [0, 5, 100], 20000, 40, 3e6) },
     ],

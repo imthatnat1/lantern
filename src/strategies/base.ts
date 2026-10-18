@@ -5,7 +5,7 @@ import * as rug from "../data/rugcheck.js";
 import * as jup from "../data/jupiter.js";
 import { config } from "../config.js";
 import { isCopycat, isSlop } from "../engine/filters.js";
-import { db, cooldowns, audit, market, recorder, type Setup } from "../db.js";
+import { db, cooldowns, audit, market, recorder, hot, type Setup } from "../db.js";
 import { isCreativePair } from "../data/universe.js";
 import { isStonkListed } from "../data/stonkfun.js";
 import { buyersOf } from "../data/wallets.js";
@@ -86,6 +86,11 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
     const wide = (safe.holders ?? 0) >= 1000 && (safe.top10Pct ?? 100) < 25;
     if (!wide) return { ok: false, why: `rejected: vertical launch, +${Math.round(Math.max(s.change1h, s.change6h))}% at ${ageH.toFixed(1)}h old` };
   }
+  try {
+    hot.clean(mode, s.mint, s.symbol, s.priceUsd);
+    // Keep the hot list's market numbers (1h change, volume, labels) fresh; at most once a minute per coin.
+    if (Date.now() - (lastMkt.get(s.mint) ?? 0) > 60_000) { lastMkt.set(s.mint, Date.now()); market.upsert(s, safe.holders, [...velocityLabel(s.mint), ...walletLabels(s.mint)]); }
+  } catch { /* best effort */ }
   return { ok: true, holders: safe.holders, top10: safe.top10Pct };
 }
 
@@ -164,8 +169,14 @@ export function logSignal(sig: Signal, taken: boolean, why: string) {
  * 11:36, never re-checked, price went through the trigger unseen).
  */
 export function watchedMints(mode: Signal["mode"], now = Date.now(), max = 10): string[] {
-  return (db.prepare(`SELECT mint, max(at) AS t FROM signals_log WHERE mode=? AND taken=0 AND setup IS NOT NULL AND at > ?
+  const setups = (db.prepare(`SELECT mint, max(at) AS t FROM signals_log WHERE mode=? AND taken=0 AND setup IS NOT NULL AND at > ?
     GROUP BY mint ORDER BY t DESC LIMIT ?`).all(mode, now - 3 * 3_600_000, max) as { mint: string }[]).map(r => r.mint);
+  // Then the hot list: coins that passed safety for this mode in the last 30 min and weren't rejected since,
+  // so a coin "on its way" is re-checked every scan and gets bid the moment it meets the criteria.
+  const onWay = (db.prepare(`SELECT mint FROM clean_seen WHERE mode=? AND at > ? AND (status IS NULL OR (status NOT LIKE 'rejected%'
+      AND status NOT LIKE '%dead%' AND status NOT LIKE 'cooldown%' AND status NOT LIKE 'no sell route%'))
+    ORDER BY at DESC LIMIT ?`).all(mode, now - 30 * 60_000, max) as { mint: string }[]).map(r => r.mint);
+  return [...new Set([...setups, ...onWay])].slice(0, max);
 }
 
 /** Watched coins first (up to two thirds of the cap), then the rest by the mode's own ranking. */
@@ -177,7 +188,9 @@ export function watchedFirst(watched: string[], snaps: TokenSnapshot[], cap: num
 }
 
 const lastLook = new Map<string, number>();
+const lastMkt = new Map<string, number>();
 export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, holders?: number, setup?: Setup) {
+  try { hot.status(mode, s.mint, why); } catch { /* best effort */ }
   const k = `${mode}:${s.mint}`;
   const gap = setup ? 10 * 60_000 : 60 * 60_000;   // setups refresh every 10 min so the distance bar moves; rejections hourly
   if (Date.now() - (lastLook.get(k) ?? 0) < gap) return;

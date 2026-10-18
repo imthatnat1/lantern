@@ -191,6 +191,25 @@ CREATE TABLE IF NOT EXISTS safety_history (
 ) WITHOUT ROWID;`);
 try { db.exec("ALTER TABLE market ADD COLUMN image TEXT"); } catch { /* already there */ }
 
+// Hot list (18 Oct): every coin that passed the safety prefilter, per mode, with the latest verdict the mode gave
+// it. Watching shows these as "On its way" (clean, not in a setup yet) next to "In a setup", and scans re-check them first.
+db.exec(`CREATE TABLE IF NOT EXISTS clean_seen (
+  mode TEXT NOT NULL, mint TEXT NOT NULL, symbol TEXT NOT NULL, at INTEGER NOT NULL, first_at INTEGER NOT NULL,
+  price REAL, status TEXT, status_at INTEGER, PRIMARY KEY (mode, mint)
+) WITHOUT ROWID;`);
+const upClean = db.prepare(`INSERT INTO clean_seen(mode,mint,symbol,at,first_at,price,status,status_at) VALUES(?,?,?,?,?,?,NULL,NULL)
+  ON CONFLICT(mode,mint) DO UPDATE SET symbol=excluded.symbol, at=excluded.at, price=excluded.price,
+    first_at=CASE WHEN clean_seen.at < excluded.at - 3600000 THEN excluded.at ELSE clean_seen.first_at END,
+    status=CASE WHEN clean_seen.status LIKE 'rejected%' THEN NULL ELSE clean_seen.status END`);
+const setStatus = db.prepare("UPDATE clean_seen SET status=?, status_at=? WHERE mode=? AND mint=?");
+export const hot = {
+  /** A coin passed the safety prefilter for this mode just now. */
+  clean(mode: Mode, mint: string, symbol: string, price: number, at = Date.now()) { upClean.run(mode, mint, symbol, at, at, price); },
+  /** The mode's latest verdict on a coin (setup progress, "waiting for...", or a rejection). Unthrottled. */
+  status(mode: Mode, mint: string, why: string, at = Date.now()) { setStatus.run(why, at, mode, mint); },
+  prune(now = Date.now()) { db.prepare("DELETE FROM clean_seen WHERE at < ?").run(now - 24 * 3_600_000); },
+};
+
 export interface Setup {
   /** What has to happen, in plain words. */
   need: string;

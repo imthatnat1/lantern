@@ -6,7 +6,8 @@ import { ingest, scorecard, currentKols } from "./data/wallets.js";
 import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
-import { isFlagship } from "./data/universe.js";
+import { isFlagship, isStonkPair } from "./data/universe.js";
+import { isStonkListed } from "./data/stonkfun.js";
 
 /**
  * JSON API for the dashboard. Bearer token from DASHBOARD_TOKEN.
@@ -93,7 +94,53 @@ export function activity(now = Date.now(), windowMs = 3_600_000) {
     } else if (r.setup && !blockedWhy(r.mint)) setups++;
   }
   const bought = (db.prepare("SELECT COUNT(*) AS n FROM positions WHERE entry_at > ?").get(since) as { n: number }).n;
-  return { windowMs, checked, looked: rows.length, setups, rejected: nRejected, rejectedBy: rejected, bought };
+  // Proof the Stonk.fun side is in the mix: distinct Stonk.fun-listed or creative-pair coins any mode looked at or cleared.
+  const seenMints = db.prepare(`SELECT DISTINCT s.mint, m.quote FROM (SELECT mint FROM signals_log WHERE at > ? UNION SELECT mint FROM clean_seen WHERE at > ?) s
+    LEFT JOIN market m ON m.mint=s.mint`).all(since, since) as { mint: string; quote: string | null }[];
+  const stonk = seenMints.filter(r => isStonkListed(r.mint) || isStonkPair({ mint: r.mint, quoteSymbol: r.quote ?? undefined })).length;
+  return { windowMs, checked, looked: rows.length, setups, rejected: nRejected, rejectedBy: rejected, bought, stonk };
+}
+
+/**
+ * The hot list (Watching). Every coin a mode cleared through safety in the last 30 minutes and hasn't rejected
+ * since, one entry per coin, ranked by heat. "setup" = part way into a buy (a setup logged in the last 20 min);
+ * "onway" = clean and active, with the mode's latest verdict on what it's waiting for. Scans re-check these first
+ * (watchedMints), so one that meets every criterion is bid on the next scan.
+ */
+export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
+  const rows = db.prepare(`SELECT c.mode, c.mint, c.symbol, c.at, c.first_at, c.status, c.status_at,
+      (SELECT s.setup FROM signals_log s WHERE s.mode=c.mode AND s.mint=c.mint AND s.setup IS NOT NULL AND s.at > ? ORDER BY s.at DESC LIMIT 1) AS setup
+    FROM clean_seen c WHERE c.at > ? AND (c.status IS NULL OR c.status NOT LIKE 'rejected%')`).all(now - 20 * 60_000, now - 30 * 60_000) as any[];
+  const best = new Map<string, any>();
+  for (const r of rows) {
+    if (held.has(r.mint) || blockedWhy(r.mint)) continue;
+    // Cleared safety but the mode has since written it off (dead, no exit route, cooling down): not hot.
+    if (/dead|no sell route|exit impact|cooldown|holders shrinking/i.test(r.status ?? "")) continue;
+    const m = mkt(r.mint);
+    const labels: string[] = m?.labels ?? [];
+    const chips: string[] = [];
+    let heat = r.setup ? 100 : 0;
+    const ch1h = Number(m?.ch1h ?? 0);
+    heat += Math.max(0, Math.min(100, ch1h)) * 0.3;
+    const vx = m?.vol1h && m?.vol24h ? (m.vol1h * 24) / m.vol24h : 0;
+    if (vx >= 1.5) { heat += 15; chips.push(`vol ${vx.toFixed(1)}x`); }
+    for (const l of labels) {
+      if (/holders \+/i.test(l)) { heat += 15; chips.push(l); }
+      else if (/trusted|KOL/i.test(l)) { heat += 20; chips.push(l); }
+    }
+    if (isFlagship(r.mint)) { heat += 5; chips.push("flagship"); }
+    if (isStonkListed(r.mint)) chips.push("Stonk.fun");
+    const entry = {
+      mint: r.mint, symbol: r.symbol, mode: r.mode, group: r.setup ? "setup" : "onway", heat: Math.round(heat),
+      status: String(r.status ?? "").replace(/^watching:\s*/i, "") || "clean, no entry pattern yet",
+      setup: r.setup ? JSON.parse(r.setup) : null, checkedAt: r.at, since: r.first_at, chips, market: m,
+      paused: config.pausedModes.includes(r.mode),
+    };
+    const prev = best.get(r.mint);
+    if (!prev || entry.heat > prev.heat) best.set(r.mint, { ...entry, modes: [...new Set([...(prev?.modes ?? []), r.mode])] });
+    else prev.modes = [...new Set([...prev.modes, r.mode])];
+  }
+  return [...best.values()].sort((a, b) => b.heat - a.heat).slice(0, max);
 }
 
 export function snapshotEquity(marks: Map<string, number>) {
@@ -205,6 +252,13 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     WHERE taken=0 AND at > ? AND mcap >= 5000 AND peak_price >= price * 2 ORDER BY peak_price / price DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
     .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, market: mkt(r.mint) }));
   // Plus coins we were stopped out of that then ran.
+  // Flagship bounces: a pinned or big Stonk.fun coin we passed on that bounced 25% or more (below the 2x bar above).
+  const seenMissed = new Set(missed.map((m: any) => m.mint));
+  const flagshipBounces = (db.prepare(`SELECT s.mode, s.mint, s.symbol, s.reason, s.at, s.price, s.peak_price, s.last_price, s.mcap FROM signals_log s
+    JOIN (SELECT mint, max(peak_price / price) AS x FROM signals_log WHERE taken=0 AND at > ? AND price > 0 GROUP BY mint) b ON b.mint=s.mint AND s.peak_price / s.price = b.x
+    WHERE s.taken=0 AND s.at > ? AND s.price > 0 AND s.peak_price >= s.price * 1.25 AND s.peak_price < s.price * 2`).all(now - 48 * 3_600_000, now - 48 * 3_600_000) as any[])
+    .filter(r => isFlagship(r.mint) && !seenMissed.has(r.mint))
+    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, flagshipBounce: true, market: mkt(r.mint) }));
   const stoppedThenRan = (db.prepare(`SELECT p.mode, p.mint, p.symbol, p.close_reason AS reason, p.closed_at AS at, p.entry_price AS price, m.price AS last_price
     FROM positions p JOIN market m ON m.mint=p.mint WHERE p.status='closed' AND p.closed_at > ? AND p.realized_usd < 0 AND m.price >= p.entry_price * 2`).all(now - 48 * 3_600_000) as any[])
     .map(r => ({ ...r, peakX: r.last_price / r.price, nowX: r.last_price / r.price, soldEarly: true, market: mkt(r.mint) }));
@@ -229,7 +283,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     health: { ...health, rejectedTicks24h: rejected.n, rejected: rejectedRows, startedAt: kv.get("startedAt", now), uptimeMs: now - kv.get("startedAt", now),
       helius: { keyLooksValid: /^[0-9a-f-]{36}$/.test(config.keys.helius ?? ""), lastOkAt: kv.get("helius:lastOkAt", 0), lastErr: kv.get("helius:lastErr", "") }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
-    open, closed, fills, equity, byMode, looks, wouldBuy, missed: [...missed, ...stoppedThenRan],
+    open, closed, fills, equity, byMode, looks, wouldBuy, hot: hotList(now, new Set(open.map(o => o.mint))), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
   };
 }
