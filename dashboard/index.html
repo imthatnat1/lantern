@@ -558,7 +558,7 @@ function hotRows(looks, open) {
     return `<div class="card">
       <div class="head">
         ${av(l.symbol, l.market)}
-        <div class="sym">${esc(l.symbol)}${held.has(l.mint) ? '<small class="held">held</small>' : mt(l.mode)}${rewardFlag(m)}</div>
+        <div class="sym">${esc(l.symbol)}${held.has(l.mint) ? '<small class="held">held</small>' : mt(l.mode)}${l.paused && !held.has(l.mint) ? '<small class="dim">watch only</small>' : ""}${rewardFlag(m)}</div>
         <div class="gain"><span class="score">${l.score ? Math.round(l.score) : "·"}</span><small>${big(m.mcap)}</small></div>
         ${links(l.mint, m)}
       </div>
