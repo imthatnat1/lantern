@@ -36,7 +36,32 @@ export const FLOW = {
   divergenceRatio: 1.8, divergenceDrop1h: -15, divergenceMinBuys: 200,
   /** Snapshot check: this many trades with an average under this size = a bot spraying cents. */
   microAvgUsd: 5, microMinTrades5m: 150, microMinTrades1h: 600,
+  /** Snapshot check: this many buys per sell in 5m, over at least this many buys = a buy bot. */
+  oneSidedRatio: 8, oneSidedMinBuys: 300,
+  /** Market cap more than this many times the pool, on a coin under a week old = a valuation nobody could sell into. */
+  fakeValuationX: 60, fakeValuationMaxAgeH: 7 * 24,
+  /** No coin under 2h old is really worth this much. */
+  youngMcapMax: 20_000_000, youngAgeH: 2,
 };
+
+/**
+ * Free checks from the snapshot for a fake valuation. USDF (18 Oct): $171M market cap on a $1.1M pool
+ * (153x), 15 minutes old, up 398,042% in the hour, 2,381 buys to 218 sells in 5m. Its average trade was $55
+ * because a few big trades sat among the cent-sized ones, so microTrades() alone missed it. Real coins on the
+ * same list ran 3-40x their pool (old flagships ZCAT 40x, STONK 36x).
+ */
+export function fakeValuation(s: { mcapUsd: number; liquidityUsd: number; createdAt: number; onCurve: boolean; buys5m: number; sells5m: number }, now = Date.now()): string | null {
+  const ageH = s.createdAt ? (now - s.createdAt) / 3_600_000 : Infinity;
+  if (ageH < FLOW.youngAgeH && s.mcapUsd > FLOW.youngMcapMax)
+    return `fake valuation: $${(s.mcapUsd / 1e6).toFixed(0)}M market cap at ${Math.round(ageH * 60)} minutes old`;
+  if (!s.onCurve && s.liquidityUsd > 0 && ageH < FLOW.fakeValuationMaxAgeH && s.mcapUsd / s.liquidityUsd > FLOW.fakeValuationX)
+    return `fake valuation: market cap ${Math.round(s.mcapUsd / s.liquidityUsd)}x the pool ($${big(s.mcapUsd)} on $${big(s.liquidityUsd)})`;
+  const b = s.buys5m ?? 0, x = s.sells5m ?? 0;
+  if (b >= FLOW.oneSidedMinBuys && b >= FLOW.oneSidedRatio * Math.max(1, x))
+    return `bot buys: ${b} buys to ${x} sells in 5m`;
+  return null;
+}
+const big = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`;
 
 export function flowFromTrades(trades: Trade[]): Flow {
   const buys = trades.filter(t => t.kind === "buy"), sells = trades.filter(t => t.kind === "sell");
