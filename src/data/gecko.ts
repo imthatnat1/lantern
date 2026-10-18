@@ -20,6 +20,22 @@ export async function candles(pairAddress: string, agg: 1 | 5 | 15, limit = 100)
   return out;
 }
 
+/**
+ * Roll 5m candles up into 15m ones, aligned to 15-minute boundaries (open of the first, high/low over all,
+ * close of the last, volume summed). The last bucket can be partial, as GeckoTerminal's own latest candle is.
+ */
+export function rollUp(c5: Candle[], minutes = 15): Candle[] {
+  const ms = minutes * 60_000;
+  const out: Candle[] = [];
+  for (const k of c5) {
+    const t = Math.floor(k.t / ms) * ms;
+    const last = out[out.length - 1];
+    if (last && last.t === t) { last.h = Math.max(last.h, k.h); last.l = Math.min(last.l, k.l); last.c = k.c; last.v += k.v; }
+    else out.push({ t, o: k.o, h: k.h, l: k.l, c: k.c, v: k.v });
+  }
+  return out;
+}
+
 /** Average true range over the last n candles. */
 export function atr(c: Candle[], n = 14): number {
   if (c.length < 2) return 0;
