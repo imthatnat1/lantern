@@ -117,6 +117,8 @@ export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
     // Cleared safety but the mode has since written it off (dead, no exit route, cooling down): not hot.
     if (/dead|deeper than|too deep|too thin|no sell route|exit impact|cooldown|holders shrinking/i.test(r.status ?? "")) continue;
     const m = mkt(r.mint);
+    // Crashing in the hour (DAE -84%, corndog -70% on 18 Oct): a rug in progress, not a coin to watch.
+    if (Number(m?.ch1h ?? 0) <= -50) continue;
     const labels: string[] = m?.labels ?? [];
     const chips: string[] = [];
     let heat = r.setup ? 100 : 0;

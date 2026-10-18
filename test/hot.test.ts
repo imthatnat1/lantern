@@ -45,3 +45,11 @@ test("passing safety again clears an old rejection; a coin clean an hour later s
   hot.clean("pullback", "OLD", "OLD", 1, NOW + 2 * 3_600_000);
   assert.equal(row().first_at, NOW + 2 * 3_600_000, "gap over an hour: new stretch");
 });
+
+test("a coin crashing in the hour stays off the hot list", async () => {
+  const { market } = await import("../src/db.js");
+  hot.clean("bounce", "RUGGING", "RUGGING", 1, NOW - M);
+  market.upsert({ mint: "RUGGING", symbol: "RUGGING", name: "r", priceUsd: 1, liquidityUsd: 9000, mcapUsd: 16000, volume24h: 1, volume1h: 1, volume5m: 1,
+    buys5m: 1, sells5m: 1, change5m: -20, change1h: -70, change6h: -70, change24h: -70, createdAt: NOW, onCurve: false, fetchedAt: NOW } as any);
+  assert.ok(!hotList(NOW).some(x => x.mint === "RUGGING"));
+});
