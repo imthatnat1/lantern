@@ -50,9 +50,12 @@ export async function pairsByMint(mints: string[]): Promise<Map<string, DsPair[]
   const byMint = new Map<string, DsPair[]>();
   for (let i = 0; i < mints.length; i += 30) {
     const chunk = mints.slice(i, i + 30);
+    const asked = new Set(chunk);
     const r = await getJson<{ pairs: DsPair[] | null }>(`https://api.dexscreener.com/latest/dex/tokens/${chunk.join(",")}`, { ttlMs: 5000 });
     for (const p of r.pairs ?? []) {
-      if (p.chainId !== "solana") continue;
+      // Only the coins we asked about. The answer also holds pools where an asked coin is the QUOTE, and their base
+      // tokens (USDC, WBTC, STRK on 19 Oct) were turning up as "fresh launches" on the radar and in every scan.
+      if (p.chainId !== "solana" || !asked.has(p.baseToken.address)) continue;
       const l = byMint.get(p.baseToken.address) ?? [];
       l.push(p); byMint.set(p.baseToken.address, l);
     }
