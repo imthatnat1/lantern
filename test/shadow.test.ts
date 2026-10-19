@@ -21,3 +21,15 @@ test("shadow summary: average gap, dollar effect, and trades Jupiter couldn't ro
   assert.ok(Math.abs(s.avgWorsePct! - 0.03) < 1e-9);
   assert.ok(Math.abs(s.usdEffect - (12 * 0.02 + 18 * 0.04)) < 1e-9);
 });
+
+test("shadow summary: a bad paper price (gap over 50%) is counted apart, not averaged in (the 7165% tile, 20 Oct)", () => {
+  db.exec("DELETE FROM shadow_quotes");
+  const now = Date.now();
+  const ins = db.prepare("INSERT INTO shadow_quotes(position_id, mode, symbol, side, at, usd, paper_price, real_price, impact_pct, worse_pct, routed) VALUES(1,'dip','D',?,?,?,1,1,0,?,1)");
+  ins.run("buy", now - 1000, 10, 0.02);
+  ins.run("sell", now - 500, 0.01, -2344);   // Dacity: paper sold at a bad tick, Jupiter said 2,300x more
+  const s = shadowSummary(now - 3_600_000);
+  assert.equal(s.priced, 1); assert.equal(s.badPaper, 1);
+  assert.ok(Math.abs(s.avgWorsePct! - 0.02) < 1e-9);
+  assert.ok(Math.abs(s.usdEffect - 0.2) < 1e-9);
+});

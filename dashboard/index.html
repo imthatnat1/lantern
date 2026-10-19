@@ -366,7 +366,7 @@ function shadowTile(sh) {
   const w = sh.avgWorsePct;
   const cls = w > 0.02 ? "down" : w < 0.005 ? "up" : "";
   const word = w >= 0 ? "worse" : "better";
-  return `<div class="stat"><div class="v ${cls}">${(Math.abs(w) * 100).toFixed(1)}% ${word}</div><div class="k">real fills vs paper · ${sh.priced} trades${sh.noRoute ? ` · ${sh.noRoute} no route` : ""} · ${usd(-sh.usdEffect, true)}</div></div>`;
+  return `<div class="stat"><div class="v ${cls}">${(Math.abs(w) * 100).toFixed(1)}% ${word}</div><div class="k">real fills vs paper · ${sh.priced} trades${sh.noRoute ? ` · ${sh.noRoute} no route` : ""}${sh.badPaper ? ` · ${sh.badPaper} bad paper price` : ""} · ${usd(-sh.usdEffect, true)}</div></div>`;
 }
 
 function stats(s) {

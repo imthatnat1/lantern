@@ -53,12 +53,19 @@ export function shadow(x: { positionId: number; mode: string; symbol: string; si
   }).catch(e => log.debug({ err: String(e) }, "shadow quote failed"));
 }
 
+/** Over this, a paper-vs-real gap means the paper price was wrong, not slippage. */
+export const BAD_PAPER_GAP = 0.5;
+
 /** For the dashboard: how real fills would have compared with paper over the last week. */
 export function shadowSummary(sinceMs: number) {
   const rows = db.prepare("SELECT mode, symbol, side, at, usd, worse_pct, impact_pct, routed FROM shadow_quotes WHERE at > ? ORDER BY at DESC").all(sinceMs) as any[];
-  const priced = rows.filter(r => r.routed && r.worse_pct != null);
+  const routed = rows.filter(r => r.routed && r.worse_pct != null);
+  // 20 Oct: the tile read "7165% better". A gap over 50% isn't slippage, it's a bad paper price (the Dacity bad-tick
+  // sale, the ALLINU wrong-pool price). Those are counted on their own and kept out of the average.
+  const badPaper = routed.filter(r => Math.abs(r.worse_pct) > BAD_PAPER_GAP);
+  const priced = routed.filter(r => Math.abs(r.worse_pct) <= BAD_PAPER_GAP);
   const avg = priced.length ? priced.reduce((a, r) => a + r.worse_pct, 0) / priced.length : null;
   // Dollar effect: each fill's USD size times how much worse it would have been.
   const usd = priced.reduce((a, r) => a + r.usd * r.worse_pct, 0);
-  return { n: rows.length, priced: priced.length, noRoute: rows.length - priced.length, avgWorsePct: avg, usdEffect: usd, recent: rows.slice(0, 10) };
+  return { n: rows.length, priced: priced.length, noRoute: rows.length - routed.length, badPaper: badPaper.length, avgWorsePct: avg, usdEffect: usd, recent: rows.slice(0, 10) };
 }
