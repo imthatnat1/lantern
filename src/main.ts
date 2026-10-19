@@ -25,6 +25,7 @@ import { launch } from "./strategies/launch.js";
 import { startServer, snapshotEquity } from "./server.js";
 import { ensureWebhook, rotateKols } from "./data/wallets.js";
 import { walletSellCheck } from "./engine/walletsell.js";
+import { pruneCreates, recordCreate } from "./data/creators.js";
 import { takeGraduations } from "./data/stonkfun.js";
 import { flagshipMints } from "./data/universe.js";
 import { currentMood, moodScore, moodSizeX, saveMood } from "./engine/mood.js";
@@ -44,6 +45,8 @@ function addMigration(m: { mint: string; at: number }) {
   kv.set("migrations", [...migrations.entries()]);
 }
 feed.on("migration", addMigration);
+// Every pump.fun create, for counting a creator's launches (serial creator check). Spoofed ones are counted, not kept.
+feed.on("new", (e: { mint?: string; creator?: string; signature?: string; at: number }) => { try { recordCreate(e); } catch { /* best effort */ } });
 
 async function exitLoop() {
   const open = positions.open();
@@ -254,7 +257,7 @@ async function main() {
   tick();
   setInterval(heartbeat, 5 * 60_000);
   setInterval(() => { try { hot.prune(); } catch { /* best effort */ } }, 3_600_000);
-  setInterval(() => { try { recorder.prune(14); } catch (e) { log.warn({ err: String(e) }, "prune failed"); } }, 6 * 3_600_000);
+  setInterval(() => { try { recorder.prune(14); pruneCreates(); } catch (e) { log.warn({ err: String(e) }, "prune failed"); } }, 6 * 3_600_000);
   heartbeat();
 }
 

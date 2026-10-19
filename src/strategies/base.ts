@@ -11,7 +11,8 @@ import { db, cooldowns, audit, market, recorder, hot, type Setup } from "../db.j
 import { isCreativePair } from "../data/universe.js";
 import { isStonkListed } from "../data/stonkfun.js";
 import { buyersOf } from "../data/wallets.js";
-import { blockedWhy, blockMint, burnedWhy, divergence, fakeValuation, flow, microTrades } from "../data/flow.js";
+import { blockedWhy, blockMint, burnedWhy, divergence, fakeValuation, flow, microTrades, stalledHolders } from "../data/flow.js";
+import { serialCreatorWhy } from "../data/creators.js";
 import { dexProfileWhy, socialsWhy } from "../data/socials.js";
 
 export interface Context {
@@ -108,6 +109,14 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
       blockMint(s.mint, why, 24, burnable);
       return { ok: false, why: `rejected: ${why}` };
     }
+    // GOKU (Blossom, 19 Oct): its creator launched 33 coins in 30 days. A launch factory, not a team. Blocked 3 days.
+    const serial = await serialCreatorWhy(safe.creator, safe.creatorLaunches30d);
+    if (serial) { blockMint(s.mint, serial, 72, burnable); return { ok: false, why: `rejected: ${serial}` }; }
+    // RUGRIOT (Blossom, 19 Oct): 484 holders at $88k and not growing. Blocked a day, name not burned (may be a slow real coin).
+    let g1h: number | null = null;
+    try { g1h = recorder.holderVelocity(s.mint, 60 * 60_000); } catch { /* no history */ }
+    const stalled = stalledHolders(s, safe.holders, g1h);
+    if (stalled) { blockMint(s.mint, stalled, 24); return { ok: false, why: `rejected: ${stalled}` }; }
   }
   const ageH = (Date.now() - s.createdAt) / 3_600_000;
   if (!pinned && ageH < 2) {

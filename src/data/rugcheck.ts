@@ -22,6 +22,8 @@ interface RcReport {
   creatorBalance?: number;
   totalSupply?: number;
   tokenMeta?: { name?: string; symbol?: string; uri?: string };
+  /** The creator's other tokens, when RugCheck lists them (field not verified from Claude's workspace; absent = unknown). */
+  creatorTokens?: { mint?: string; createdAt?: string | number }[] | null;
 }
 
 const LIQ_HOLDER_RISKS = /liquidity|lp|holder|single/i;
@@ -88,6 +90,15 @@ async function token2022Traps(mint: string): Promise<string[] | null> {
   return traps;
 }
 
+/** Launches RugCheck lists for the creator in the last 30 days (undated ones count). undefined when it lists none. */
+export function creatorLaunches(tokens: RcReport["creatorTokens"], now = Date.now()): number | undefined {
+  if (!Array.isArray(tokens) || !tokens.length) return undefined;
+  return tokens.filter(t => {
+    const at = typeof t.createdAt === "number" ? (t.createdAt < 1e12 ? t.createdAt * 1000 : t.createdAt) : Date.parse(String(t.createdAt ?? ""));
+    return !Number.isFinite(at) || now - at <= 30 * 86_400_000;
+  }).length;
+}
+
 /** Shared safety gate from the v1 spec, minus the dev-history DB (added later). */
 export async function safety(mint: string, onCurve: boolean): Promise<SafetyResult> {
   const reasons: string[] = [];
@@ -147,7 +158,7 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
     if (traps?.length) reasons.push(...traps.map(t => `honeypot: ${t}`));
   }
 
-  const out = { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator, sniperPct, metaUri: rep.tokenMeta?.uri };
+  const out = { ok: reasons.length === 0, reasons, top10Pct: top10, insiders, holders: rep.totalHolders, lpLockedPct: lp, creator: rep.creator, sniperPct, metaUri: rep.tokenMeta?.uri, creatorLaunches30d: creatorLaunches(rep.creatorTokens) };
   try { recorder.safety(mint, out); } catch { /* best effort */ }
   return out;
 }

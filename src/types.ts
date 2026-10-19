@@ -53,6 +53,8 @@ export interface SafetyResult {
   sniperPct?: number;
   /** Launch metadata JSON (pump.fun / LaunchLab), where the dev's twitter, telegram and website links live. */
   metaUri?: string;
+  /** Creator's launches in 30 days per RugCheck, when it lists them. */
+  creatorLaunches30d?: number;
 }
 
 export interface ExitPlan {

@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { log } from "../log.js";
 
 export interface MigrationEvent { mint: string; at: number }
-export interface NewTokenEvent { mint: string; symbol: string; name: string; at: number }
+export interface NewTokenEvent { mint: string; symbol: string; name: string; at: number; creator?: string; signature?: string }
 
 /**
  * PumpPortal websocket with automatic reconnect and exponential backoff.
@@ -44,8 +44,8 @@ export class PumpPortal extends EventEmitter {
       this.lastMessageAt = Date.now();
       let m: any;
       try { m = JSON.parse(raw.toString()); } catch { return; }
-      if (m.txType === "create" && m.mint) {
-        this.emit("new", { mint: m.mint, symbol: m.symbol ?? "", name: m.name ?? "", at: Date.now() } satisfies NewTokenEvent);
+      if (m.txType === "create") {   // mint checked by recordCreate (data/creators.ts), which counts spoofs
+        this.emit("new", { mint: m.mint, symbol: m.symbol ?? "", name: m.name ?? "", at: Date.now(), creator: m.traderPublicKey, signature: m.signature } satisfies NewTokenEvent);
       } else if (m.txType === "migrate" && m.mint) {
         this.emit("migration", { mint: m.mint, at: Date.now() } satisfies MigrationEvent);
       }

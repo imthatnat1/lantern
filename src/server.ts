@@ -8,6 +8,7 @@ import { config } from "./config.js";
 import { ingest, scorecard, currentKols } from "./data/wallets.js";
 import { walletSellLog } from "./engine/walletsell.js";
 import { stopGapSummary } from "./engine/stopgaps.js";
+import { createStats } from "./data/creators.js";
 import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
@@ -108,6 +109,8 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
  */
 const REJECT_GROUPS: [string, RegExp][] = [
   ["scam relaunch", /scam relaunch/i],
+  ["serial creator", /serial creator/i],
+  ["stalled holders", /stalled holders/i],
   ["no socials", /no links on DexScreener|no website or socials|no community|no website of its own/i],
   ["bot volume", /fake holders/i],
   ["socials unreadable", /couldn't read its socials/i],
@@ -352,7 +355,9 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     health: { ...health, rejectedTicks24h: rejected.n, rejected: rejectedRows, startedAt: kv.get("startedAt", now), uptimeMs: now - kv.get("startedAt", now),
       helius: { keyLooksValid: /^[0-9a-f-]{36}$/.test(config.keys.helius ?? ""), lastOkAt: kv.get("helius:lastOkAt", 0), lastErr: kv.get("helius:lastErr", ""),
         // lastOkAt/lastErr are the backup poller, which only runs when the webhook has been quiet for an hour. lastPushAt is the webhook.
-        lastPushAt: kv.get("helius:lastPushAt", 0) }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
+        lastPushAt: kv.get("helius:lastPushAt", 0) }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", ""),
+      // pump.fun creates recorded for the serial creator check, and the ones refused as spoofed (data/creators.ts).
+      creates: createStats(now) },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
     open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: { ...shadowSummary(now - 7 * 24 * 3_600_000), stops: { n: stopGaps.n, avgFillGapPct: stopGaps.avgFillGapPct, realN: stopGaps.realN, avgRealGapPct: stopGaps.avgRealGapPct } }, hot: hotList(now, new Set(open.map(o => o.mint))), radar: radarList(now, new Set(open.map(o => o.mint))), natWatch: natWatchList(now), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
     walletSells: walletSellLog(now - 48 * 3_600_000),

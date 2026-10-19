@@ -44,7 +44,29 @@ export const FLOW = {
   youngMcapMax: 20_000_000, youngAgeH: 2,
   /** A coin under a day old whose whole life's volume is under this share of its market cap never traded its way there. */
   unbackedVolShare: 0.2, unbackedMaxAgeH: 24, unbackedMinMcap: 1_000_000,
+  /** Stalled holders: a coin under this age, at this market cap or more, whose holders grew less than this in the last hour… */
+  stalledMaxAgeH: 24, stalledMinMcap: 50_000, stalledMaxGrowth1h: 0.03,
+  /** …while price rose this much in the hour, or (under this cap) it has fewer than this many holders per $1k of market cap. */
+  stalledPriceUp1h: 25, stalledDensityMaxMcap: 250_000, stalledMinHoldersPerK: 6,
 };
+
+/**
+ * Stalled holders (19 Oct, from Blossom's RUGRIOT block: 484 holders at $88k and not growing).
+ * A young coin whose price climbs while nobody new buys in is being pushed by a few wallets; a young coin with a thin
+ * crowd for its size that isn't gaining any is the same story, slower. Needs an hour of our own holder readings
+ * (`growth1h` null = not enough history, no verdict). Thresholds are first guesses; watch how many coins it stops.
+ */
+export function stalledHolders(s: { mcapUsd: number; change1h: number; createdAt: number }, holders: number | undefined, growth1h: number | null, now = Date.now()): string | null {
+  if (growth1h == null || !holders || !s.createdAt) return null;
+  const ageH = (now - s.createdAt) / 3_600_000;
+  if (ageH >= FLOW.stalledMaxAgeH || s.mcapUsd < FLOW.stalledMinMcap || growth1h >= FLOW.stalledMaxGrowth1h) return null;
+  const flat = growth1h <= 0 ? "no new holders" : `holders up only ${(growth1h * 100).toFixed(1)}%`;
+  if (s.change1h >= FLOW.stalledPriceUp1h) return `stalled holders: price up ${Math.round(s.change1h)}% in the hour but ${flat} (${holders})`;
+  const perK = holders / (s.mcapUsd / 1000);
+  if (s.mcapUsd <= FLOW.stalledDensityMaxMcap && perK < FLOW.stalledMinHoldersPerK)
+    return `stalled holders: ${holders} holders at $${big(s.mcapUsd)} and ${flat} in the hour`;
+  return null;
+}
 
 /**
  * Free checks from the snapshot for a fake valuation. USDF (18 Oct): $171M market cap on a $1.1M pool
