@@ -344,7 +344,11 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
   const wouldBuy = (db.prepare(`SELECT s.mode, s.mint, s.symbol, s.score, s.at, s.price, s.peak_price, s.last_price, s.mcap FROM signals_log s
     JOIN (SELECT mode, mint, max(at) AS at FROM signals_log WHERE at > ? AND taken=0 AND reason LIKE '%paused: watching only%' GROUP BY mode, mint) l
     ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at ORDER BY s.at DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
-    .map(r => ({ ...r, peakX: r.price ? r.peak_price / r.price : null, nowX: r.price ? r.last_price / r.price : null, flagship: isFlagship(r.mint), market: mkt(r.mint) }));
+    .map(r => ({ ...r, peakX: r.price ? r.peak_price / r.price : null, nowX: r.price ? r.last_price / r.price : null, flagship: isFlagship(r.mint), market: mkt(r.mint),
+      // 20 Oct (Nat: "why we have runners on our would have bought list but didnt buy them"): say why, and whether
+      // another mode bought the coin anyway.
+      whyNot: `${r.mode} was paused then (watching only)`, pausedNow: config.pausedModes.includes(r.mode),
+      boughtBy: (db.prepare("SELECT mode FROM positions WHERE mint=? AND entry_at > ? ORDER BY entry_at LIMIT 1").get(r.mint, r.at - 6 * 3_600_000) as { mode: string } | undefined)?.mode ?? null }));
 
   const missed = (db.prepare(`SELECT mode, mint, symbol, reason, at, price, peak_price, last_price, mcap, low_before_peak FROM signals_log
     WHERE taken=0 AND at > ? AND mcap >= 5000 AND peak_price >= price * 2 ORDER BY peak_price / price DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])

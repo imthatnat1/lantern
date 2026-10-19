@@ -239,7 +239,7 @@
 <div id="hot"></div>
 
 <h2>Would have bought <small id="wouldCount"></small></h2>
-<p class="dim" style="font-size:13px;margin:0 0 6px">Paused modes keep looking. Ride and bounce are paused, so they log where they would have bought. No money used. How these play out decides when they come back.</p>
+<p class="dim" style="font-size:13px;margin:0 0 6px">Picks from modes that were paused at the time, so nothing was bought. Each card says why, and where the coin is now. The total at the top is the honest test of whether a paused mode should come back.</p>
 <div id="would"></div>
 
 <h2>Today's trades <small id="tradesSummary"></small></h2>
@@ -470,15 +470,19 @@ function setupBlock(l) {
 function wouldRows(rows) {
   const done = rows.filter(r => r.nowX != null);
   const up = done.filter(r => r.nowX > 1.0001).length;
+  // The honest total (20 Oct): $10 in each pick, valued where they are NOW, not at their best moment.
+  const total = done.reduce((a, r) => a + 10 * (r.nowX - 1), 0);
   $("wouldCount").textContent = rows.length ? `${rows.length} in 48h · ${up} up now` : "";
-  if (!rows.length) return `<div class="empty">No would-buys yet. Dip checks flagships every 5 minutes.</div>`;
-  return rows.map(r => {
+  if (!rows.length) return `<div class="empty">No picks from paused modes in the last 48 hours.</div>`;
+  const head = done.length ? `<div class="note" style="margin:0 0 8px">If we'd put $10 in each: <b class="${total >= 0 ? "up" : "down"}">${usd(total, true)}</b> now (${up} of ${done.length} up). Best moments flatter; this is where they are today.</div>` : "";
+  return head + rows.map(r => {
     const now = r.nowX == null ? null : r.nowX - 1, peak = r.peakX == null ? null : r.peakX - 1;
+    const why = r.boughtBy ? `We did buy it: ${esc(r.boughtBy)} took it.` : `Not bought: ${esc(r.whyNot)}${r.pausedNow ? "" : `. ${esc(r.mode)} is buying again now.`}`;
     return `<div class="card">
       <div class="head">${av(r.symbol, r.market)}<div class="sym">${esc(r.symbol)}<small>${esc(r.mode)}</small>${r.flagship ? '<small class="dim">flagship</small>' : ""}</div>
-        <div class="gain ${now == null ? "" : now >= 0 ? "up" : "down"}">${now == null ? "—" : pct(now)}<small>since the signal</small></div>
+        <div class="gain ${now == null ? "" : now >= 0 ? "up" : "down"}">${now == null ? "—" : pct(now)}<small>now · best ${peak == null ? "—" : pct(peak)}</small></div>
         ${links(r.mint, r.market)}</div>
-      <div class="note">Would have bought at ${px(r.price)}${r.mcap ? ` (${big(r.mcap)})` : ""} · ${ago(Date.now() - r.at)} ago · best since ${peak == null ? "—" : pct(peak)} · score ${Math.round(r.score)}</div>
+      <div class="note">${why}<br>Signal at ${px(r.price)}${r.mcap ? ` (${big(r.mcap)})` : ""} · ${ago(Date.now() - r.at)} ago</div>
     </div>`;
   }).join("");
 }
