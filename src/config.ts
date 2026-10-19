@@ -176,6 +176,9 @@ export const config = {
       // 19 Oct: Blossom's best trade was PIERRE, an "ultra breakout" 2.3h old on 4.5x volume ($3 -> +$9.28).
       // From 1h to 6h after migration launch buys a breakout: a 5m close at a new high on a volume spike.
       breakoutMaxAgeH: 6, breakoutVolX: 3,
+      // 20 Oct: first-leg buys (under 1h after migration) went 11 trades, 1 win, -$28.62 overnight; 8 were dumped to
+      // ~$2k within 30 minutes. Blossom never buys a coin under an hour old. Launch now only buys breakouts from 1h on.
+      firstLeg: false,
       // 19 Oct 11:30: pump.fun coins migrate at ~$27-38k with a $12-15k pool (UBI $27k/$12k, then 6.7x; WAND $31k/$13.5k).
       // The first numbers ($25k pool, $60k cap) meant waiting until a coin had already doubled.
       minLiquidity: 10_000, mcapMin: 25_000, mcapMax: 3_000_000,

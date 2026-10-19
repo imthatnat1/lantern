@@ -91,3 +91,21 @@ test("structuralStop clamps to max loss and never sits above entry", () => {
   assert.equal(structuralStop(1.0, 0.2, 0.05, 1, 0.5), 0.5);
   assert.equal(structuralStop(1.0, 1.5, 0.0, 1, 0.3), 0.7);
 });
+
+test("COMPUTE (20 Oct): a 15m candle that closed before the buy can't trigger the stop", async () => {
+  const T0 = 1_000_000_000_000, M15 = 15 * 60_000;
+  const p = pos(1.0);
+  p.entryAt = T0 + 2 * M15 + 60_000;            // bought a minute into the third candle
+  p.plan.closeStopPrice = 0.65;
+  const before = candle(T0 + M15, 0.5);          // closed before the buy, far below the stop (pre-pump)
+  assert.deepEqual(evaluate(p, { price: 1.0, at: p.entryAt + 1000, confirmed: true, source: "t" } as any, before, p.entryAt + 1000), []);
+  const after = candle(T0 + 2 * M15, 0.6);       // the candle we bought in, closing under the stop
+  const acts = evaluate(p, { price: 0.6, at: T0 + 3 * M15 + 1000, confirmed: true, source: "t" } as any, after, T0 + 3 * M15 + 1000);
+  assert.match(acts[0].reason, /close stop/);
+});
+
+test("Dacity (20 Oct): a crash Jupiter disagrees with never confirms, however many ticks repeat it", async () => {
+  _resetPending();
+  const bad = { primary: async () => 0.0000029, secondary: async () => 0.0068 };
+  for (const t of [1000, 7000, 13000]) assert.equal((await readPrice("DACITY", 0.0042, bad, t))!.confirmed, false);
+});

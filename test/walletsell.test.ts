@@ -11,7 +11,8 @@ const HEXI = "21rgbFW6sujQovCw3qt6R2EdE97Yzzvk8sSc37Bb72Cm";
 const T = Date.UTC(2026, 9, 19, 8, 0), M15 = 15 * 60_000;
 let sigN = 0;
 const swap = (wallet: string, mint: string, side: "buy" | "sell", amount: number, at: number) => ingest({
-  type: "SWAP", signature: `sig${++sigN}`, timestamp: Math.floor(at / 1000), nativeTransfers: [],
+  type: "SWAP", signature: `sig${++sigN}`, timestamp: Math.floor(at / 1000),
+  nativeTransfers: side === "buy" ? [{ fromUserAccount: wallet, toUserAccount: "pool", amount: 0.2e9 }] : [{ fromUserAccount: "pool", toUserAccount: wallet, amount: 0.2e9 }],
   tokenTransfers: [side === "buy" ? { mint, toUserAccount: wallet, fromUserAccount: "pool", tokenAmount: amount } : { mint, fromUserAccount: wallet, toUserAccount: "pool", tokenAmount: amount }],
 });
 const pos = (mint: string, mode = "trusted", walletAddrs: string[] = []) => ({ id: ++sigN, mode, mint, symbol: mint, entryPrice: 1, entryAt: T, qty: 10, remainingQty: 10, costUsd: 10,

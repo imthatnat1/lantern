@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 process.env.DB_PATH = ":memory:";
 const { config } = await import("../src/config.js");
 const { launchPattern, cheapWhy } = await import("../src/strategies/launch.js");
-const C = config.modes.launch;
+const C = { ...config.modes.launch, firstLeg: true };   // first-leg tests; live has it off since 20 Oct
 
 const M5 = 5 * 60_000;
 const MIG = Date.UTC(2026, 9, 19, 0, 0);
@@ -73,4 +73,18 @@ test("Moonoween (19 Oct): a fake valuation is named a scam before any size check
   const t = Date.now();
   const why = cheapWhy({ ...mkt, mcapUsd: 157_700_000, liquidityUsd: 1_000_000, buys5m: 300, sells5m: 12, createdAt: t - 60 * 60_000, volume24h: 541_000, onCurve: false }, C, t);
   assert.match(why!, /^rejected: (fake valuation|bot buys)/);
+});
+
+test("first-leg buys are off live (20 Oct): under an hour after migration launch waits", async () => {
+  const live = config.modes.launch;
+  const p = launchPattern(mkt, run([1, 1.2, 1.45, 1.7, 2.0]), MIG, now(5), live) as any;
+  assert.equal(p.ok, false);
+  assert.match(p.why, /under an hour since migration/);
+});
+
+test("launchpad coins only: pump.fun and bonk mints, not tokenized stocks or wrapped coins", async () => {
+  const { isLaunchpadMint } = await import("../src/strategies/launch.js");
+  assert.ok(isLaunchpadMint("Goqx3oFohWoTnuJbVhT7DcGfq6EjLrPyhTEuyHUZpump"));
+  assert.ok(isLaunchpadMint("AbcdEfgh1234bonk"));
+  assert.ok(!isLaunchpadMint("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), "USDC");
 });

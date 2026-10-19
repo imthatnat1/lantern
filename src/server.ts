@@ -203,6 +203,9 @@ export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
     // in the hour, a setup more than 25% from its trigger, or one the mode says is breaking down leaves the list.
     // It's still checked first behind the scenes (watchedMints) and comes back on its own when it gets close.
     if (Number(m?.ch1h ?? 0) <= -30) continue;
+    // 20 Oct (Nat: "rubbish in the watch list"): sub-$25k coins, coins down 50%+ on the day and churners are noise.
+    if (m && !isFlagship(r.mint) && ((m.mcap ?? 0) < 25_000 || Number(m.ch24h ?? 0) <= -50)) continue;
+    if (((m?.labels ?? []) as string[]).some(l => /^churn\?/i.test(l))) continue;
     const su = r.setup ? JSON.parse(r.setup) : null;
     if (su && !su.progress && su.distance != null && su.distance > 0.25) continue;
     if (/structure broken|still making new lows|more than a dip/i.test(r.status ?? "")) continue;
@@ -264,7 +267,8 @@ export function radarList(now = Date.now(), held = new Set<string>(), max = 12) 
       return { mint: r.mint, symbol: r.symbol, waiting: r.reason, checkedAt: r.at, market: m, watched: isNatWatched(r.mint, now),
         chips: ((m?.labels ?? []) as string[]).filter(l => /holders \+|churn\?|bought|KOL|trusted/i.test(l)) };
     })
-    .filter(r => r.market && (r.market.liquidity ?? 0) >= 5_000)
+    // Fresh coins only (pool under 6h old), with a real market cap.
+    .filter(r => r.market && (r.market.liquidity ?? 0) >= 5_000 && (r.market.mcap ?? 0) >= 15_000 && now - (r.market.created_at ?? 0) < 6 * 3_600_000)
     .sort((a, b) => Number(b.watched) - Number(a.watched) || (b.market.vol5m ?? 0) - (a.market.vol5m ?? 0))
     .slice(0, max);
 }

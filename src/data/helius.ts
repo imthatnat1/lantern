@@ -31,7 +31,7 @@ export async function recentBuys(wallet: string, sinceMs: number, budget: number
     log.warn({ used: creditsUsedToday(), budget }, "helius budget hit for today");
     return [];
   }
-  const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${config.keys.helius}&limit=10&type=SWAP`;
+  const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${config.keys.helius}&limit=20`;
   let txs: HeliusTx[];
   try { txs = await getJson<HeliusTx[]>(url); spend(CREDITS_PER_CALL); kv.set("helius:lastOkAt", Date.now()); } catch (e) { kv.set("helius:lastErr", String(e).slice(0, 40)); log.warn({ wallet, err: String(e) }, "helius fetch failed"); return []; }
   if (ingestTx) for (const tx of txs) { try { ingestTx(tx); } catch { /* best effort */ } }
@@ -81,7 +81,7 @@ export async function tokenBalance(owner: string, mint: string, budget: number):
 export async function recentSells(wallet: string, mint: string, sinceMs: number, budget: number): Promise<number> {
   if (!config.keys.helius) return 0;
   if (creditsUsedToday() + CREDITS_PER_CALL > budget) return 0;
-  const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${config.keys.helius}&limit=10&type=SWAP`;
+  const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${config.keys.helius}&limit=20`;
   let txs: HeliusTx[];
   try { txs = await getJson<HeliusTx[]>(url); spend(CREDITS_PER_CALL); kv.set("helius:lastOkAt", Date.now()); } catch { return 0; }
   let sold = 0;

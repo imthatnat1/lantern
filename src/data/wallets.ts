@@ -64,7 +64,8 @@ export function ingest(tx: any): number {
     const solIn = (tx.nativeTransfers ?? []).filter((t: any) => t.toUserAccount === w).reduce((a: number, t: any) => a + t.amount, 0) / 1e9;
     for (const t of tx.tokenTransfers ?? []) {
       if (t.mint === SOL) continue;
-      if (t.toUserAccount === w) { ins.run(`${sig}:${w}:${t.mint}:b`, w, walletTier(w)!, "buy", t.mint, t.tokenAmount, solOut, at); n++; }
+      // A buy spends SOL. Tokens that just arrive (airdropped dust, a transfer from their other wallet) aren't buys.
+      if (t.toUserAccount === w && solOut >= 0.005) { ins.run(`${sig}:${w}:${t.mint}:b`, w, walletTier(w)!, "buy", t.mint, t.tokenAmount, solOut, at); n++; }
       else if (t.fromUserAccount === w) { ins.run(`${sig}:${w}:${t.mint}:s`, w, walletTier(w)!, "sell", t.mint, t.tokenAmount, solIn, at); n++; }
     }
   }
@@ -116,13 +117,16 @@ export function recordedBag(wallet: string, mint: string, atMs: number): number 
 export async function ensureWebhook(publicUrl: string) {
   if (!config.keys.helius) { log.warn("no helius key, wallet webhook disabled"); return; }
   const addresses = [...new Set([...config.trustedWallets, ...currentKols().map(k => k.address)])];
-  const want = { webhookURL: `${publicUrl}/api/wallet-events`, transactionTypes: ["SWAP"], accountAddresses: addresses, webhookType: "enhanced", authHeader: `Bearer ${process.env.DASHBOARD_TOKEN ?? ""}` };
+  const want = { webhookURL: `${publicUrl}/api/wallet-events`, transactionTypes: ["ANY"], accountAddresses: addresses, webhookType: "enhanced", authHeader: `Bearer ${process.env.DASHBOARD_TOKEN ?? ""}` };
   const base = `https://api.helius.xyz/v0/webhooks?api-key=${config.keys.helius}`;
   try {
     const list = await (await fetch(base, { signal: AbortSignal.timeout(10_000) })).json() as any[];
     const mine = (list ?? []).find(w => w.webhookURL === want.webhookURL);
     if (mine) {
-      const same = JSON.stringify([...mine.accountAddresses].sort()) === JSON.stringify([...addresses].sort());
+      // 20 Oct: the webhook took only "SWAP" transactions, and pump.fun curve buys aren't labelled that, so trusted mode
+      // never saw COUP (Sapphy + hexi, Blossom +$7.37) or any of the ~60 overnight buys Blossom saw. Now "ANY".
+      const same = JSON.stringify([...mine.accountAddresses].sort()) === JSON.stringify([...addresses].sort())
+        && JSON.stringify(mine.transactionTypes ?? []) === JSON.stringify(want.transactionTypes);
       if (!same) {
         await fetch(`https://api.helius.xyz/v0/webhooks/${mine.webhookID}?api-key=${config.keys.helius}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(want), signal: AbortSignal.timeout(10_000) });
         log.info({ n: addresses.length }, "helius webhook updated");

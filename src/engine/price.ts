@@ -69,7 +69,17 @@ export async function readPrice(
     return { price: p, at: now, confirmed: false, source: "primary", note };
   }
 
-  // Second source missing or disagrees. Fall back to next-tick confirmation.
+  // Jupiter has a price and disagrees: never confirm. 20 Oct: Dacity was "sold" at $0.0000029 while Jupiter said $0.0068
+  // (and every pool $0.007). The bad tick repeated, so next-tick agreement confirmed it. Only fall back to the next
+  // tick when Jupiter has no price at all (a fresh coin it doesn't price yet, or a pool that's gone).
+  if (s) {
+    const note = `secondary ${s} disagrees`;
+    audit.rejectedTick(mint, "primary", p, lastGood, note);
+    log.warn({ mint, p, lastGood, s }, "price disagrees with Jupiter, holding");
+    return { price: p, at: now, confirmed: false, source: "primary", note };
+  }
+
+  // No second source. Fall back to next-tick confirmation.
   const prev = pending.get(mint);
   if (prev && now - prev.at >= 5000 && Math.abs(prev.price - p) / p <= config.risk.sanityAgreePct) {
     pending.delete(mint);

@@ -2,7 +2,8 @@ import { config, type ModeCfg } from "../config.js";
 import { log } from "../log.js";
 import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { atr, highestHigh } from "../data/gecko.js";
-import { natWatchMints } from "../data/natwatch.js";
+import { isNatWatched, natWatchMints } from "../data/natwatch.js";
+import { isStonkListed } from "../data/stonkfun.js";
 import { fakeValuation, microTrades } from "../data/flow.js";
 import { buySellRatio, candles5and15, churnLabel, dex, dist, gate, holderScore, holderVelocity, logLook, logSignal, pairScore, prefilter, sniperPenalty, walletScore, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
@@ -45,7 +46,9 @@ export const launch: Strategy = {
       if (s && !s.onCurve && ctx.now - s.createdAt < C.breakoutMaxAgeH * 3_600_000) migratedAt.set(m, s.createdAt);
       else all.delete(m);
     }
-    const snaps = [...all.values()];
+    // Launchpad coins only (pump.fun / bonk mints, Stonk.fun listings, or ones Nat watches). 20 Oct: a new pool for
+    // tokenized stocks and wrapped coins (ABNB, TTWO, cbADA, INJ) looked like a migration and filled the radar.
+    const snaps = [...all.values()].filter(s => isLaunchpadMint(s.mint) || isStonkListed(s.mint) || watched.includes(s.mint) || isNatWatched(s.mint));
     // Cheap checks first; the busiest buy-side coins get the candle and safety calls.
     const live = snaps.filter(s => {
       const why = cheapWhy(s, C, ctx.now);
@@ -64,6 +67,9 @@ export const launch: Strategy = {
     return out;
   },
 };
+
+/** pump.fun and LetsBonk mints carry their launchpad in the address. */
+export function isLaunchpadMint(mint: string): boolean { return /(pump|bonk)$/.test(mint); }
 
 /** Checks that need no I/O. Null = worth a closer look. */
 export function cheapWhy(m: Mkt & { volume1h?: number; volume5m?: number; buys1h?: number; sells1h?: number; createdAt?: number; onCurve?: boolean }, C: ModeCfg<"launch">, now = Date.now()): string | null {
@@ -101,6 +107,7 @@ export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: 
   if (last.c < last.o) return { ok: false, why: "last 5m candle red, waiting for a green one" };
   const firstHour = now - migratedAt <= C.maxSinceMigrationMin * 60_000;
   let kind: "first leg" | "breakout";
+  if (firstHour && !C.firstLeg) return { ok: false, why: "under an hour since migration, waiting for it to prove itself (breakouts from 1h)" };
   if (firstHour) {
     // First leg: still running, on at least average volume.
     if (gain15 < C.minGain15m) return { ok: false, why: `only +${(gain15 * 100).toFixed(0)}% in 15 minutes, not running` };

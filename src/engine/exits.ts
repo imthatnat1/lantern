@@ -23,10 +23,13 @@ export function evaluate(p: Position, read: PriceRead, lastClosed15: Candle | un
     p.lastGoodAt = read.at;
     if (price > p.peakPrice) p.peakPrice = price;
   }
-  const newClose = lastClosed15 && lastClosed15.t > ((p.meta.lastCloseT as number) ?? 0);
+  // Only candles that closed after we bought. 20 Oct: COMPUTE, 김여정 and discat were sold the minute they were bought,
+  // because the last closed 15m candle was from before the pump, below the stop. COMPUTE then ran +452%.
+  const afterEntry = !!lastClosed15 && lastClosed15.t + 15 * 60_000 > p.entryAt;
+  const newClose = afterEntry && lastClosed15!.t > ((p.meta.lastCloseT as number) ?? 0);
   if (newClose) {
-    p.meta.lastCloseT = lastClosed15.t;
-    if (lastClosed15.c > p.peakClose) p.peakClose = lastClosed15.c;
+    p.meta.lastCloseT = lastClosed15!.t;
+    if (lastClosed15!.c > p.peakClose) p.peakClose = lastClosed15!.c;
   }
 
   // 1. Hard tick floor. Confirmed price only.
@@ -35,7 +38,7 @@ export function evaluate(p: Position, read: PriceRead, lastClosed15: Candle | un
   }
 
   // 2. Close-based stop. Only on a new closed candle.
-  if (newClose && lastClosed15.c <= p.plan.closeStopPrice) {
+  if (newClose && lastClosed15!.c <= p.plan.closeStopPrice) {
     return [{ fraction: 1, reason: `close stop ${p.plan.closeStopPrice.toPrecision(4)}`, trigger: p.plan.closeStopPrice }];
   }
 
@@ -57,7 +60,7 @@ export function evaluate(p: Position, read: PriceRead, lastClosed15: Candle | un
     // Lift the close stop under the trail. Only ever up.
     const trailStop = p.peakClose * (1 - trail);
     if (trailStop > p.plan.closeStopPrice) p.plan.closeStopPrice = trailStop;
-    if (newClose && lastClosed15.c <= trailStop) {
+    if (newClose && lastClosed15!.c <= trailStop) {
       out.push({ fraction: 1, reason: `trail ${(trail * 100).toFixed(0)}% from peak close`, trigger: trailStop });
       return out;
     }
