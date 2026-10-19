@@ -76,3 +76,38 @@ export function structuralStop(entry: number, low: number, atr: number, k: numbe
   const floor = entry * (1 - maxLossPct);
   return Math.max(raw, floor) > entry ? floor : Math.max(raw, floor);
 }
+
+/**
+ * Adding to winners (19 Oct, Nat: "if it looks like its going to run can we keep bidding? So that we make the most of
+ * that ticker"). Pure, shared by the live exit loop and the lab.
+ *
+ * An add happens only when the position is already up by the next level in `gains` (measured from the FIRST entry),
+ * on a green closed 15m candle at a new peak close, with buyers at least matching sellers. Each add is `fraction` of
+ * the first bid. After an add the close stop moves up to the new average entry. Stops are judged on 15m closes, so a
+ * sharp drop right after an add can still exit a little below that average: a small loss, not a big one.
+ */
+export interface AddRule { gains: number[]; fraction: number }
+
+export function wantAdd(p: Position, read: PriceRead, lastClosed15: Candle | undefined, rule: AddRule | undefined, buyersOk: boolean): { step: number; usd: number } | null {
+  if (!rule || !rule.gains.length || !read.confirmed || !buyersOk || p.status !== "open") return null;
+  const done = (p.meta.adds as number | undefined) ?? 0;
+  if (done >= rule.gains.length) return null;
+  const firstEntry = (p.meta.firstEntry as number | undefined) ?? p.entryPrice;
+  const firstCost = (p.meta.firstCost as number | undefined) ?? p.costUsd;
+  if (read.price / firstEntry - 1 < rule.gains[done]) return null;
+  if (!lastClosed15 || lastClosed15.t === p.meta.lastAddCloseT) return null;
+  if (lastClosed15.c <= lastClosed15.o || lastClosed15.c < p.peakClose * 0.999) return null;
+  return { step: done + 1, usd: firstCost * rule.fraction };
+}
+
+/** Book an add on the position: average the entry, grow the size, lift the stop to the new average. */
+export function applyAdd(p: Position, usd: number, effPrice: number, feesUsd: number, lastClosed15T?: number): void {
+  if (p.meta.firstEntry == null) { p.meta.firstEntry = p.entryPrice; p.meta.firstCost = p.costUsd; }
+  const qtyAdd = (usd - feesUsd) / effPrice;
+  const remaining = p.remainingQty + qtyAdd;
+  p.entryPrice = (p.entryPrice * p.remainingQty + effPrice * qtyAdd) / remaining;
+  p.qty += qtyAdd; p.remainingQty = remaining; p.costUsd += usd;
+  p.meta.adds = ((p.meta.adds as number | undefined) ?? 0) + 1;
+  p.meta.lastAddCloseT = lastClosed15T;
+  if (p.entryPrice > p.plan.closeStopPrice) p.plan.closeStopPrice = p.entryPrice;
+}

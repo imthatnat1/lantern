@@ -9,7 +9,7 @@ import * as gecko from "./data/gecko.js";
 import * as jup from "./data/jupiter.js";
 import * as rug from "./data/rugcheck.js";
 import { readPrice } from "./engine/price.js";
-import { evaluate } from "./engine/exits.js";
+import { evaluate, wantAdd } from "./engine/exits.js";
 import * as broker from "./engine/broker.js";
 import { candles5and15, logSignal, type Context, type Strategy } from "./strategies/base.js";
 import * as liveCandles from "./data/livecandles.js";
@@ -68,6 +68,17 @@ async function exitLoop() {
         broker.sell(p, a.fraction, read.price, snap?.liquidityUsd ?? p.liquidityAtEntry, snap?.onCurve ?? false, solPrice, a.reason, now);
         if ((p.status as string) === "closed" && (a.reason.startsWith("close stop") || a.reason.startsWith("hard floor"))) {
           cooldowns.set(p.mode, p.mint, now + 6 * 3_600_000);   // 6h before re-entering a stop-out
+        }
+      }
+      // Adding to winners: a green 15m close at a new high, buyers at least matching sellers, at the mode's next level.
+      if (p.status === "open" && !actions.length && snap) {
+        const want = wantAdd(p, read, lastClosed, broker.addRuleFor(p.mode), snap.buys5m >= snap.sells5m);
+        if (want) {
+          const feedHealthy = now - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs;
+          const ok = broker.canAdd(p, want.usd, markPrices, feedHealthy);
+          const gain = read.price / ((p.meta.firstEntry as number | undefined) ?? p.entryPrice) - 1;
+          if (ok.ok) broker.addTo(p, want.usd, read.price, snap.liquidityUsd, snap.onCurve, solPrice, `add #${want.step} at +${Math.round(gain * 100)}%: new high on a green 15m close`, lastClosed?.t, now);
+          else { p.meta.lastAddCloseT = lastClosed?.t; log.info({ sym: p.symbol, why: ok.why }, "add skipped"); }   // once per candle
         }
       }
       if (p.status === "open") positions.update(p);

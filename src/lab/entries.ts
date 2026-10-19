@@ -21,6 +21,7 @@ import { pullbackPattern, pullbackQualifies } from "../strategies/pullback.js";
 import { bounceFloor, bouncePattern } from "../strategies/bounce.js";
 import { cheapWhy as launchCheap, launchPattern } from "../strategies/launch.js";
 import { isFlagship } from "../data/universe.js";
+import { addRuleFor } from "../engine/broker.js";
 import { dipPattern, dipPlan } from "../strategies/dip.js";
 import { ultraPattern, ultraPlan, ultraWindow } from "../strategies/ultra.js";
 import { rideCorePlan, rideLeader, rideSleeve } from "../strategies/ride.js";
@@ -51,6 +52,8 @@ export interface LabTrade {
   mode: Mode; mint: string; symbol: string; at: number; entryMcap: number; sizeUsd: number;
   pnl: number; pct: number; peakPct: number; heldMin: number; exit: string; open: boolean;
   why: string; candles: "real" | "mixed" | "ticks"; leg?: string;
+  /** How many times the replay added to this winner (19 Oct). */
+  adds?: number;
 }
 
 export interface ModeSummary { trades: number; wins: number; pnl: number; best: number; worst: number; avgPct: number; realCandleShare: number }
@@ -103,12 +106,13 @@ function enter(h: CoinHistory, mode: Mode, now: number, why: string, plan: (e: n
     mode, mint: h.info.mint, symbol: h.info.symbol, at: fill.at, price: fill.price, liquidity: fill.liquidity, onCurve: h.info.onCurve,
     sizeUsd: size, plan, atr15: atr(h.c15Before(now)), ticks: h.ticksFrom(fill.at), c15: h.c15From(fill.at),
     variant: { ...(exp.exits?.["*"] ?? {}), ...(exp.exits?.[mode] ?? {}) },
+    adds: addRuleFor(mode, exp.config?.[mode as keyof ModeOverrides] as Record<string, unknown> | undefined),
   });
   if (!r) return null;
   return {
     exitAt: r.exitAt,
     trade: { mode, mint: h.info.mint, symbol: h.info.symbol, at: fill.at, entryMcap: fill.mcap, sizeUsd: size, pnl: r.pnl, pct: r.pct, peakPct: r.peakPct,
-      heldMin: r.heldMin, exit: r.reason, open: r.open, why, candles: candleTag(realShare), leg: extra?.leg },
+      heldMin: r.heldMin, exit: r.reason, open: r.open, why, candles: candleTag(realShare), leg: extra?.leg, adds: r.adds || undefined },
   };
 }
 

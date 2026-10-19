@@ -2,6 +2,24 @@
   "hours": 72,
   "experiments": [
     {
+      "name": "No adding to winners",
+      "why": "19 Oct: launch, dip, ultra and pullback add half their first bid at two levels on a winner (Nat: \"if it looks like its going to run can we keep bidding?\"). This switches adds off. If it says Helps, adding is costing more than it earns.",
+      "config": {
+        "launch": {
+          "addAtGains": []
+        },
+        "dip": {
+          "addAtGains": []
+        },
+        "ultra": {
+          "addAtGains": []
+        },
+        "pullback": {
+          "addAtGains": []
+        }
+      }
+    },
+    {
       "name": "Bounce: old $45k floor for everyone",
       "why": "19 Oct the floor dropped to $25k for coins with 1,000+ holders and a $25k pool (PIERRE 26x, mucron 18x, MEGA 10x were all refused at $32-43k). This puts the old floor back. If this row says Helps, the new floor is losing money and should go.",
       "config": {

@@ -4,6 +4,7 @@ import { kv, positions, fills } from "../db.js";
 import { log } from "../log.js";
 import { isCreativePair } from "../data/universe.js";
 import type { Fill, Mode, Position, Signal } from "../types.js";
+import { applyAdd, type AddRule } from "./exits.js";
 
 /** Paper account: cash, vault, peak equity, daily P&L. */
 export interface Account { cash: number; vault: number; peakEquity: number }
@@ -142,3 +143,40 @@ export function markPeakEquity(markPrices: Map<string, number>) {
 }
 
 export function modeOpenCount(mode: Mode) { return positions.openByMode(mode).length; }
+
+/** The add-to-winners rule for a mode, from its config (addAtGains, addFraction). None for modes without one. */
+export function addRuleFor(mode: Mode, overrides?: Record<string, unknown>): AddRule | undefined {
+  const c = { ...((config.modes as Record<string, any>)[mode] ?? {}), ...(overrides ?? {}) };
+  return Array.isArray(c.addAtGains) && c.addAtGains.length ? { gains: c.addAtGains, fraction: c.addFraction ?? 0.5 } : undefined;
+}
+
+/** Same guardrails as a new position: daily loss stop, drawdown halt, feed, capital at risk, mode allocation, cash. */
+export function canAdd(p: Position, usd: number, markPrices: Map<string, number>, feedHealthy: boolean): RiskCheck {
+  const a = account();
+  const eq = equity(markPrices);
+  if (realizedToday() <= -config.risk.dailyLossStopUsd) return { ok: false, why: "daily loss stop" };
+  if (eq < a.peakEquity * (1 - config.risk.drawdownHaltPct)) return { ok: false, why: "drawdown halt" };
+  if (!feedHealthy) return { ok: false, why: "price feed stale" };
+  if (openValueUsd(markPrices) + usd > config.risk.maxCapitalAtRiskUsd) return { ok: false, why: "capital at risk cap" };
+  const modeOpen = positions.openByMode(p.mode).reduce((s, x) => s + x.remainingQty * (markPrices.get(x.mint) ?? x.lastGoodPrice), 0);
+  if (modeOpen + usd > eq * config.allocation[p.mode]) return { ok: false, why: `${p.mode} allocation full` };
+  if (usd > a.cash) return { ok: false, why: "no cash" };
+  return { ok: true };
+}
+
+/** Add to an open winner. Sized so the whole position can still exit within the pool's impact limit. */
+export function addTo(p: Position, usd: number, priceUsd: number, liquidityUsd: number, onCurve: boolean, solPrice: number, reason: string, lastCloseT: number | undefined, now = Date.now()): boolean {
+  const held = p.remainingQty * priceUsd;
+  if (liquidityUsd > 0) usd = Math.min(usd, liquidityUsd * config.risk.maxExitImpactPct / 2 - held);
+  if (usd < 2) return false;
+  const { effPrice, feesUsd } = fillModel("buy", priceUsd, usd, liquidityUsd, onCurve, solPrice, taxPct(p.mint));
+  const a = account();
+  a.cash -= usd;
+  saveAccount(a);
+  const qtyBefore = p.qty;
+  applyAdd(p, usd, effPrice, feesUsd, lastCloseT);
+  positions.update(p);
+  fills.insert({ side: "buy", mint: p.mint, mode: p.mode, qty: p.qty - qtyBefore, priceUsd: effPrice, grossUsd: usd, feesUsd, netUsd: usd, reason, at: now }, p.id);
+  log.info({ mode: p.mode, sym: p.symbol, usd: usd.toFixed(2), price: effPrice, avg: p.entryPrice, stop: p.plan.closeStopPrice, reason }, "ADD");
+  return true;
+}

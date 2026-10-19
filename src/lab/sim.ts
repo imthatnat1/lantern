@@ -2,7 +2,7 @@
  * Exit simulation over recorded prices, using the live exit engine and fill model.
  * Shared by the exit replay (src/replay.ts) and the entry lab (src/lab/entries.ts).
  */
-import { evaluate } from "../engine/exits.js";
+import { applyAdd, evaluate, wantAdd, type AddRule } from "../engine/exits.js";
 import { fillModel } from "../engine/broker.js";
 import { taxPct } from "../data/tax.js";
 import type { Candle, ExitPlan, Mode, Position } from "../types.js";
@@ -43,9 +43,11 @@ export interface SimInput {
   ticks: SimTick[];          // from entry onward
   c15: Candle[];             // 15m candles covering the hold
   variant?: ExitVariant;
+  /** Adding to winners, same rule as live. Undefined = no adds. Buyer/seller flow isn't replayed, so that check passes. */
+  adds?: AddRule;
 }
 
-export interface SimResult { pnl: number; pct: number; reason: string; exitAt: number; heldMin: number; peakPct: number; open: boolean }
+export interface SimResult { pnl: number; pct: number; reason: string; exitAt: number; heldMin: number; peakPct: number; open: boolean; adds: number; costUsd: number }
 
 export function simulate(x: SimInput): SimResult | null {
   if (x.ticks.length < 2) return null;
@@ -59,7 +61,7 @@ export function simulate(x: SimInput): SimResult | null {
     costUsd: x.sizeUsd, peakPrice: effPrice, peakClose: effPrice, lastGoodPrice: x.price, lastGoodAt: x.at, atr15: x.atr15 || effPrice * 0.05,
     liquidityAtEntry: liq0, plan, tpTaken: [], realizedUsd: 0, status: "open", meta: {},
   };
-  let net = 0, ci = 0, reason = "still open", exitAt = x.at, peak = x.price;
+  let net = 0, ci = 0, reason = "still open", exitAt = x.at, peak = x.price, spent = x.sizeUsd;
   const M15 = 15 * 60_000;
   for (let i = 0; i < x.ticks.length; i++) {
     const t = x.ticks[i];
@@ -70,7 +72,8 @@ export function simulate(x: SimInput): SimResult | null {
     if (confirmed) peak = Math.max(peak, t.price);
     while (ci < x.c15.length && x.c15[ci].t + M15 <= t.at) ci++;
     const lastClosed = ci > 0 ? x.c15[ci - 1] : undefined;
-    const actions = evaluate(p, { price: t.price, at: t.at, confirmed, source: "replay" }, lastClosed, t.at);
+    const read = { price: t.price, at: t.at, confirmed, source: "replay" as const };
+    const actions = evaluate(p, read, lastClosed, t.at);
     for (const a of actions) {
       const q = p.remainingQty * a.fraction;
       const { effPrice: sp, feesUsd: sf } = fillModel("sell", t.price, q * t.price, t.liquidity || liq0, x.onCurve, SOL_USD, tax);
@@ -78,9 +81,21 @@ export function simulate(x: SimInput): SimResult | null {
       if (p.remainingQty <= p.qty * 0.001) { p.remainingQty = 0; p.status = "closed"; break; }
     }
     if (p.status === "closed") break;
+    if (!actions.length) {
+      const want = wantAdd(p, read, lastClosed, x.adds, true);
+      if (want) {
+        const liq = t.liquidity || liq0;
+        const usd = Math.min(want.usd, liq * 0.02 / 2 - p.remainingQty * t.price);
+        if (usd >= 2) {
+          const { effPrice: ap, feesUsd: af } = fillModel("buy", t.price, usd, liq, x.onCurve, SOL_USD, tax);
+          applyAdd(p, usd, ap, af, lastClosed?.t);
+          spent += usd;
+        } else p.meta.lastAddCloseT = lastClosed?.t;
+      }
+    }
   }
   const open = p.remainingQty > 0;
   if (open) { const last = x.ticks.at(-1)!; net += p.remainingQty * last.price; exitAt = last.at; }
-  const pnl = net - x.sizeUsd;
-  return { pnl, pct: pnl / x.sizeUsd, reason, exitAt, heldMin: Math.round((exitAt - x.at) / 60_000), peakPct: peak / x.price - 1, open };
+  const pnl = net - spent;
+  return { pnl, pct: pnl / spent, reason, exitAt, heldMin: Math.round((exitAt - x.at) / 60_000), peakPct: peak / x.price - 1, open, adds: (p.meta.adds as number | undefined) ?? 0, costUsd: spent };
 }

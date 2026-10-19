@@ -145,6 +145,7 @@ export const config = {
       breakoutVolX: 1.3,
       buySellMin: 1.0, buySellMax: 3.0,
       maxAboveRangeTop: 0.25, maxAboveRangeTopHot: 0.60, hotVolX: 5, hotMinLiq: 50_000,
+      addAtGains: [0.5, 1.2], addFraction: 0.5,   // adding to winners (19 Oct)
     },
     bounce: {
       scanEveryMs: 3 * 60_000,
@@ -184,6 +185,8 @@ export const config = {
       maxOffHigh: 0.15, minGain15m: 0.10, maxCandleX: 1.6, minVolX: 1.0,
       // 35% (was 25%): the lab's "wider stop" row lost less (-$0.54 vs -$1.14 over 3 days). First legs shake hard.
       stopPct: 0.35, hardFloorPct: 0.40,
+      // Adding to winners (19 Oct): half the first bid at +60% and again at +150% from the first entry.
+      addAtGains: [0.6, 1.5], addFraction: 0.5,
     },
     pullback: {
       scanEveryMs: 2 * 60_000,
@@ -198,6 +201,7 @@ export const config = {
       holdCandles5m: 3,
       reclaimVolX: 1.3,
       maxAboveLowX: 1.25,
+      addAtGains: [0.5, 1.2], addFraction: 0.5,   // adding to winners (19 Oct)
     },
     dip: {
       scanEveryMs: 5 * 60_000,
@@ -223,6 +227,8 @@ export const config = {
       /** Turn rule only on flagships (pinned + Stonk.fun's biggest) and pinned coins. */
       flagshipsOnly: true,
       turnMaxDepth: 0.70, turnMaxAboveLow: 1.40,
+      // Adding to winners (19 Oct): half the first bid at +25% and at +60%.
+      addAtGains: [0.25, 0.6], addFraction: 0.5,
     },
     ride: {
       scanEveryMs: 3 * 60_000,
