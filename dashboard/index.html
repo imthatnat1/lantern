@@ -651,8 +651,8 @@ function walletTable(ws) {
 
 function modeTable(byMode) {
   const rows = byMode.sort((a, b) => b.pnl - a.pnl).map(m =>
-    `<tr><td>${m.mode}</td><td>${m.open}</td><td>${m.n}</td><td>${m.n ? Math.round(m.wins / m.n * 100) + "%" : "—"}</td><td class="${m.pnl > 0 ? "up" : m.pnl < 0 ? "down" : ""}">${usd(m.pnl, true)}</td></tr>`).join("");
-  return `<table><tr><th>strategy</th><th>open</th><th>trades</th><th>won</th><th>P&amp;L</th></tr>${rows}</table>`;
+    `<tr><td>${m.mode}${m.paused ? ` <span class="faint">paused</span>` : m.stopped ? ` <span class="down" style="font-size:12px">sitting out today</span>` : ""}</td><td>${m.open}</td><td>${m.n}</td><td>${m.n ? Math.round(m.wins / m.n * 100) + "%" : "—"}</td><td class="${(m.today || 0) > 0 ? "up" : (m.today || 0) < 0 ? "down" : ""}">${m.today == null ? "—" : usd(m.today, true)}</td><td class="${m.pnl > 0 ? "up" : m.pnl < 0 ? "down" : ""}">${usd(m.pnl, true)}</td></tr>`).join("");
+  return `<table><tr><th>strategy</th><th>open</th><th>trades</th><th>won</th><th>today</th><th>P&amp;L</th></tr>${rows}</table>`;
 }
 
 function missedRows(missed) {

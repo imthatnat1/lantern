@@ -138,6 +138,18 @@ export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: 
   };
 }
 
+/**
+ * 20 Oct: the stricter first leg. Overnight, 8 of 11 first legs were dumped to ~$2k within 30 minutes. A first leg now
+ * also needs a spread-out crowd (top 10 under firstLegMaxTop10%) that is still growing fast. Unknown = refused.
+ * Pure, shared with the lab. Returns why it's refused, or null.
+ */
+export function firstLegWhy(kind: string, top10: number | undefined | null, holderGrowth10m: number | null, C: ModeCfg<"launch">): string | null {
+  if (kind !== "first leg") return null;
+  if ((top10 ?? 100) > C.firstLegMaxTop10) return `first leg: top 10 hold ${top10 == null ? "?" : top10.toFixed(0)}%, needs under ${C.firstLegMaxTop10}% this early`;
+  if (C.firstLegMinHolderGrowth > -1 && (holderGrowth10m == null || holderGrowth10m < C.firstLegMinHolderGrowth)) return `first leg: holders ${holderGrowth10m == null ? "not measured yet" : `+${(holderGrowth10m * 100).toFixed(0)}%`} in 10m, needs +${(C.firstLegMinHolderGrowth * 100).toFixed(0)}%`;
+  return null;
+}
+
 async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promise<Signal | null> {
   const pre = await prefilter(s, "launch");
   if (!pre.ok) { logLook("launch", s, pre.why!, pre.holders); return null; }
@@ -149,6 +161,8 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   if (!p.ok) { if (p.why) logLook("launch", s, p.why, pre.holders, p.setup); return null; }
   const hv = holderVelocity(s.mint);
   if (hv != null && hv <= 0) { logLook("launch", s, `holders not growing (${(hv * 100).toFixed(0)}% in 10m)`, pre.holders); return null; }
+  const fl = firstLegWhy(p.kind, pre.top10, hv, C);
+  if (fl) { logLook("launch", s, fl, pre.holders); return null; }
 
   const g = await gate(s, "launch", C.sizeUsd);
   const score = p.base + (hv != null && hv >= 0.1 ? 10 : 0) + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);

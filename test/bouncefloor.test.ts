@@ -13,7 +13,7 @@ test("bounce floor: the runners we missed on 18-19 Oct now get in, at the crowd 
   // PIERRE $32k/$84k pool/7,612 holders (ran 26x), mucron $43k/$34k/12,658 (18x), MEGA $43k/$34k/7,305 (10x), OPEQ $33k/$34k/2,336 (6.5x)
   for (const [mcap, liq, holders] of [[31_702, 84_000, 7_612], [43_500, 34_000, 12_658], [43_000, 34_000, 7_305], [33_000, 34_000, 2_336]])
     assert.deepEqual(bounceFloor(mcap, liq, holders, C), { why: null, crowd: true }, `${mcap}`);
-  assert.equal(C.crowdSizeUsd, 2);
+  assert.equal(C.crowdSizeUsd, 5);   // 20 Oct: $2 -> $5 with bounce live again
 });
 
 test("bounce floor: the rugs it caught stay out (thin pools, few holders)", () => {

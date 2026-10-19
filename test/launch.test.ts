@@ -75,11 +75,23 @@ test("Moonoween (19 Oct): a fake valuation is named a scam before any size check
   assert.match(why!, /^rejected: (fake valuation|bot buys)/);
 });
 
-test("first-leg buys are off live (20 Oct): under an hour after migration launch waits", async () => {
-  const live = config.modes.launch;
-  const p = launchPattern(mkt, run([1, 1.2, 1.45, 1.7, 2.0]), MIG, now(5), live) as any;
+test("with first legs off, under an hour after migration launch waits", async () => {
+  const off = { ...config.modes.launch, firstLeg: false };
+  const p = launchPattern(mkt, run([1, 1.2, 1.45, 1.7, 2.0]), MIG, now(5), off) as any;
   assert.equal(p.ok, false);
   assert.match(p.why, /under an hour since migration/);
+});
+
+test("first legs are back on live (20 Oct) but need a spread-out, fast-growing crowd", async () => {
+  const { firstLegWhy } = await import("../src/strategies/launch.js");
+  const C = config.modes.launch;
+  assert.equal(C.firstLeg, true);
+  assert.match(firstLegWhy("first leg", 31, 0.2, C)!, /top 10 hold 31%/, "concentrated: refused");
+  assert.match(firstLegWhy("first leg", 15, 0.04, C)!, /holders \+4%/, "slow crowd: refused");
+  assert.match(firstLegWhy("first leg", 15, null, C)!, /not measured yet/, "unknown growth: refused");
+  assert.equal(firstLegWhy("first leg", 15, 0.12, C), null, "spread out and growing: allowed");
+  assert.equal(firstLegWhy("breakout", 31, null, C), null, "breakouts keep the normal rules");
+  assert.equal(firstLegWhy("first leg", 31, null, { ...C, firstLegMaxTop10: 100, firstLegMinHolderGrowth: -1 }), null, "the lab's loose row");
 });
 
 test("launchpad coins only: pump.fun and bonk mints, not tokenized stocks or wrapped coins", async () => {

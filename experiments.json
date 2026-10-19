@@ -2,6 +2,43 @@
   "hours": 72,
   "experiments": [
     {
+      "name": "Launch: no first legs (breakouts only)",
+      "why": "20 Oct first legs went back on live with strict crowd rules (top 10 under 20%, holders +10% in 10m). This switches them off again. If it says Helps, first legs are still losing and should go.",
+      "config": {
+        "launch": {
+          "firstLeg": false
+        }
+      }
+    },
+    {
+      "name": "Launch: first legs without the strict crowd rules",
+      "why": "The overnight 20 Oct version: any first leg, no top 10 or holder growth rule (11 trades, 1 win). Kept to prove the strict rules earn their keep. If this says Helps, the strict rules are refusing winners.",
+      "config": {
+        "launch": {
+          "firstLegMaxTop10": 100,
+          "firstLegMinHolderGrowth": -1
+        }
+      }
+    },
+    {
+      "name": "Ride: Stonk.fun flagships only",
+      "why": "Ride is live again on any leader ($2M+ 24h volume, $100k pool). This limits it to Stonk.fun flagships and pinned coins. If it says Helps, ride should stick to the flagships.",
+      "config": {
+        "ride": {
+          "flagshipsOnly": true
+        }
+      }
+    },
+    {
+      "name": "Bounce: only after a trusted wallet buys",
+      "why": "Bounce is live again on any post-migration dip. This only bounces coins wirelyss, hexi or sapphy bought in the last 6 hours. If it says Helps, bounce should wait for a trusted buyer.",
+      "config": {
+        "bounce": {
+          "trustedOnly": true
+        }
+      }
+    },
+    {
       "name": "Ultra: old second-leg rule",
       "why": "20 Oct ultra switched to Blossom-style breakouts (a 5m close above the 2h high on 1.3x volume, not in a 6h downtrend). This puts the old rule back (dump, 1.8x recovery, 3 higher lows, then a breakout). If it says Helps, go back.",
       "config": {

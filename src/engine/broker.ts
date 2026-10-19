@@ -31,8 +31,17 @@ export function brisbaneDayStart(now = Date.now()): number {
   return d.getTime() - 10 * 3_600_000;
 }
 
-export function realizedToday(): number {
-  return positions.realizedSince(brisbaneDayStart());
+export function realizedToday(mode?: string): number {
+  return positions.realizedSince(brisbaneDayStart(), mode);
+}
+
+/**
+ * 20 Oct, Nat: "what matters is we test all modes until they are valid and robust". With every mode buying, one bad
+ * mode used to trip the whole-bot daily stop and silence the rest. Now each mode has its own daily cap: a mode that
+ * loses config.risk.modeDailyLossUsd sits out until Brisbane midnight and the others keep trading.
+ */
+export function modeStopped(mode: string): boolean {
+  return realizedToday(mode) <= -config.risk.modeDailyLossUsd;
 }
 
 /** Fee + slippage model. Returns effective price and fee in USD. */
@@ -55,6 +64,7 @@ export function canOpen(sig: Signal, markPrices: Map<string, number>, feedHealth
   const a = account();
   const eq = equity(markPrices);
   if (realizedToday() <= -config.risk.dailyLossStopUsd) return { ok: false, why: "daily loss stop" };
+  if (modeStopped(sig.mode)) return { ok: false, why: `${sig.mode} hit its $${config.risk.modeDailyLossUsd} daily loss cap, back at midnight` };
   if (eq < a.peakEquity * (1 - config.risk.drawdownHaltPct)) return { ok: false, why: "drawdown halt" };
   if (!feedHealthy) return { ok: false, why: "price feed stale" };
   const atRisk = openValueUsd(markPrices);
@@ -164,6 +174,7 @@ export function canAdd(p: Position, usd: number, markPrices: Map<string, number>
   const a = account();
   const eq = equity(markPrices);
   if (realizedToday() <= -config.risk.dailyLossStopUsd) return { ok: false, why: "daily loss stop" };
+  if (modeStopped(p.mode)) return { ok: false, why: `${p.mode} hit its daily loss cap` };
   if (eq < a.peakEquity * (1 - config.risk.drawdownHaltPct)) return { ok: false, why: "drawdown halt" };
   if (!feedHealthy) return { ok: false, why: "price feed stale" };
   if (openValueUsd(markPrices) + usd > config.risk.maxCapitalAtRiskUsd) return { ok: false, why: "capital at risk cap" };

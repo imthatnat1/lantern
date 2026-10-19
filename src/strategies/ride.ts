@@ -3,7 +3,7 @@ import { log } from "../log.js";
 import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow, vwap } from "../data/gecko.js";
-import { allCandidates, isPinned, isStonkPair } from "../data/universe.js";
+import { allCandidates, isFlagship, isPinned, isStonkPair } from "../data/universe.js";
 import { ride as rideDb } from "../db.js";
 import { brisbaneDayStart } from "../engine/broker.js";
 import { buySellRatio, candles5and15, dex, dist, gate, holderScore, walletScore, logLook, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
@@ -31,6 +31,7 @@ export const ride: Strategy = {
     // Candidates: liquid, busy, and preferably ours. Rank by 24h volume, keep a short list to check structure on.
     const cands = [...snaps.values()]
       .filter(s => s.volume24h >= C.minVol24h && s.liquidityUsd >= C.minLiquidity && s.pairAddress)
+      .filter(s => !C.flagshipsOnly || isFlagship(s.mint) || isPinned(s.mint))
       .sort((a, b) => (Number(isPinned(b.mint) || isStonkPair(b)) - Number(isPinned(a.mint) || isStonkPair(a))) || b.volume24h - a.volume24h)
       .slice(0, 6);
     const leaders: string[] = [];

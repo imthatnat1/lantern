@@ -171,12 +171,16 @@ export function activity(now = Date.now(), windowMs = 3_600_000) {
  * 19 Oct (Nat: "All these messages say similar things"): a miss card should say how far the coin fell before it ran,
  * and whether the reason we passed is already fixed, so the list shows the misses we can still learn from.
  */
-export function honest(r: { mode: string; reason: string; price: number; low_before_peak?: number }): { fellFirst: number | null; fixed: string | null } {
+/** When a paused mode went live again. Misses it logged before then were "paused then", not a rule that failed. */
+export const UNPAUSED_AT: Record<string, number> = { ride: Date.UTC(2026, 9, 19, 21, 50), bounce: Date.UTC(2026, 9, 19, 21, 50) };
+
+export function honest(r: { mode: string; reason: string; price: number; low_before_peak?: number; at?: number }): { fellFirst: number | null; fixed: string | null } {
   const fellFirst = r.low_before_peak && r.price ? Math.max(0, 1 - r.low_before_peak / r.price) : null;
   const why = r.reason ?? "";
   const fixed =
     /cooling|geckoterminal/i.test(why) ? "fixed 18 Oct: we build our own charts now, no more cooling"
     : config.pausedModes.includes(r.mode) && !/paused: watching only/.test(why) ? `${r.mode} is paused`
+    : UNPAUSED_AT[r.mode] && (r.at ?? 0) < UNPAUSED_AT[r.mode] && !/paused: watching only/.test(why) ? `${r.mode} was paused then, buying again since 20 Oct`
     : /under the \$45k bounce floor$/.test(why) ? "changed 19 Oct: bounce now buys from $25k with a real crowd"
     : /launch needs \$25k|under launch's \$60k/.test(why) ? "changed 19 Oct: launch now looks from a $10k pool and $25k"
     : /vertical launch/.test(why) && r.mode === "launch" ? "changed 19 Oct: launch skips the vertical-launch rule"
@@ -321,7 +325,11 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
   const byMode = (db.prepare(`SELECT mode, count(*) AS n, sum(case when realized_usd>0 then 1 else 0 end) AS wins, sum(realized_usd) AS pnl
     FROM positions WHERE status='closed' GROUP BY mode`).all() as any[]);
   for (const m of Object.keys(config.allocation)) if (!byMode.find(x => x.mode === m)) byMode.push({ mode: m, n: 0, wins: 0, pnl: 0 });
-  for (const m of byMode) m.open = open.filter(o => o.mode === m.mode).length;
+  for (const m of byMode) {
+    m.open = open.filter(o => o.mode === m.mode).length;
+    // 20 Oct: every mode live, each with its own daily loss cap.
+    m.today = broker.realizedToday(m.mode); m.stopped = broker.modeStopped(m.mode); m.paused = config.pausedModes.includes(m.mode);
+  }
 
   // Looks in the last 24h: latest per (mode, mint). Two pulls, so the flood of pump.fun rejections can't
   // push forming setups off the Watching list: the latest 80 looks of any kind, plus every coin with a
@@ -347,7 +355,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     .map(r => ({ ...r, peakX: r.price ? r.peak_price / r.price : null, nowX: r.price ? r.last_price / r.price : null, flagship: isFlagship(r.mint), market: mkt(r.mint),
       // 20 Oct (Nat: "why we have runners on our would have bought list but didnt buy them"): say why, and whether
       // another mode bought the coin anyway.
-      whyNot: `${r.mode} was paused then (watching only)`, pausedNow: config.pausedModes.includes(r.mode),
+      whyNot: config.pausedModes.includes(r.mode) ? `${r.mode} is paused (watching only)` : `${r.mode} was paused then (watching only), buying again now`, pausedNow: config.pausedModes.includes(r.mode),
       boughtBy: (db.prepare("SELECT mode FROM positions WHERE mint=? AND entry_at > ? ORDER BY entry_at LIMIT 1").get(r.mint, r.at - 6 * 3_600_000) as { mode: string } | undefined)?.mode ?? null }));
 
   const missed = (db.prepare(`SELECT mode, mint, symbol, reason, at, price, peak_price, last_price, mcap, low_before_peak FROM signals_log
@@ -377,7 +385,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       cash: a.cash, vault: a.vault, equity: eq, peakEquity: a.peakEquity, startingCapital: config.startingCapital,
       realizedToday: broker.realizedToday(), openPnl, closedCount: closedAll.n, closedWins: closedAll.wins, closedPnl: closedAll.pnl,
     },
-    guardrails: { dailyLossStopUsd: config.risk.dailyLossStopUsd, drawdownHaltAt: a.peakEquity * (1 - config.risk.drawdownHaltPct), capitalAtRisk: broker.openValueUsd(marks), maxCapitalAtRisk: config.risk.maxCapitalAtRiskUsd },
+    guardrails: { dailyLossStopUsd: config.risk.dailyLossStopUsd, modeDailyLossUsd: config.risk.modeDailyLossUsd, drawdownHaltAt: a.peakEquity * (1 - config.risk.drawdownHaltPct), capitalAtRisk: broker.openValueUsd(marks), maxCapitalAtRisk: config.risk.maxCapitalAtRiskUsd },
     health: { ...health, rejectedTicks24h: rejected.n, rejected: rejectedRows, startedAt: kv.get("startedAt", now), uptimeMs: now - kv.get("startedAt", now),
       helius: { keyLooksValid: /^[0-9a-f-]{36}$/.test(config.keys.helius ?? ""), lastOkAt: kv.get("helius:lastOkAt", 0), lastErr: kv.get("helius:lastErr", ""),
         // lastOkAt/lastErr are the backup poller, which only runs when the webhook has been quiet for an hour. lastPushAt is the webhook.

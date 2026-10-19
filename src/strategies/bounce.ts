@@ -2,6 +2,7 @@ import { config, type ModeCfg } from "../config.js";
 import { log } from "../log.js";
 import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
+import { trustedBuyerAddrs } from "../data/wallets.js";
 import { atr, highestHigh, lowestLow } from "../data/gecko.js";
 import { baseHolds, buySellRatio, candles5and15, dex, dist, gate, heldCount, logLook, holderScore, pairScore, sniperPenalty, walletScore, holderVelocity, logSignal, prefilter, reclaim, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
@@ -77,6 +78,7 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   // Checked before the safety calls, so coins under the floor cost nothing and never reach the hot list.
   const early = bounceFloor(s.mcapUsd, s.liquidityUsd, undefined, C);
   if (early.why) { logLook("bounce", s, early.why); return null; }
+  if (C.trustedOnly && !trustedBuyerAddrs(s.mint, 6 * 3_600_000, ctx.now).length) { logLook("bounce", s, "no trusted wallet bought it in 6h (bounce is trusted-only)"); return null; }
   const pre = await prefilter(s, "bounce");
   if (!pre.ok) { logLook("bounce", s, pre.why!, pre.holders); return null; }
   const floor = bounceFloor(s.mcapUsd, s.liquidityUsd, pre.holders ?? 0, C);

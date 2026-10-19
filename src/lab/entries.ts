@@ -19,7 +19,7 @@ import { pairScore } from "../strategies/base.js";
 import { isStonkPair } from "../data/universe.js";
 import { pullbackPattern, pullbackQualifies } from "../strategies/pullback.js";
 import { bounceFloor, bouncePattern } from "../strategies/bounce.js";
-import { cheapWhy as launchCheap, launchPattern } from "../strategies/launch.js";
+import { cheapWhy as launchCheap, firstLegWhy, launchPattern } from "../strategies/launch.js";
 import { isFlagship } from "../data/universe.js";
 import { addRuleFor } from "../engine/broker.js";
 import { dipPattern, dipPlan } from "../strategies/dip.js";
@@ -145,6 +145,7 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
       // Holders unknown in the replay = can't prove a crowd, so under $45k it's treated as 0 holders.
       const floor = bounceFloor(m.mcapUsd ?? 0, m.liquidityUsd ?? 0, h.holdersAt(now) ?? 0, C);
       if (floor.why) continue;
+      if (C.trustedOnly && !trustedBoughtBefore(h.info.mint, now, 6 * 3_600_000)) continue;
       if (!passesGate(h, now, ageH, m.change1h, m.change6h, g)) continue;
       const { c5, realShare } = h.c5At(now);
       const p = bouncePattern(m, c5, migratedAt, C);
@@ -165,6 +166,8 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
       const { c5, realShare } = h.c5At(now);
       const p = launchPattern(m, c5, migratedAt, now, C);
       if (!p.ok) continue;
+      const hNow = h.holdersAt(now), h10 = h.holdersAt(now - 10 * 60_000);
+      if (firstLegWhy(p.kind, sa.top10, hNow && h10 ? hNow / h10 - 1 : null, C)) continue;
       const c = enter(h, mode, now, `launch: ${p.kind} +${(p.gain15 * 100).toFixed(0)}% in 15m`, p.plan, realShare, exp);
       if (c) { out.push(c); blockedUntil = c.exitAt + C.cooldownMs; }
     } else if (mode === "dip") {
@@ -216,6 +219,7 @@ function rideTrades(coins: Map<string, CoinHistory>, from: number, to: number, e
     for (const h of coins.values()) {
       const m = h.mktAt(now);
       if (!m || m.volume24h < C.minVol24h || m.liquidityUsd < C.minLiquidity) continue;
+      if (C.flagshipsOnly && !isFlagship(h.info.mint) && !config.pinned.includes(h.info.mint)) continue;
       cands.push({ h, m, pref: Number(config.pinned.includes(h.info.mint) || stonk(h)) });
     }
     cands.sort((a, b) => (b.pref - a.pref) || b.m.volume24h - a.m.volume24h);
@@ -246,6 +250,11 @@ function rideTrades(coins: Map<string, CoinHistory>, from: number, to: number, e
     }
   }
   return out;
+}
+
+/** Did a trusted wallet buy this coin in the window before `now`? From the recorded wallet events. */
+function trustedBoughtBefore(mint: string, now: number, windowMs: number): boolean {
+  try { return !!db.prepare("SELECT 1 FROM wallet_events WHERE tier='trusted' AND side='buy' AND mint=? AND at BETWEEN ? AND ? LIMIT 1").get(mint, now - windowMs, now); } catch { return false; }
 }
 
 /** Trusted copies: every recorded buy by a trusted wallet, entered a minute later (copy latency). */

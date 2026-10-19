@@ -52,7 +52,9 @@ export const config = {
    * 19 Oct 16:05 (Nat: yes): dip unpaused with the turn rule (lab +$3.37 over 9 trades; the old trigger -$17.43) at $4.
    * bounce paused: lab 10 trades, 0 wins, -$7.25. Launch now covers fresh migrations.
    */
-  pausedModes: ["ride", "bounce", ...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
+  // 20 Oct, Nat: "i dont mind losing paper money ... what matters is we test all modes until they are valid and robust".
+  // Nothing is paused by default now. Each mode has its own daily loss cap instead (risk.modeDailyLossUsd).
+  pausedModes: [...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
   /**
    * Always checked, like pinned coins, but with every safety check still applied (pinned coins skip
    * RugCheck and the copycat filter). For coins Nat wants eyes on but hasn't vouched for.
@@ -86,8 +88,12 @@ export const config = {
   },
 
   risk: {
-    dailyLossStopUsd: 30,
-    drawdownHaltPct: 0.20,      // halt when equity < 80% of peak
+    // 20 Oct: $30 -> $60 with every mode live. Each mode stops itself at modeDailyLossUsd first, so this is the backstop.
+    dailyLossStopUsd: 60,
+    modeDailyLossUsd: 15,
+    // 20 Oct: 20% -> 35% for paper testing. From a $300 peak the old halt was $240 and equity was $252: one rough day
+    // with every mode live would have stopped all buying until reset. Put back to 20% before any real money.
+    drawdownHaltPct: 0.35,      // halt when equity < 65% of peak
     maxCapitalAtRiskUsd: 180,
     maxSingleTradeUsd: 40,
     vaultShare: 0.5,            // of realized profit
@@ -158,7 +164,8 @@ export const config = {
       scanEveryMs: 3 * 60_000,
       cooldownMs: 60 * 60_000,
       maxOpen: 4,
-      sizeUsd: 4,
+      // 20 Oct: $4 -> $8 (and the early crowd $2 -> $5) now bounce is live again. Nat: "2 dollar test sizes is kind of pointless".
+      sizeUsd: 8,
       maxSinceMigrationH: 6,
       drawdownMin: 0.35, drawdownMax: 0.70, deadBelow: 0.80,
       baseHoldCandles5m: 3,
@@ -170,7 +177,9 @@ export const config = {
       // 19 Oct: the floor cost us PIERRE (26x from $32k), mucron (18x from $43k), MEGA (10x), OPEQ (6.5x). Each had
       // thousands of holders and $34k+ of liquidity; the rugs it caught (PRIME, NVIDIA, GREEN) had ~$2k. So a coin
       // with a real crowd can enter from $25k, at half size.
-      crowdMcapMin: 25_000, crowdHolders: 1_000, crowdLiquidity: 25_000, crowdSizeUsd: 2,
+      crowdMcapMin: 25_000, crowdHolders: 1_000, crowdLiquidity: 25_000, crowdSizeUsd: 5,
+      /** Only bounce coins a trusted wallet bought in the last 6 hours. Off live; the lab tests it. */
+      trustedOnly: false,
     },
     // 19 Oct: buy the first leg of a fresh migration (strategies/launch.ts). Nat: "we need to try everything".
     launch: {
@@ -185,7 +194,10 @@ export const config = {
       breakoutMaxAgeH: 6, breakoutVolX: 3,
       // 20 Oct: first-leg buys (under 1h after migration) went 11 trades, 1 win, -$28.62 overnight; 8 were dumped to
       // ~$2k within 30 minutes. Blossom never buys a coin under an hour old. Launch now only buys breakouts from 1h on.
-      firstLeg: false,
+      // 20 Oct (later): back on so every mode is tested live, but stricter than the overnight version. A first leg also
+      // needs the top 10 under firstLegMaxTop10% and holders up firstLegMinHolderGrowth in 10 minutes (the rugs had
+      // concentrated holders and a flat crowd). Breakouts keep the normal rules.
+      firstLeg: true, firstLegMaxTop10: 20, firstLegMinHolderGrowth: 0.10,
       // 19 Oct 11:30: pump.fun coins migrate at ~$27-38k with a $12-15k pool (UBI $27k/$12k, then 6.7x; WAND $31k/$13.5k).
       // The first numbers ($25k pool, $60k cap) meant waiting until a coin had already doubled.
       minLiquidity: 10_000, mcapMin: 25_000, mcapMax: 3_000_000,
@@ -253,6 +265,8 @@ export const config = {
       maxSleeveTradesPerDay: 6, reenterAfterWinMs: 30 * 60_000, reenterAfterLossMs: 2 * 3_600_000,
       /** Drop the leader when 1h volume falls under this fraction of its average, or it prints a 1h lower low. */
       fadeVolX: 0.3,
+      /** Only ride Stonk.fun flagships and pinned coins. Off live; the lab tests it. */
+      flagshipsOnly: false,
     },
     /** Nat's picks: the Buy button on Watching. No entry pattern needed; every safety check and guardrail still runs. */
     pick: {

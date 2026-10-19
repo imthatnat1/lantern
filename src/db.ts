@@ -157,9 +157,9 @@ export const positions = {
    * out after midnight counted its whole sale as profit (dashboard showed "+$7.38 today" on a losing night).
    * The $30 daily loss stop reads this too, so it was blind to overnight losses.
    */
-  realizedSince(sinceMs: number): number {
+  realizedSince(sinceMs: number, mode?: string): number {
     const r = db.prepare(`SELECT COALESCE(SUM(f.net_usd - f.qty * p.cost_usd / p.qty), 0) AS s FROM fills f JOIN positions p ON p.id = f.position_id
-      WHERE f.side='sell' AND f.at>=? AND p.qty > 0`).get(sinceMs) as { s: number };
+      WHERE f.side='sell' AND f.at>=? AND p.qty > 0${mode ? " AND p.mode = ?" : ""}`).get(...(mode ? [sinceMs, mode] : [sinceMs])) as { s: number };
     return r.s;
   },
 };

@@ -92,9 +92,13 @@ test("Watching is for coins near a buy: far setups and breaking-down coins leave
   assert.ok(watchedMints("ultra", NOW).includes("TSIFAR"));
 });
 
-test("paused modes stay off Watching: bounce and ride coins show under Would have bought instead", () => {
+test("paused modes stay off Watching: bounce and ride coins show under Would have bought instead", async () => {
+  const { config } = await import("../src/config.js");
+  const was = [...config.pausedModes];
+  config.pausedModes.push("bounce", "ride");
   hot.clean("bounce", "PAUSEDDIP", "PAUSEDDIP", 1, NOW - M); hot.status("bounce", "PAUSEDDIP", "only 3% off the post-migration high, no dip yet", NOW - M);
   hot.clean("ride", "PAUSEDRIDE", "PAUSEDRIDE", 1, NOW - M);
   const mints = hotList(NOW).map(x => x.mint);
+  config.pausedModes.splice(0, config.pausedModes.length, ...was);
   assert.ok(!mints.includes("PAUSEDDIP") && !mints.includes("PAUSEDRIDE"));
 });

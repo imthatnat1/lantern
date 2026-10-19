@@ -26,8 +26,11 @@ test("a coin that went straight up fell nothing first", () => {
 
 test("reasons we've already fixed or paused are marked", () => {
   assert.match(honest({ mode: "dip", reason: "couldn't check: cooling api.geckoterminal.com", price: 1 }).fixed!, /own charts/);
-  assert.match(honest({ mode: "ride", reason: "cooldown after a recent stop-out", price: 1 }).fixed!, /ride is paused/);
-  assert.match(honest({ mode: "bounce", reason: "rejected: $43k market cap, under the $45k bounce floor", price: 1 }).fixed!, /bounce is paused/);
+  // Ride and bounce went live again 20 Oct: a miss from before then was "paused then"; after, the rule is judged on its own.
+  const before = Date.UTC(2026, 9, 19, 12), after = Date.UTC(2026, 9, 20, 1);
+  assert.match(honest({ mode: "ride", reason: "cooldown after a recent stop-out", price: 1, at: before }).fixed!, /ride was paused then/);
+  assert.equal(honest({ mode: "ride", reason: "cooldown after a recent stop-out", price: 1, at: after }).fixed, null);
+  assert.match(honest({ mode: "bounce", reason: "rejected: $43k market cap, under the $45k bounce floor", price: 1, at: after }).fixed!, /\$25k with a real crowd/);
   assert.match(honest({ mode: "launch", reason: "$27k market cap, under launch's $60k", price: 1 }).fixed!, /\$10k pool/);
   assert.equal(honest({ mode: "launch", reason: "rejected: top 10 hold 71%", price: 1 }).fixed, null);
   assert.equal(honest({ mode: "dip", reason: "dip is paused: watching only", price: 1 }).fixed, null, "a would-buy isn't a fixed miss");
