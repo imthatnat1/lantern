@@ -7,6 +7,7 @@ import * as broker from "./engine/broker.js";
 import { config } from "./config.js";
 import { ingest, scorecard, currentKols } from "./data/wallets.js";
 import { walletSellLog } from "./engine/walletsell.js";
+import { stopGapSummary } from "./engine/stopgaps.js";
 import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
@@ -336,6 +337,8 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     .map(r => ({ ...r, peakX: r.last_price / r.price, nowX: r.last_price / r.price, soldEarly: true, market: mkt(r.mint) }));
 
   const closedAll = db.prepare(`SELECT count(*) AS n, sum(case when realized_usd>0 then 1 else 0 end) AS wins, coalesce(sum(realized_usd),0) AS pnl FROM positions WHERE status='closed'`).get() as any;
+  // Stop slippage (engine/stopgaps.ts): how far stop, trail and hard floor fills land past their trigger. Also in shadow.stops.
+  const stopGaps = stopGapSummary(now - 7 * 24 * 3_600_000);
   const eq = broker.equity(marks);
   const openPnl = open.reduce((s, o) => s + o.pnlUsd, 0);
 
@@ -351,8 +354,9 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
         // lastOkAt/lastErr are the backup poller, which only runs when the webhook has been quiet for an hour. lastPushAt is the webhook.
         lastPushAt: kv.get("helius:lastPushAt", 0) }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
-    open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: shadowSummary(now - 7 * 24 * 3_600_000), hot: hotList(now, new Set(open.map(o => o.mint))), radar: radarList(now, new Set(open.map(o => o.mint))), natWatch: natWatchList(now), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
+    open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: { ...shadowSummary(now - 7 * 24 * 3_600_000), stops: { n: stopGaps.n, avgFillGapPct: stopGaps.avgFillGapPct, realN: stopGaps.realN, avgRealGapPct: stopGaps.avgRealGapPct } }, hot: hotList(now, new Set(open.map(o => o.mint))), radar: radarList(now, new Set(open.map(o => o.mint))), natWatch: natWatchList(now), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
     walletSells: walletSellLog(now - 48 * 3_600_000),
+    stopGaps,
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
   };
 }

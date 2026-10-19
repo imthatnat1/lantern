@@ -70,7 +70,7 @@ async function exitLoop() {
       }
       for (const a of actions) {
         if ((p.status as string) !== "open") break;
-        broker.sell(p, a.fraction, read.price, snap?.liquidityUsd ?? p.liquidityAtEntry, snap?.onCurve ?? false, solPrice, a.reason, now);
+        broker.sell(p, a.fraction, read.price, snap?.liquidityUsd ?? p.liquidityAtEntry, snap?.onCurve ?? false, solPrice, a.reason, now, a.trigger);
         if ((p.status as string) === "closed" && (a.reason.startsWith("close stop") || a.reason.startsWith("hard floor"))) {
           cooldowns.set(p.mode, p.mint, now + 6 * 3_600_000);   // 6h before re-entering a stop-out
         }

@@ -1,7 +1,8 @@
 import type { Candle, Position } from "../types.js";
 import type { PriceRead } from "./price.js";
 
-export interface ExitAction { fraction: number; reason: string }
+/** `trigger`: the stop level that fired (stops, trails, hard floor), so the fill's gap past it can be measured. */
+export interface ExitAction { fraction: number; reason: string; trigger?: number }
 
 /**
  * Pure exit logic. Given a position, a (possibly unconfirmed) price read and the
@@ -30,12 +31,12 @@ export function evaluate(p: Position, read: PriceRead, lastClosed15: Candle | un
 
   // 1. Hard tick floor. Confirmed price only.
   if (read.confirmed && price <= p.entryPrice * (1 - p.plan.hardFloorPct)) {
-    return [{ fraction: 1, reason: `hard floor -${(p.plan.hardFloorPct * 100).toFixed(0)}%` }];
+    return [{ fraction: 1, reason: `hard floor -${(p.plan.hardFloorPct * 100).toFixed(0)}%`, trigger: p.entryPrice * (1 - p.plan.hardFloorPct) }];
   }
 
   // 2. Close-based stop. Only on a new closed candle.
   if (newClose && lastClosed15.c <= p.plan.closeStopPrice) {
-    return [{ fraction: 1, reason: `close stop ${p.plan.closeStopPrice.toPrecision(4)}` }];
+    return [{ fraction: 1, reason: `close stop ${p.plan.closeStopPrice.toPrecision(4)}`, trigger: p.plan.closeStopPrice }];
   }
 
   // 3. Take-profit ladder on confirmed price.
@@ -57,7 +58,7 @@ export function evaluate(p: Position, read: PriceRead, lastClosed15: Candle | un
     const trailStop = p.peakClose * (1 - trail);
     if (trailStop > p.plan.closeStopPrice) p.plan.closeStopPrice = trailStop;
     if (newClose && lastClosed15.c <= trailStop) {
-      out.push({ fraction: 1, reason: `trail ${(trail * 100).toFixed(0)}% from peak close` });
+      out.push({ fraction: 1, reason: `trail ${(trail * 100).toFixed(0)}% from peak close`, trigger: trailStop });
       return out;
     }
   }

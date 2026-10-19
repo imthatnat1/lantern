@@ -6,6 +6,7 @@ import { isCreativePair } from "../data/universe.js";
 import type { Fill, Mode, Position, Signal } from "../types.js";
 import { applyAdd, type AddRule } from "./exits.js";
 import { shadow } from "./shadow.js";
+import { recordStopGap, setRealPrice } from "./stopgaps.js";
 
 /** Paper account: cash, vault, peak equity, daily P&L. */
 export interface Account { cash: number; vault: number; peakEquity: number }
@@ -109,7 +110,8 @@ export function openPosition(sig: Signal, solPrice: number, now = Date.now()): P
   return p;
 }
 
-export function sell(p: Position, fraction: number, priceUsd: number, liquidityUsd: number, onCurve: boolean, solPrice: number, reason: string, now = Date.now()) {
+/** `trigger`: for stop, trail and hard floor exits, the level that fired. Recorded with the fill's gap past it (engine/stopgaps.ts). */
+export function sell(p: Position, fraction: number, priceUsd: number, liquidityUsd: number, onCurve: boolean, solPrice: number, reason: string, now = Date.now(), trigger?: number) {
   const qty = Math.min(p.remainingQty, p.remainingQty * fraction);
   if (qty <= 0) return;
   const gross = qty * priceUsd;
@@ -135,7 +137,11 @@ export function sell(p: Position, fraction: number, priceUsd: number, liquidityU
   saveAccount(a);
 
   fills.insert({ side: "sell", mint: p.mint, mode: p.mode, qty, priceUsd: effPrice, grossUsd: gross, feesUsd, netUsd: net, reason, at: now }, p.id);
-  shadow({ positionId: p.id, mode: p.mode, symbol: p.symbol, side: "sell", mint: p.mint, usd: gross, qty, paperPrice: effPrice, solPrice });
+  const gapId = trigger && trigger > 0
+    ? recordStopGap({ positionId: p.id, mode: p.mode, symbol: p.symbol, mint: p.mint, at: now, reason, trigger, mark: priceUsd, fill: effPrice, liquidity: liquidityUsd, usd: gross })
+    : null;
+  shadow({ positionId: p.id, mode: p.mode, symbol: p.symbol, side: "sell", mint: p.mint, usd: gross, qty, paperPrice: effPrice, solPrice },
+    gapId != null ? q => setRealPrice(gapId, q.realPrice) : undefined);
   log.info({ mode: p.mode, sym: p.symbol, frac: fraction.toFixed(2), price: effPrice, pnl: pnl.toFixed(2), reason, status: p.status }, "SELL");
 }
 

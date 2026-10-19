@@ -41,13 +41,15 @@ export async function quote(side: "buy" | "sell", mint: string, amount: number, 
 }
 
 /** Fire and forget: never slows or blocks a paper trade. */
-export function shadow(x: { positionId: number; mode: string; symbol: string; side: "buy" | "sell"; mint: string; usd: number; qty: number; paperPrice: number; solPrice: number }) {
+export function shadow(x: { positionId: number; mode: string; symbol: string; side: "buy" | "sell"; mint: string; usd: number; qty: number; paperPrice: number; solPrice: number },
+  onRouted?: (q: Quote) => void) {
   if (process.env.DB_PATH === ":memory:") return;   // tests: no network
   const amount = x.side === "buy" ? x.usd : x.qty;
   quote(x.side, x.mint, amount, x.solPrice).then(q => {
     const worse = q.routed && x.paperPrice > 0 ? worseBy(x.side, x.paperPrice, q.realPrice) : null;
     db.prepare(`INSERT INTO shadow_quotes(position_id, mode, symbol, side, at, usd, paper_price, real_price, impact_pct, worse_pct, routed)
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(x.positionId, x.mode, x.symbol, x.side, Date.now(), x.usd, x.paperPrice, q.realPrice, q.impactPct, worse, q.routed ? 1 : 0);
+    if (q.routed && onRouted) onRouted(q);
   }).catch(e => log.debug({ err: String(e) }, "shadow quote failed"));
 }
 
