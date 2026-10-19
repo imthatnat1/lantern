@@ -27,6 +27,7 @@ import { ensureWebhook, rotateKols } from "./data/wallets.js";
 import { walletSellCheck } from "./engine/walletsell.js";
 import { pruneCreates, recordCreate } from "./data/creators.js";
 import { refreshFx } from "./data/fx.js";
+import { done as approvalDone, driftWhy, needsApproval, queue as queueApproval, takeApproved } from "./engine/approvals.js";
 import { takeGraduations } from "./data/stonkfun.js";
 import { flagshipMints } from "./data/universe.js";
 import { currentMood, moodScore, moodSizeX, saveMood } from "./engine/mood.js";
@@ -154,6 +155,20 @@ async function scanLoop() {
   for (const g of takeGraduations()) { addMigration(g); log.info({ mint: g.mint }, "stonkfun graduation"); }
   const ctx: Context = { now, solPrice, migrations };
   const feedHealthy = now - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs;
+  // Approval queue (engine/approvals.ts, off unless APPROVALS=on): buys Nat said yes to, re-checked at today's price.
+  for (const { id, sig } of takeApproved(now)) {
+    const snap = (await dex.snapshots([sig.mint])).get(sig.mint);
+    const drift = snap ? driftWhy(sig.snapshot.priceUsd, snap.priceUsd) : "couldn't price it";
+    if (drift) { approvalDone(id, false, drift); logSignal(sig, false, `approved, but ${drift}`); continue; }
+    sig.snapshot = snap!;
+    const cfg = (config.modes as any)[sig.mode];
+    const r = broker.modeOpenCount(sig.mode) >= cfg.maxOpen ? { ok: false, why: "mode full" } : broker.canOpen(sig, markPrices, feedHealthy);
+    if (!r.ok) { approvalDone(id, false, r.why!); logSignal(sig, false, `approved, but ${r.why}`); continue; }
+    broker.openPosition(sig, solPrice, now);
+    logSignal(sig, true, "opened (approved by Nat)");
+    approvalDone(id, true, "bought");
+    markPrices.set(sig.mint, sig.snapshot.priceUsd);
+  }
   for (const s of strategies) {
     // Paused modes still watch (at a third of the pace, to spare GeckoTerminal) so their setups show on
     // the dashboard and their candles get recorded for the lab. They just never buy.
@@ -173,6 +188,7 @@ async function scanLoop() {
       if (broker.modeOpenCount(sig.mode) >= cfg.maxOpen) { logSignal(sig, false, "mode full"); continue; }
       const r = broker.canOpen(sig, markPrices, feedHealthy);
       if (!r.ok) { logSignal(sig, false, r.why!); continue; }
+      if (needsApproval(sig)) { const id = queueApproval(sig, now); logSignal(sig, false, `waiting for Nat's yes (request #${id})`); continue; }
       broker.openPosition(sig, solPrice, now);
       logSignal(sig, true, "opened");
       markPrices.set(sig.mint, sig.snapshot.priceUsd);

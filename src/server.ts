@@ -10,6 +10,7 @@ import { walletSellLog } from "./engine/walletsell.js";
 import { stopGapSummary } from "./engine/stopgaps.js";
 import { createStats } from "./data/creators.js";
 import { audSummary } from "./data/fx.js";
+import { approvalsState, decide as decideApproval } from "./engine/approvals.js";
 import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
@@ -80,6 +81,21 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
           const list = setNatWatch(mint, String(symbol ?? ""), on !== false);
           log.info({ mint, on: on !== false }, "watch list changed from dashboard");
           res.end(JSON.stringify({ ok: true, natWatch: list }));
+        } catch (e) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, why: String(e).slice(0, 80) })); }
+      });
+      return;
+    }
+    // Approval queue (engine/approvals.ts): Nat's yes or no on a buy waiting for her. Off while on paper.
+    if (req.method === "POST" && req.url === "/api/approve") {
+      let body = "";
+      req.on("data", c => body += c);
+      req.on("end", () => {
+        try {
+          const { id, yes } = JSON.parse(body || "{}");
+          if (!Number.isInteger(id)) { res.statusCode = 400; res.end('{"ok":false,"why":"id must be a request number"}'); return; }
+          const r = decideApproval(id, yes === true);
+          log.info({ id, yes: yes === true, ok: r.ok }, "approval answered from dashboard");
+          res.end(JSON.stringify({ ...r, approvals: approvalsState() }));
         } catch (e) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, why: String(e).slice(0, 80) })); }
       });
       return;
@@ -363,6 +379,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: { ...shadowSummary(now - 7 * 24 * 3_600_000), stops: { n: stopGaps.n, avgFillGapPct: stopGaps.avgFillGapPct, realN: stopGaps.realN, avgRealGapPct: stopGaps.avgRealGapPct } }, hot: hotList(now, new Set(open.map(o => o.mint))), radar: radarList(now, new Set(open.map(o => o.mint))), natWatch: natWatchList(now), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
     // AUD for tax (data/fx.ts): rate now, equity/cash/vault in AUD, realised P&L at each fill's own rate.
     aud: audSummary(eq, a.cash, a.vault, now),
+    approvals: approvalsState(now),
     walletSells: walletSellLog(now - 48 * 3_600_000),
     stopGaps,
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
