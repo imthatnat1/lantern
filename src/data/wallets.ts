@@ -94,6 +94,24 @@ export function soldSince(mint: string, sinceMs: number, wallets: string[]): boo
   return !!db.prepare(`SELECT 1 FROM wallet_events WHERE side='sell' AND mint=? AND at >= ? AND wallet IN (${q})`).get(mint, sinceMs, ...wallets);
 }
 
+/**
+ * Trusted-wallet sells of `mint` since `sinceMs`, one row per wallet: tokens sold, how many sell events, latest time.
+ * `n` changes whenever a new sell lands, so callers can re-check a wallet's bag only then.
+ */
+export interface WalletSellRow { wallet: string; name: string; sold: number; n: number; lastAt: number }
+export function trustedSellsSince(mint: string, sinceMs: number): WalletSellRow[] {
+  const rows = db.prepare(`SELECT wallet, sum(amount) AS sold, count(*) AS n, max(at) AS lastAt FROM wallet_events
+    WHERE side='sell' AND tier='trusted' AND mint=? AND at >= ? GROUP BY wallet`).all(mint, sinceMs) as any[];
+  return rows.filter(r => config.trustedWallets.includes(r.wallet)).map(r => ({ ...r, name: walletName(r.wallet) }));
+}
+
+/** What our own records say a wallet held of `mint` at `atMs`: recorded buys minus recorded sells before then. */
+export function recordedBag(wallet: string, mint: string, atMs: number): number {
+  const r = db.prepare(`SELECT coalesce(sum(CASE WHEN side='buy' THEN amount ELSE -amount END), 0) AS bag FROM wallet_events
+    WHERE wallet=? AND mint=? AND at < ?`).get(wallet, mint, atMs) as { bag: number };
+  return r.bag;
+}
+
 /** Make sure a Helius webhook exists for our address list and points at our API. Idempotent. */
 export async function ensureWebhook(publicUrl: string) {
   if (!config.keys.helius) { log.warn("no helius key, wallet webhook disabled"); return; }

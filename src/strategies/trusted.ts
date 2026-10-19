@@ -4,7 +4,7 @@ import type { ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import * as helius from "../data/helius.js";
-import { recentBuys as pushedBuys } from "../data/wallets.js";
+import { ingest, recentBuys as pushedBuys } from "../data/wallets.js";
 import { kv } from "../db.js";
 import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, sniperPenalty, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
@@ -28,15 +28,19 @@ export const trusted: Strategy = {
     const since = ctx.now - 30 * 60_000;
     // Pushed by the Helius webhook when it's working; poll as a fallback when nothing has arrived in the last hour.
     const pushed = pushedBuys(since, "trusted");
-    const anyPushRecently = pushedBuys(ctx.now - 60 * 60_000).length > 0;
+    // The webhook's own delivery time, not "any event in the last hour": polled swaps land in wallet_events too
+    // (so the exit loop sees trusted sells), and they must not make a dead webhook look alive.
+    const webhookAlive = ctx.now - kv.get("helius:lastPushAt", 0) < 60 * 60_000;
     let buys: { wallet: string; mint: string; signature: string; at: number; solSpent: number }[];
-    if (pushed.length || anyPushRecently) {
+    if (pushed.length || webhookAlive) {
       buys = pushed.map(b => ({ wallet: b.wallet, mint: b.mint, signature: `${b.wallet}:${b.mint}:${b.at}`, at: b.at, solSpent: b.sol }));
     } else {
       // Polling costs 100 credits per wallet per call, so it runs on its own slower clock.
       if (ctx.now - kv.get("trusted:lastPollAt", 0) < C.heliusPollEveryMs) return out;
       kv.set("trusted:lastPollAt", ctx.now);
-      buys = (await Promise.all(wallets.map(w => helius.recentBuys(w, ctx.now - C.heliusPollEveryMs - 60_000, C.heliusDailyCredits)))).flat();
+      buys = (await Promise.all(wallets.map(w => helius.recentBuys(w, ctx.now - C.heliusPollEveryMs - 60_000, C.heliusDailyCredits, ingest)))).flat()
+        // Same key as the push path, so a buy seen by the poll is never copied a second time once the webhook is back.
+        .map(b => ({ ...b, signature: `${b.wallet}:${b.mint}:${b.at}` }));
     }
 
     // Group by mint; count distinct wallets within the window.

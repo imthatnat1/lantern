@@ -23,7 +23,8 @@ import { dip } from "./strategies/dip.js";
 import { ride } from "./strategies/ride.js";
 import { launch } from "./strategies/launch.js";
 import { startServer, snapshotEquity } from "./server.js";
-import { ensureWebhook, soldSince, rotateKols } from "./data/wallets.js";
+import { ensureWebhook, rotateKols } from "./data/wallets.js";
+import { walletSellCheck } from "./engine/walletsell.js";
 import { takeGraduations } from "./data/stonkfun.js";
 import { flagshipMints } from "./data/universe.js";
 import { currentMood, moodScore, moodSizeX, saveMood } from "./engine/mood.js";
@@ -61,10 +62,11 @@ async function exitLoop() {
       if (snap?.pairAddress) { try { c15 = (await candles5and15(snap.pairAddress)).c15; } catch { /* no history yet: judge on ticks only */ } }
       const lastClosed = c15.length >= 2 ? c15.at(-2) : undefined;
       const actions = evaluate(p, read, lastClosed, now);
-      // Trusted copies mirror the wallet's exit: if any wallet that bought it has sold since we entered, we sell too.
-      if (p.mode === "trusted" && read.confirmed && !actions.length) {
-        const ws = (p.meta.walletAddrs as string[] | undefined) ?? [];
-        if (soldSince(p.mint, p.entryAt, ws)) actions.push({ fraction: 1, reason: "mirror: trusted wallet sold" });
+      // Trusted wallets selling a coin we hold (any mode, engine/walletsell.ts): the wallet we copied dumping most of its
+      // bag = exit; any other trusted sell = tighter trail and a warning. Exits fill on a confirmed price only.
+      if (!actions.length) {
+        const ws = await walletSellCheck(p, now);
+        if (ws?.kind === "exit" && read.confirmed) actions.push({ fraction: 1, reason: ws.reason });
       }
       for (const a of actions) {
         if ((p.status as string) !== "open") break;

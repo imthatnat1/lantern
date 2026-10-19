@@ -20,8 +20,12 @@ export function creditsUsedToday(): number { return kv.get(dayKey(), 0); }
 
 function spend(n: number) { kv.set(dayKey(), creditsUsedToday() + n); }
 
-/** Recent swaps where `wallet` received a non-SOL token. Within the daily credit budget. */
-export async function recentBuys(wallet: string, sinceMs: number, budget: number): Promise<WalletBuy[]> {
+/**
+ * Recent swaps where `wallet` received a non-SOL token. Within the daily credit budget.
+ * Every fetched swap (buys AND sells) also goes into wallet_events through `ingestTx`, so when the webhook is quiet
+ * this backup poll still tells the exit loop that a trusted wallet sold a coin we hold.
+ */
+export async function recentBuys(wallet: string, sinceMs: number, budget: number, ingestTx?: (tx: any) => unknown): Promise<WalletBuy[]> {
   if (!config.keys.helius) return [];
   if (creditsUsedToday() + CREDITS_PER_CALL > budget) {
     log.warn({ used: creditsUsedToday(), budget }, "helius budget hit for today");
@@ -30,6 +34,7 @@ export async function recentBuys(wallet: string, sinceMs: number, budget: number
   const url = `https://api.helius.xyz/v0/addresses/${wallet}/transactions?api-key=${config.keys.helius}&limit=10&type=SWAP`;
   let txs: HeliusTx[];
   try { txs = await getJson<HeliusTx[]>(url); spend(CREDITS_PER_CALL); kv.set("helius:lastOkAt", Date.now()); } catch (e) { kv.set("helius:lastErr", String(e).slice(0, 40)); log.warn({ wallet, err: String(e) }, "helius fetch failed"); return []; }
+  if (ingestTx) for (const tx of txs) { try { ingestTx(tx); } catch { /* best effort */ } }
 
   const out: WalletBuy[] = [];
   for (const tx of txs) {
@@ -41,6 +46,35 @@ export async function recentBuys(wallet: string, sinceMs: number, budget: number
     for (const r of received) out.push({ wallet, mint: r.mint, signature: tx.signature, at, solSpent: solOut });
   }
   return out;
+}
+
+/**
+ * How many tokens of `mint` a wallet holds right now (UI units, all its token accounts, Token-2022 included).
+ * One RPC call; null when there's no key, the budget is spent, or the call fails.
+ * Used to turn "wirelyss sold 1.2M tokens" into "wirelyss sold 80% of her bag".
+ */
+const BALANCE_CREDITS = 10;   // getTokenAccountsByOwner; counted high on purpose
+export async function tokenBalance(owner: string, mint: string, budget: number): Promise<number | null> {
+  if (!config.keys.helius) return null;
+  if (creditsUsedToday() + BALANCE_CREDITS > budget) return null;
+  try {
+    const res = await fetch(`https://mainnet.helius-rpc.com/?api-key=${config.keys.helius}`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getTokenAccountsByOwner", params: [owner, { mint }, { encoding: "jsonParsed" }] }),
+      signal: AbortSignal.timeout(8000),
+    });
+    spend(BALANCE_CREDITS);
+    const j = await res.json() as any;
+    const accts = j?.result?.value;
+    if (!Array.isArray(accts)) return null;
+    return accts.reduce((a: number, x: any) => {
+      const t = x?.account?.data?.parsed?.info?.tokenAmount;
+      return a + Number(t?.uiAmountString ?? t?.uiAmount ?? 0);
+    }, 0);
+  } catch (e) {
+    log.debug({ owner: owner.slice(0, 6), err: String(e) }, "helius balance failed");
+    return null;
+  }
 }
 
 /** Recent swaps where `wallet` sent a given mint out (a sell). */

@@ -6,6 +6,7 @@ import { isNatWatched, natWatchList, setNatWatch } from "./data/natwatch.js";
 import * as broker from "./engine/broker.js";
 import { config } from "./config.js";
 import { ingest, scorecard, currentKols } from "./data/wallets.js";
+import { walletSellLog } from "./engine/walletsell.js";
 import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
@@ -269,6 +270,8 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       hardFloorPct: -p.plan.hardFloorPct, trailArmed: (p.peakClose / p.entryPrice - 1) >= p.plan.trailAfterGain,
       peakPct: p.peakPrice / p.entryPrice - 1, tpTaken: p.tpTaken, takeProfits: p.plan.takeProfits,
       reason: p.meta.reason, score: p.meta.score, mcapAtEntry: (p.meta.mcapAtEntry as number) ?? null, leg: (p.meta.leg as string) ?? null,
+      // Set when a trusted wallet sold this coin while we held it (engine/walletsell.ts): "hexi sold 40% of their bag: trail tightened to 15%".
+      walletWarn: (p.meta.walletWarn as string | undefined) ?? null,
       market: mkt(p.mint),
     };
   });
@@ -349,6 +352,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
         lastPushAt: kv.get("helius:lastPushAt", 0) }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
     open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: shadowSummary(now - 7 * 24 * 3_600_000), hot: hotList(now, new Set(open.map(o => o.mint))), radar: radarList(now, new Set(open.map(o => o.mint))), natWatch: natWatchList(now), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
+    walletSells: walletSellLog(now - 48 * 3_600_000),
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
   };
 }
