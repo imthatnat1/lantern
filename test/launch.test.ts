@@ -40,8 +40,10 @@ test("the forming candle is ignored: only closed 5m candles count", () => {
 test("cheap checks: thin pools, tiny or huge caps, sell-heavy flow and churn never get a closer look", () => {
   const t = Date.now();
   assert.equal(cheapWhy(mkt, C, t), null);
-  assert.match(cheapWhy({ ...mkt, liquidityUsd: 18_000 }, C, t)!, /too thin/);
-  assert.match(cheapWhy({ ...mkt, mcapUsd: 47_000 }, C, t)!, /under launch's \$60k/);
+  assert.match(cheapWhy({ ...mkt, liquidityUsd: 8_000 }, C, t)!, /too thin/);
+  assert.match(cheapWhy({ ...mkt, mcapUsd: 20_000 }, C, t)!, /under launch's \$25k/);
+  // UBI (19 Oct 10:43): $27k market cap and a $12k pool a minute after migrating, then 6.7x. Now worth a closer look.
+  assert.equal(cheapWhy({ ...mkt, mcapUsd: 27_181, liquidityUsd: 12_000, buys5m: 1_066, sells5m: 792 }, C, t), null);
   assert.match(cheapWhy({ ...mkt, mcapUsd: 5_000_000 }, C, t)!, /past launch's/);
   assert.match(cheapWhy({ ...mkt, buys5m: 200, sells5m: 180 }, C, t)!, /needs 1.3x/);
   // safufun at 19 minutes: 3,545 buys / 3,418 sells, $345k traded on $83k

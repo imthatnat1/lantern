@@ -92,7 +92,8 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
     const links = { website: s.website, twitter: s.twitter, telegram: s.telegram };
     // PIERRE (19 Oct, 2.1h old, 7,612 holders) was refused for no DexScreener links, then ran 8x: a team rarely sets up
     // DexScreener in the first hours. Under 3h old with 1,000+ holders, the launch links count, as for Stonk.fun coins.
-    const young = ageHours(s) < 3 && (safe.holders ?? 0) >= 1_000;
+    // 500 holders matches launch's own floor (19 Oct: at 1,000, launch's 500-999 holder coins needed a DexScreener profile).
+    const young = ageHours(s) < 3 && (safe.holders ?? 0) >= 500;
     const sw = isStonkListed(s.mint) || young ? await socialsWhy(s.mint, links, safe.metaUri) : dexProfileWhy(links);
     if (sw) return { ok: false, why: `rejected: ${sw}` };
     // TTP (18 Oct 21:25): holders +8,330% in 10 minutes, an hour after launch. Real coins don't grow 6x in holders in
@@ -112,7 +113,9 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   if (s.buys5m >= 20 && s.sells5m === 0) return { ok: false, why: "rejected: buys but no sells in 5m, possible honeypot" };
   // Vertical launches: a coin that went 5x in an hour (or 20x in six) while still under 6h old is a pump, not a setup,
   // unless it has already spread to a real holder base.
-  if (!pinned && ageH < 6 && (s.change1h > 500 || s.change6h > 2000)) {
+  // Launch is exempt: buying the first leg is its whole job, and it has its own anti-chase checks (no blow-off candle,
+  // near the high on volume). 19 Oct: this rule quietly made launch need 1,000 holders, not 500.
+  if (!pinned && mode !== "launch" && ageH < 6 && (s.change1h > 500 || s.change6h > 2000)) {
     const wide = (safe.holders ?? 0) >= 1000 && (safe.top10Pct ?? 100) < 25;
     if (!wide) return { ok: false, why: `rejected: vertical launch, +${Math.round(Math.max(s.change1h, s.change6h))}% at ${ageH.toFixed(1)}h old` };
   }
@@ -244,13 +247,18 @@ export function watchedFirst(watched: string[], snaps: TokenSnapshot[], cap: num
 }
 
 const lastLook = new Map<string, number>();
+const lastWhy = new Map<string, string>();
 const lastMkt = new Map<string, number>();
 export function logLook(mode: Signal["mode"], s: TokenSnapshot, why: string, holders?: number, setup?: Setup) {
   try { hot.status(mode, s.mint, why); } catch { /* best effort */ }
   const k = `${mode}:${s.mint}`;
   const gap = setup ? 10 * 60_000 : 60 * 60_000;   // setups refresh every 10 min so the distance bar moves; rejections hourly
-  if (Date.now() - (lastLook.get(k) ?? 0) < gap) return;
-  lastLook.set(k, Date.now());
+  // A new kind of reason is logged after 2 minutes, not an hour: UBI (19 Oct) showed only its first rejection
+  // ("too thin") and hid whatever stopped it while it ran 6.7x.
+  const kind = why.replace(/[\d$.,%x]+/g, "#").slice(0, 40);
+  const changed = lastWhy.get(k) !== kind;
+  if (Date.now() - (lastLook.get(k) ?? 0) < (changed ? 2 * 60_000 : gap)) return;
+  lastLook.set(k, Date.now()); lastWhy.set(k, kind);
   audit.signal(mode, s.mint, s.symbol, 0, false, why, s.priceUsd, s.mcapUsd, s.liquidityUsd, setup, s.pairAddress);
   market.upsert(s, holders, [...velocityLabel(s.mint), ...walletLabels(s.mint), ...churnLabel(s)]);
 }

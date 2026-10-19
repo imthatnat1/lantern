@@ -170,9 +170,11 @@ export const config = {
       sizeUsd: 3,
       checksPerScan: 10,
       maxSinceMigrationMin: 60,
-      minLiquidity: 25_000, mcapMin: 60_000, mcapMax: 3_000_000,
+      // 19 Oct 11:30: pump.fun coins migrate at ~$27-38k with a $12-15k pool (UBI $27k/$12k, then 6.7x; WAND $31k/$13.5k).
+      // The first numbers ($25k pool, $60k cap) meant waiting until a coin had already doubled.
+      minLiquidity: 10_000, mcapMin: 25_000, mcapMax: 3_000_000,
       minBuys5m: 40, minBuySell: 1.3,
-      minHolders: 500, maxTop10: 25,
+      minHolders: 500, maxTop10: 35,
       maxOffHigh: 0.15, minGain15m: 0.10, maxCandleX: 1.6, minVolX: 1.0,
       stopPct: 0.25, hardFloorPct: 0.40,
     },

@@ -151,10 +151,16 @@ export const positions = {
       .run({ ...p, plan: JSON.stringify(p.plan), tpTaken: JSON.stringify(p.tpTaken), meta: JSON.stringify(p.meta),
         closedAt: p.closedAt ?? null, closeReason: p.closeReason ?? null });
   },
+  /**
+   * Profit or loss booked since `sinceMs`: each sell's proceeds minus what that share of the position cost.
+   * 19 Oct: the old version took today's sells minus only today's buys, so a position bought yesterday and stopped
+   * out after midnight counted its whole sale as profit (dashboard showed "+$7.38 today" on a losing night).
+   * The $30 daily loss stop reads this too, so it was blind to overnight losses.
+   */
   realizedSince(sinceMs: number): number {
-    const r = db.prepare("SELECT COALESCE(SUM(net_usd),0) AS s FROM fills WHERE side='sell' AND at>=?").get(sinceMs) as { s: number };
-    const c = db.prepare("SELECT COALESCE(SUM(net_usd),0) AS s FROM fills WHERE side='buy' AND at>=? AND position_id IN (SELECT id FROM positions WHERE status='closed' AND closed_at>=?)").get(sinceMs, sinceMs) as { s: number };
-    return r.s - c.s;
+    const r = db.prepare(`SELECT COALESCE(SUM(f.net_usd - f.qty * p.cost_usd / p.qty), 0) AS s FROM fills f JOIN positions p ON p.id = f.position_id
+      WHERE f.side='sell' AND f.at>=? AND p.qty > 0`).get(sinceMs) as { s: number };
+    return r.s;
   },
 };
 

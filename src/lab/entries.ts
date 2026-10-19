@@ -151,7 +151,8 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
       const C = cfg("launch", o);
       if (migratedAt == null || now < migratedAt || now - migratedAt > C.maxSinceMigrationMin * 60_000) continue;
       if (launchCheap(m, C, now)) continue;
-      if (!passesGate(h, now, ageH, m.change1h, m.change6h, g)) continue;
+      // Launch skips the vertical-launch rule live (base.ts prefilter), so pass 0 for the moves here.
+      if (!passesGate(h, now, ageH, 0, 0, g)) continue;
       // Holders and top 10 from the recorded safety check; unknown = can't prove a crowd, skip.
       const sa = h.safetyAt(now);
       const holders = sa.holders ?? h.holdersAt(now);

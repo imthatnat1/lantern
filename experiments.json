@@ -20,12 +20,12 @@
       }
     },
     {
-      "name": "Launch: smaller crowds (300+ holders, top 10 under 30%)",
-      "why": "Launch wants 500+ holders and top 10 under 25%. Are we too strict to catch them early?",
+      "name": "Launch: smaller crowds (300+ holders, top 10 under 45%)",
+      "why": "Launch wants 500+ holders and top 10 under 35%. Are we too strict to catch them early?",
       "config": {
         "launch": {
           "minHolders": 300,
-          "maxTop10": 30
+          "maxTop10": 45
         }
       }
     },
