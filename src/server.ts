@@ -9,6 +9,7 @@ import { ingest, scorecard, currentKols } from "./data/wallets.js";
 import { walletSellLog } from "./engine/walletsell.js";
 import { stopGapSummary } from "./engine/stopgaps.js";
 import { createStats } from "./data/creators.js";
+import { audSummary } from "./data/fx.js";
 import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
@@ -360,6 +361,8 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       creates: createStats(now) },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
     open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: { ...shadowSummary(now - 7 * 24 * 3_600_000), stops: { n: stopGaps.n, avgFillGapPct: stopGaps.avgFillGapPct, realN: stopGaps.realN, avgRealGapPct: stopGaps.avgRealGapPct } }, hot: hotList(now, new Set(open.map(o => o.mint))), radar: radarList(now, new Set(open.map(o => o.mint))), natWatch: natWatchList(now), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
+    // AUD for tax (data/fx.ts): rate now, equity/cash/vault in AUD, realised P&L at each fill's own rate.
+    aud: audSummary(eq, a.cash, a.vault, now),
     walletSells: walletSellLog(now - 48 * 3_600_000),
     stopGaps,
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),

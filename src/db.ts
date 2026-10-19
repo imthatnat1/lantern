@@ -164,11 +164,20 @@ export const positions = {
   },
 };
 
+// AUD (19 Oct, from Blossom): the USD/AUD rate at the time of every fill, for Australian tax. Set by data/fx.ts.
+try { db.exec("ALTER TABLE fills ADD COLUMN usd_aud REAL"); } catch { /* already there */ }
+
+/** The latest USD to AUD rate if it's under 3 days old, else null (data/fx.ts refreshes it hourly). */
+export function usdAudNow(now = Date.now()): number | null {
+  const fx = kv.get<{ rate: number; at: number } | null>("fx:usdaud", null);
+  return fx && fx.rate > 0 && now - fx.at < 3 * 86_400_000 ? fx.rate : null;
+}
+
 export const fills = {
   insert(f: Fill, positionId: number) {
-    db.prepare(`INSERT INTO fills (position_id,side,mode,mint,qty,price_usd,gross_usd,fees_usd,net_usd,reason,at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(positionId, f.side, f.mode, f.mint, f.qty, f.priceUsd, f.grossUsd, f.feesUsd, f.netUsd, f.reason, f.at);
+    db.prepare(`INSERT INTO fills (position_id,side,mode,mint,qty,price_usd,gross_usd,fees_usd,net_usd,reason,at,usd_aud)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(positionId, f.side, f.mode, f.mint, f.qty, f.priceUsd, f.grossUsd, f.feesUsd, f.netUsd, f.reason, f.at, usdAudNow(f.at));
   },
 };
 

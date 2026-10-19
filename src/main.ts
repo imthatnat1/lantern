@@ -26,6 +26,7 @@ import { startServer, snapshotEquity } from "./server.js";
 import { ensureWebhook, rotateKols } from "./data/wallets.js";
 import { walletSellCheck } from "./engine/walletsell.js";
 import { pruneCreates, recordCreate } from "./data/creators.js";
+import { refreshFx } from "./data/fx.js";
 import { takeGraduations } from "./data/stonkfun.js";
 import { flagshipMints } from "./data/universe.js";
 import { currentMood, moodScore, moodSizeX, saveMood } from "./engine/mood.js";
@@ -244,6 +245,8 @@ async function main() {
     polling = true;
     try { await liveCandles.poll(); } catch (e) { log.debug({ err: String(e) }, "live candles poll failed"); } finally { polling = false; }
   }, liveCandles.POLL_MS);
+  refreshFx().catch(() => null);
+  setInterval(() => refreshFx().catch(() => null), 3_600_000);   // USD/AUD for tax (data/fx.ts)
   solPrice = await jup.solPrice();
   setInterval(async () => { solPrice = await jup.solPrice(); }, 60_000);
   const tick = async () => {
