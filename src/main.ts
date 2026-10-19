@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { log } from "./log.js";
-import { positions, cooldowns, kv, market, db, recorder, hot } from "./db.js";
+import { positions, cooldowns, kv, market, db, recorder, hot, reprice } from "./db.js";
 import { startLab } from "./lab/scheduler.js";
 import { PumpPortal } from "./data/pumpportal.js";
 import * as dex from "./data/dexscreener.js";
@@ -93,7 +93,7 @@ async function missedRunnersLoop() {
     WHERE at > ? AND taken=0 GROUP BY mint, COALESCE(pair, '') ORDER BY w DESC, t DESC LIMIT 120`).all(since) as { mint: string; pair: string }[];
   if (!rows.length) return;
   const byMint = await dex.pairsByMint([...new Set(rows.map(r => r.mint))].slice(0, 90));
-  const upd = db.prepare(`UPDATE signals_log SET last_price=?, peak_price=MAX(peak_price, ?), peak_checked_at=? WHERE mint=? AND COALESCE(pair, '')=? AND at > ?`);
+
   for (const r of rows) {
     const pairs = byMint.get(r.mint);
     if (!pairs?.length) continue;
@@ -103,7 +103,7 @@ async function missedRunnersLoop() {
     const p = traded.find(x => x.pairAddress === r.pair) ?? dex.bestPair(pairs);
     const price = Number(p?.priceUsd ?? 0);
     if (!price) continue;
-    upd.run(price, price, now, r.mint, r.pair, since);
+    reprice(r.mint, r.pair, price, now, since);
   }
   for (const [mint, pairs] of byMint) {
     const p = dex.bestPair(pairs);

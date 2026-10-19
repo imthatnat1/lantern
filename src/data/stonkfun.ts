@@ -92,9 +92,13 @@ export async function stonkfunFresh(): Promise<string[]> {
 async function refresh() {
   if (Date.now() - cache.at < 10 * 60_000) return;
   // ("status=aboutToGraduate" exists in the docs but returned nothing on 18 Oct; graduationProgress does the job.)
-  const [vol, cap, newest, grad] = await Promise.all([
+  const [vol, cap, newest, grad, cap2, cap3] = await Promise.all([
     page("volume"), page("marketCap"), page("newest", "&status=new", true), page("newest", "&status=graduated", true),
+    page("marketCap", "&page=2"), page("marketCap", "&page=3"),
   ]);
+  // Pages 2-3 by market cap: recorded so the bot knows they're Stonk.fun coins (3% fee limit, no name-based copycat
+  // check), but only watched if they clear the usual volume/liquidity bar. 19 Oct: ~524 coins listed in total.
+  absorb([...cap2, ...cap3]);
   const top = [...vol, ...cap];
   if (!top.length && !newest.length && !grad.length) { cache.at = Date.now() - 5 * 60_000; return; }   // retry in 5 min, keep the old lists
   const keep = absorb(top);

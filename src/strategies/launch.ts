@@ -18,6 +18,8 @@ const M5 = 5 * 60_000;
  *          500+ holders with the top 10 under 25%, its own socials (prefilter).
  * Enter on: a closed 5m candle near the post-migration high, up on the last 15 minutes, on at least average volume,
  *          and not one giant candle (no buying a blow-off wick).
+ * From 1h to 6h after migration it buys a breakout instead: a 5m close at a new high since migration on 3x the
+ *          previous hour's average volume (Blossom's PIERRE trade, 19 Oct: 2.3h old, 4.5x volume, $3 -> +$9.28).
  * Exit: out on a 15m close 25% under entry, -40% hard floor on ticks; half off at 2x; trail 30% from the peak close
  *          once up 50% (35% after 4x); 6h backstop.
  * Most of these fail. It only works if the winners are big enough to pay for the losers, so size is small.
@@ -28,7 +30,7 @@ export const launch: Strategy = {
   async scan(ctx: Context): Promise<Signal[]> {
     const out: Signal[] = [];
     const recent = [...ctx.migrations.entries()]
-      .filter(([, at]) => ctx.now - at < C.maxSinceMigrationMin * 60_000)
+      .filter(([, at]) => ctx.now - at < C.breakoutMaxAgeH * 3_600_000)
       .map(([m]) => m);
     if (!recent.length) return out;
     const snaps = [...(await dex.snapshots(recent)).values()];
@@ -63,7 +65,7 @@ export function cheapWhy(m: Mkt & { volume1h?: number; buys1h?: number; sells1h?
 }
 
 /** The candle setup. Pure, shared by the live scan and the lab. */
-export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: number, C: ModeCfg<"launch">): Pattern<{ base: number; gain15: number; plan: (entry: number, atr15: number) => ExitPlan }> {
+export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: number, C: ModeCfg<"launch">): Pattern<{ base: number; gain15: number; kind: "first leg" | "breakout"; plan: (entry: number, atr15: number) => ExitPlan }> {
   const c5 = c5all.filter(k => k.t >= migratedAt - M5 && k.t + M5 <= now);   // closed candles since migration
   if (c5.length < 3) return { ok: false, why: `${c5.length * 5} minutes since migration, needs 15 to read the first leg` };
   const last = c5.at(-1)!;
@@ -72,14 +74,29 @@ export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: 
   if (offHigh > C.maxOffHigh) return { ok: false, why: `${(offHigh * 100).toFixed(0)}% off its high, first leg stalling`, setup: { need: `5m close back near ${(hi * (1 - C.maxOffHigh)).toPrecision(3)}`, level: hi * (1 - C.maxOffHigh), distance: dist(m.priceUsd, hi * (1 - C.maxOffHigh)) } };
   const ref = c5.at(-4)?.c ?? c5[0].o;
   const gain15 = last.c / ref - 1;
-  if (gain15 < C.minGain15m) return { ok: false, why: `only +${(gain15 * 100).toFixed(0)}% in 15 minutes, not running` };
   if (last.c / last.o > C.maxCandleX) return { ok: false, why: `last 5m candle +${((last.c / last.o - 1) * 100).toFixed(0)}%, too vertical to chase` };
   if (last.c < last.o) return { ok: false, why: "last 5m candle red, waiting for a green one" };
-  const avgV = c5.reduce((a, k) => a + k.v, 0) / c5.length;
-  if (avgV > 0 && last.v < avgV * C.minVolX) return { ok: false, why: "volume fading on the last candle" };
-  const base = 55 + Math.min(20, gain15 * 40) + (buySellRatio(m) > 2 ? 10 : 0) + (m.liquidityUsd > 50_000 ? 5 : 0);
+  const firstHour = now - migratedAt <= C.maxSinceMigrationMin * 60_000;
+  let kind: "first leg" | "breakout";
+  if (firstHour) {
+    // First leg: still running, on at least average volume.
+    if (gain15 < C.minGain15m) return { ok: false, why: `only +${(gain15 * 100).toFixed(0)}% in 15 minutes, not running` };
+    const avgV = c5.reduce((a, k) => a + k.v, 0) / c5.length;
+    if (avgV > 0 && last.v < avgV * C.minVolX) return { ok: false, why: "volume fading on the last candle" };
+    kind = "first leg";
+  } else {
+    // Breakout (PIERRE at 2.3h): the close is a new high since migration, on a volume spike against the hour before.
+    const prior = c5.slice(0, -1);
+    const prevHighClose = Math.max(...prior.map(k => k.c));
+    if (last.c <= prevHighClose) return { ok: false, why: "no new high yet", setup: { need: `5m close above ${prevHighClose.toPrecision(3)} on ${C.breakoutVolX}x volume`, level: prevHighClose, distance: dist(m.priceUsd, prevHighClose) } };
+    const hour = prior.slice(-12);
+    const avgV = hour.reduce((a, k) => a + k.v, 0) / Math.max(1, hour.length);
+    if (avgV > 0 && last.v < avgV * C.breakoutVolX) return { ok: false, why: `new high on only ${(last.v / avgV).toFixed(1)}x volume, needs ${C.breakoutVolX}x` };
+    kind = "breakout";
+  }
+  const base = 55 + Math.min(20, Math.max(0, gain15) * 40) + (buySellRatio(m) > 2 ? 10 : 0) + (m.liquidityUsd > 50_000 ? 5 : 0);
   return {
-    ok: true, base, gain15,
+    ok: true, base, gain15, kind,
     plan: (entry) => ({
       hardFloorPct: C.hardFloorPct,
       closeStopPrice: entry * (1 - C.stopPct),
@@ -107,7 +124,7 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   const score = p.base + (hv != null && hv >= 0.1 ? 10 : 0) + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
   const sig: Signal = {
     mode: "launch", mint: s.mint, symbol: s.symbol, sizeUsd: C.sizeUsd, score,
-    reason: `launch: first leg +${(p.gain15 * 100).toFixed(0)}% in 15m, ${pre.holders} holders, buys ${buySellRatio(s).toFixed(1)}x sells`,
+    reason: `launch: ${p.kind} +${(p.gain15 * 100).toFixed(0)}% in 15m, ${((ctx.now - migratedAt) / 3_600_000).toFixed(1)}h after migrating, ${pre.holders} holders, buys ${buySellRatio(s).toFixed(1)}x sells`,
     snapshot: s, candles15: c15,
     meta: { atr15: atr(c15), migratedAt, holders: pre.holders },
     plan: p.plan,

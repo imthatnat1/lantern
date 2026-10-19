@@ -185,6 +185,10 @@ export const cooldowns = {
 // Migration for databases created before the setup column existed.
 try { db.exec("ALTER TABLE signals_log ADD COLUMN setup TEXT"); } catch { /* already there */ }
 try { db.exec("ALTER TABLE signals_log ADD COLUMN pair TEXT"); } catch { /* already there */ }
+// 19 Oct: the lowest price seen after a look, and the lowest before the peak, so a miss card can say how far a coin
+// fell before it ran (sampled every 20 min, so a quick wick can be missed).
+try { db.exec("ALTER TABLE signals_log ADD COLUMN low_price REAL NOT NULL DEFAULT 0"); } catch { /* already there */ }
+try { db.exec("ALTER TABLE signals_log ADD COLUMN low_before_peak REAL NOT NULL DEFAULT 0"); } catch { /* already there */ }
 // Recorded for the replay lab: which pair a tick came from (dust pools can be filtered out), when coins
 // migrated (bounce needs it), and what the safety gate saw (so gate rules can be replayed later).
 try { db.exec("ALTER TABLE ticks ADD COLUMN pair TEXT"); } catch { /* already there */ }
@@ -329,4 +333,16 @@ export const ride = {
 if (!kv.get("fix:dustPeaks", false)) {
   db.prepare("UPDATE signals_log SET peak_price=price, last_price=price, peak_checked_at=0 WHERE taken=0 AND peak_price >= price * 2").run();
   kv.set("fix:dustPeaks", true);
+}
+
+/**
+ * Missed-runner tracker: a new price for every look at this coin (and pair) since `since`. Keeps the peak, the running
+ * low, and the low before the peak. Right-hand sides read the old row, so low_before_peak sees the low before this price.
+ */
+export function reprice(mint: string, pair: string, p: number, now: number, since: number) {
+  db.prepare(`UPDATE signals_log SET last_price=@p, peak_checked_at=@now,
+      low_before_peak = CASE WHEN @p > peak_price THEN MIN(price, CASE WHEN low_price > 0 THEN low_price ELSE price END) ELSE low_before_peak END,
+      low_price = MIN(CASE WHEN low_price > 0 THEN low_price ELSE price END, @p),
+      peak_price = MAX(peak_price, @p)
+    WHERE mint=@mint AND COALESCE(pair, '')=@pair AND at > @since`).run({ p, now, mint, pair, since });
 }

@@ -117,7 +117,9 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
   const fee = rep.transferFee?.pct ?? 0;
   if (fee > 0) setTax(mint, fee);
   // A Stonk.fun reward coin's tax goes to holders in the paired token, not to the dev: allow up to 3%.
-  if (fee > (isStonkReward(mint) ? 3 : 2)) reasons.push(`transfer fee ${fee}%`);
+  // 19 Oct: checked all 524 coins Stonk.fun's API lists: fees are exactly 1% (240) or 3% (178), never more, and only on
+  // reward coins. Any coin Stonk.fun lists gets the 3% limit (Blossom's flat 2% was refusing every 3% coin).
+  if (fee > (isStonkReward(mint) || isStonkListed(mint) ? 3 : 2)) reasons.push(`transfer fee ${fee}%`);
   for (const r of rep.risks ?? []) {
     if (TRAP_RISKS.test(r.name)) reasons.push(`honeypot: ${r.name}`);
     else if (r.level === "danger" && !LIQ_HOLDER_RISKS.test(r.name)) reasons.push(`danger: ${r.name}`);

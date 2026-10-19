@@ -127,6 +127,23 @@ export function activity(now = Date.now(), windowMs = 3_600_000) {
  * "onway" = clean and active, with the mode's latest verdict on what it's waiting for. Scans re-check these first
  * (watchedMints), so one that meets every criterion is bid on the next scan.
  */
+/**
+ * 19 Oct (Nat: "All these messages say similar things"): a miss card should say how far the coin fell before it ran,
+ * and whether the reason we passed is already fixed, so the list shows the misses we can still learn from.
+ */
+export function honest(r: { mode: string; reason: string; price: number; low_before_peak?: number }): { fellFirst: number | null; fixed: string | null } {
+  const fellFirst = r.low_before_peak && r.price ? Math.max(0, 1 - r.low_before_peak / r.price) : null;
+  const why = r.reason ?? "";
+  const fixed =
+    /cooling|geckoterminal/i.test(why) ? "fixed 18 Oct: we build our own charts now, no more cooling"
+    : config.pausedModes.includes(r.mode) && !/paused: watching only/.test(why) ? `${r.mode} is paused`
+    : /under the \$45k bounce floor$/.test(why) ? "changed 19 Oct: bounce now buys from $25k with a real crowd"
+    : /launch needs \$25k|under launch's \$60k/.test(why) ? "changed 19 Oct: launch now looks from a $10k pool and $25k"
+    : /vertical launch/.test(why) && r.mode === "launch" ? "changed 19 Oct: launch skips the vertical-launch rule"
+    : null;
+  return { fellFirst, fixed };
+}
+
 export function hotList(now = Date.now(), held = new Set<string>(), max = 15) {
   const rows = db.prepare(`SELECT c.mode, c.mint, c.symbol, c.at, c.first_at, c.status, c.status_at,
       (SELECT s.setup FROM signals_log s WHERE s.mode=c.mode AND s.mint=c.mint AND s.setup IS NOT NULL AND s.at > ? ORDER BY s.at DESC LIMIT 1) AS setup
@@ -260,17 +277,17 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
     ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at ORDER BY s.at DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
     .map(r => ({ ...r, peakX: r.price ? r.peak_price / r.price : null, nowX: r.price ? r.last_price / r.price : null, flagship: isFlagship(r.mint), market: mkt(r.mint) }));
 
-  const missed = (db.prepare(`SELECT mode, mint, symbol, reason, at, price, peak_price, last_price, mcap FROM signals_log
+  const missed = (db.prepare(`SELECT mode, mint, symbol, reason, at, price, peak_price, last_price, mcap, low_before_peak FROM signals_log
     WHERE taken=0 AND at > ? AND mcap >= 5000 AND peak_price >= price * 2 ORDER BY peak_price / price DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
-    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, market: mkt(r.mint) }));
+    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, ...honest(r), market: mkt(r.mint) }));
   // Plus coins we were stopped out of that then ran.
   // Flagship bounces: a pinned or big Stonk.fun coin we passed on that bounced 25% or more (below the 2x bar above).
   const seenMissed = new Set(missed.map((m: any) => m.mint));
-  const flagshipBounces = (db.prepare(`SELECT s.mode, s.mint, s.symbol, s.reason, s.at, s.price, s.peak_price, s.last_price, s.mcap FROM signals_log s
+  const flagshipBounces = (db.prepare(`SELECT s.mode, s.mint, s.symbol, s.reason, s.at, s.price, s.peak_price, s.last_price, s.mcap, s.low_before_peak FROM signals_log s
     JOIN (SELECT mint, max(peak_price / price) AS x FROM signals_log WHERE taken=0 AND at > ? AND price > 0 GROUP BY mint) b ON b.mint=s.mint AND s.peak_price / s.price = b.x
     WHERE s.taken=0 AND s.at > ? AND s.price > 0 AND s.peak_price >= s.price * 1.25 AND s.peak_price < s.price * 2`).all(now - 48 * 3_600_000, now - 48 * 3_600_000) as any[])
     .filter(r => isFlagship(r.mint) && !seenMissed.has(r.mint))
-    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, flagshipBounce: true, market: mkt(r.mint) }));
+    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, flagshipBounce: true, ...honest(r), market: mkt(r.mint) }));
   const stoppedThenRan = (db.prepare(`SELECT p.mode, p.mint, p.symbol, p.close_reason AS reason, p.closed_at AS at, p.entry_price AS price, m.price AS last_price
     FROM positions p JOIN market m ON m.mint=p.mint WHERE p.status='closed' AND p.closed_at > ? AND p.realized_usd < 0 AND m.price >= p.entry_price * 2`).all(now - 48 * 3_600_000) as any[])
     .map(r => ({ ...r, peakX: r.last_price / r.price, nowX: r.last_price / r.price, soldEarly: true, market: mkt(r.mint) }));

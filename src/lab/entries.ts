@@ -20,6 +20,7 @@ import { isStonkPair } from "../data/universe.js";
 import { pullbackPattern, pullbackQualifies } from "../strategies/pullback.js";
 import { bounceFloor, bouncePattern } from "../strategies/bounce.js";
 import { cheapWhy as launchCheap, launchPattern } from "../strategies/launch.js";
+import { isFlagship } from "../data/universe.js";
 import { dipPattern, dipPlan } from "../strategies/dip.js";
 import { ultraPattern, ultraPlan, ultraWindow } from "../strategies/ultra.js";
 import { rideCorePlan, rideLeader, rideSleeve } from "../strategies/ride.js";
@@ -149,7 +150,7 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
       if (c) { out.push(c); blockedUntil = c.exitAt + C.cooldownMs; }
     } else if (mode === "launch") {
       const C = cfg("launch", o);
-      if (migratedAt == null || now < migratedAt || now - migratedAt > C.maxSinceMigrationMin * 60_000) continue;
+      if (migratedAt == null || now < migratedAt || now - migratedAt > C.breakoutMaxAgeH * 3_600_000) continue;
       if (launchCheap(m, C, now)) continue;
       // Launch skips the vertical-launch rule live (base.ts prefilter), so pass 0 for the moves here.
       if (!passesGate(h, now, ageH, 0, 0, g)) continue;
@@ -160,14 +161,15 @@ function walk(h: CoinHistory, mode: Mode, from: number, to: number, exp: Experim
       const { c5, realShare } = h.c5At(now);
       const p = launchPattern(m, c5, migratedAt, now, C);
       if (!p.ok) continue;
-      const c = enter(h, mode, now, `launch: first leg +${(p.gain15 * 100).toFixed(0)}% in 15m`, p.plan, realShare, exp);
+      const c = enter(h, mode, now, `launch: ${p.kind} +${(p.gain15 * 100).toFixed(0)}% in 15m`, p.plan, realShare, exp);
       if (c) { out.push(c); blockedUntil = c.exitAt + C.cooldownMs; }
     } else if (mode === "dip") {
       const C = cfg("dip", o);
       const pinned = config.pinned.includes(h.info.mint);
       const stonk = isStonkPair({ mint: h.info.mint, quoteSymbol: h.info.quote ?? undefined });
       const quality = ageH >= 72 && m.liquidityUsd >= 100_000 && m.volume24h >= 50_000;
-      if (!pinned && !stonk && !quality) continue;
+      if (C.trigger === "turn" && C.flagshipsOnly) { if (!pinned && !isFlagship(h.info.mint)) continue; }
+      else if (!pinned && !stonk && !quality) continue;
       if (!pinned && !passesGate(h, now, ageH, m.change1h, m.change6h, g)) continue;
       const { c5, realShare } = h.c5At(now);
       const p = dipPattern(m, c5, now, C);

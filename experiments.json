@@ -102,59 +102,21 @@
       }
     },
     {
-      "name": "Dip: skip falling knives",
-      "why": "Dip is paused because it kept buying dips that kept dipping. Skip any coin down more than 10% in the last hour.",
+      "name": "Dip: old trigger (first green 5m candle)",
+      "why": "19 Oct the dip trigger changed to the turn rule (hourly higher low, close above the last lower high, flagships only). This puts the old trigger back on the same coins. If this says Helps, the turn rule is worse.",
       "config": {
         "dip": {
-          "maxDrop1h": -10
+          "trigger": "reclaim",
+          "flagshipsOnly": true
         }
       }
     },
     {
-      "name": "Dip: the bounce needs real volume",
-      "why": "Today a bounce counts on any green candle. Require 1.5x normal volume, so buyers are actually stepping in.",
+      "name": "Dip turn: any quality coin, not just flagships",
+      "why": "The turn rule only watches flagships and pinned coins. Would it work on Stonk.fun pairs and established coins too?",
       "config": {
         "dip": {
-          "reclaimVolX": 1.5
-        }
-      }
-    },
-    {
-      "name": "Dip: stronger bounce",
-      "why": "Close at least 3% above the low (today 1%) on 1.5x volume.",
-      "config": {
-        "dip": {
-          "reclaimAboveLow": 1.03,
-          "reclaimVolX": 1.5
-        }
-      }
-    },
-    {
-      "name": "Dip: shallow dips only (6-15%)",
-      "why": "Deeper drops may be trend breaks, not dips. Only buy 6 to 15% off the 24h high (today up to 30%).",
-      "config": {
-        "dip": {
-          "dipMax": 0.15
-        }
-      }
-    },
-    {
-      "name": "Dip: only the strongest setups",
-      "why": "Raise dip's score bar from 55 to 70.",
-      "config": {
-        "dip": {
-          "minScore": 70
-        }
-      }
-    },
-    {
-      "name": "Dip: falling-knife filter plus stronger bounce",
-      "why": "The two most likely fixes together.",
-      "config": {
-        "dip": {
-          "maxDrop1h": -10,
-          "reclaimAboveLow": 1.03,
-          "reclaimVolX": 1.5
+          "flagshipsOnly": false
         }
       }
     }

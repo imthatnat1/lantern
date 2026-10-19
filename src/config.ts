@@ -168,8 +168,11 @@ export const config = {
       cooldownMs: 2 * 3_600_000,
       maxOpen: 3,
       sizeUsd: 3,
-      checksPerScan: 10,
+      checksPerScan: 15,
       maxSinceMigrationMin: 60,
+      // 19 Oct: Blossom's best trade was PIERRE, an "ultra breakout" 2.3h old on 4.5x volume ($3 -> +$9.28).
+      // From 1h to 6h after migration launch buys a breakout: a 5m close at a new high on a volume spike.
+      breakoutMaxAgeH: 6, breakoutVolX: 3,
       // 19 Oct 11:30: pump.fun coins migrate at ~$27-38k with a $12-15k pool (UBI $27k/$12k, then 6.7x; WAND $31k/$13.5k).
       // The first numbers ($25k pool, $60k cap) meant waiting until a coin had already doubled.
       minLiquidity: 10_000, mcapMin: 25_000, mcapMax: 3_000_000,
@@ -206,6 +209,15 @@ export const config = {
       reclaimAboveLow: 1.01, reclaimVolX: 1.0,
       /** Skip a falling knife: down more than this % in the last hour (-100 = off). */
       maxDrop1h: -100,
+      /**
+       * 19 Oct: the entry trigger. "reclaim" = the first green 5m candle over the dip low (lost in every lab run: it buys
+       * pauses in downtrends). "turn" = wait for the hourly chart to turn: a higher low, then an hourly close above the
+       * last lower high. Nat: Stonk.fun coins look due for a bounce, "it might be a little early".
+       */
+      trigger: "turn" as "turn" | "reclaim",
+      /** Turn rule only on flagships (pinned + Stonk.fun's biggest) and pinned coins. */
+      flagshipsOnly: true,
+      turnMaxDepth: 0.70, turnMaxAboveLow: 1.40,
     },
     ride: {
       scanEveryMs: 3 * 60_000,

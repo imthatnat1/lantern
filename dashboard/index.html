@@ -119,6 +119,7 @@
   td:not(:first-child), th:not(:first-child) { text-align: right; }
 
   .lesson { font-family: var(--serif); font-style: italic; font-weight: 300; color: var(--ivory); font-size: 16px; margin-top: 8px; }
+  .lesson.done { opacity: .55; }
   .totals { font-size: 14px; color: var(--ivory-dim); margin: 6px 0 4px; }
   .totals b { color: var(--ivory); font-weight: 500; }
 
@@ -578,10 +579,15 @@ function missedRows(missed) {
   const byReason = {};
   for (const m of missed) { const k = m.flagshipBounce ? "flagship bounce" : m.soldEarly ? "stopped out, then it ran" : reasonBucket(m.reason); byReason[k] = (byReason[k] || 0) + 1; }
   $("missedTotals").innerHTML = Object.entries(byReason).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${esc(k)}: cost us <b>${n}</b>`).join(" · ");
+  // Misses we can still learn from first; ones whose reason is already fixed go to the bottom.
+  missed = [...missed].sort((a, b) => (a.fixed ? 1 : 0) - (b.fixed ? 1 : 0));
   return missed.map(m => {
     const why = m.flagshipBounce ? "flagship bounce" : m.soldEarly ? "sold early" : "skipped";
-    const lesson = m.flagshipBounce
-      ? `A flagship bounced +${Math.round((m.peakX - 1) * 100)}% after we passed (${esc(m.reason)}). Deep flagship dips fall outside every rule today; this is the case for a deep-dip test.`
+    const fell = m.fellFirst != null && m.fellFirst >= 0.05 ? ` · fell ${Math.round(m.fellFirst * 100)}% first` : "";
+    const lesson = m.fixed
+      ? `Already dealt with: ${esc(m.fixed)}.`
+      : m.flagshipBounce
+      ? `A flagship bounced +${Math.round((m.peakX - 1) * 100)}% after we passed (${esc(m.reason)})${m.fellFirst >= 0.05 ? `, after falling ${Math.round(m.fellFirst * 100)}% first` : ""}. The dip turn rule now watches flagships for exactly this; see Would have bought.`
       : m.soldEarly
       ? `Stopped out (${esc(m.reason)}), then it ran ${m.peakX.toFixed(1)}x. Check whether the close stop was under the right low.`
       : /watching|waiting|forming/i.test(m.reason) ? `We were waiting for a setup that never came, then it ran ${m.peakX.toFixed(1)}x. The pullback entry may need a looser trigger.`
@@ -593,8 +599,8 @@ function missedRows(missed) {
     return `<div class="card">
       <div class="head">${av(m.symbol, m.market)}<div class="sym">${esc(m.symbol)}<small>${m.mode}</small></div><div class="gain up">+${Math.round((m.peakX - 1) * 100)}%<small>${why}</small></div>
       ${links(m.mint, m.market)}</div>
-      <div class="note">${big(m.mcap || (m.market && m.market.mcap))} when we looked → peak ${m.peakX.toFixed(1)}x · now ${m.nowX.toFixed(1)}x · ${ago(Date.now() - m.at)} ago<br>${esc(m.reason)}</div>
-      <div class="lesson">${lesson}</div>
+      <div class="note">${big(m.mcap || (m.market && m.market.mcap))} when we looked → peak ${m.peakX.toFixed(1)}x${fell} · now ${m.nowX.toFixed(1)}x · ${ago(Date.now() - m.at)} ago<br>${esc(m.reason)}</div>
+      <div class="lesson${m.fixed ? " done" : ""}">${lesson}</div>
     </div>`;
   }).join("");
 }

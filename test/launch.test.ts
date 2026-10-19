@@ -49,3 +49,22 @@ test("cheap checks: thin pools, tiny or huge caps, sell-heavy flow and churn nev
   // safufun at 19 minutes: 3,545 buys / 3,418 sells, $345k traded on $83k
   assert.match(cheapWhy({ ...mkt, mcapUsd: 83_000, liquidityUsd: 26_000, buys5m: 200, sells5m: 120, createdAt: t - 19 * 60_000, volume1h: 345_000, buys1h: 3_545, sells1h: 3_418 }, C, t)!, /churn/);
 });
+
+test("breakout (PIERRE, Blossom's best trade): 2.3h after migrating, a new-high close on a volume spike = buy", () => {
+  // 27 quiet candles drifting sideways, then a green candle closing at a new high on 5x the hour's volume
+  const closes = Array.from({ length: 27 }, (_, i) => 1 + 0.05 * Math.sin(i));
+  const c5 = run([...closes, 1.25], i => i === 27 ? 25_000 : 5_000);
+  const p = launchPattern(mkt, c5, MIG, now(28), C);
+  assert.ok(p.ok, JSON.stringify(p));
+  if (p.ok) assert.equal(p.kind, "breakout");
+});
+
+test("breakout needs both: a new high and the volume", () => {
+  const closes = Array.from({ length: 27 }, (_, i) => 1 + 0.05 * Math.sin(i));
+  assert.match((launchPattern(mkt, run([...closes, 1.25], () => 5_000), MIG, now(28), C) as any).why, /needs 3x/);
+  assert.match((launchPattern(mkt, run([...closes, 1.044], i => i === 27 ? 25_000 : 5_000), MIG, now(28), C) as any).why, /no new high/);
+});
+
+test("past 6 hours, launch is done with a coin", () => {
+  assert.equal(C.breakoutMaxAgeH, 6);
+});
