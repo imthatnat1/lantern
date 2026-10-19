@@ -11,11 +11,11 @@
       }
     },
     {
-      "name": "Launch: wider stop (35%)",
-      "why": "Launch buys the first leg of a fresh migration (19 Oct). First legs shake hard. Does a 35% stop keep more winners, or just lose more?",
+      "name": "Launch: tighter stop (25%)",
+      "why": "Launch's stop went from 25% to 35% on 19 Oct (the lab lost less with it). This puts 25% back to keep checking.",
       "config": {
         "launch": {
-          "stopPct": 0.35
+          "stopPct": 0.25
         }
       }
     },

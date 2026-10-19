@@ -112,7 +112,11 @@ export function microTrades(s: { buys5m: number; sells5m: number; volume5m: numb
 }
 
 /** Free check from the snapshot: lots more buys than sells, but the price is falling. */
-export function divergence(s: { buys1h?: number; sells1h?: number; change1h: number }): string | null {
+export function divergence(s: { buys1h?: number; sells1h?: number; change1h: number; createdAt?: number }, now = Date.now()): string | null {
+  // 19 Oct: SXSITBL (2h old) was flagged here, blocked 24h and its name burned, then ran 9x. On a coin under 6 hours
+  // old, buyers outnumbering sellers while it dips is ordinary dip buying, not bots. Older coins still get the check;
+  // fresh coins still face the micro-trade, fake-valuation, fake-holder and churn checks.
+  if (s.createdAt && now - s.createdAt < 6 * 3_600_000) return null;
   const b = s.buys1h ?? 0, x = s.sells1h ?? 0;
   if (b < FLOW.divergenceMinBuys || !x) return null;
   const r = b / x;

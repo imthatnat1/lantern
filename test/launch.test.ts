@@ -18,7 +18,7 @@ test("Vader-style first leg: steady climb near the highs on rising volume = buy"
   assert.ok(p.ok, JSON.stringify(p));
   if (p.ok) {
     const plan = p.plan(2.0, 0.1);
-    assert.equal(plan.closeStopPrice, 1.5, "out on a 15m close 25% under entry");
+    assert.equal(plan.closeStopPrice, 1.3, "out on a 15m close 35% under entry");
     assert.deepEqual(plan.takeProfits, [{ gain: 1, sell: 0.5 }], "half off at 2x");
   }
 });

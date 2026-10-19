@@ -54,10 +54,15 @@ test("a coin crashing in the hour stays off the hot list", async () => {
   assert.ok(!hotList(NOW).some(x => x.mint === "RUGGING"));
 });
 
-test("bounce takes at most 5 hot list spots unless a coin is in a setup", () => {
+test("bounce takes at most 5 hot list spots unless a coin is in a setup", async () => {
+  // Bounce is paused since 19 Oct; the cap still matters if it's switched back on.
+  const { config } = await import("../src/config.js");
+  const saved = [...config.pausedModes];
+  config.pausedModes.splice(0, config.pausedModes.length, ...saved.filter(m => m !== "bounce"));
   for (let i = 0; i < 8; i++) hot.clean("bounce", "NEWPAIR" + i, "NEWPAIR" + i, 1, NOW - M);
   hot.clean("ultra", "PROVEN", "PROVEN", 1, NOW - M);
   const h = hotList(NOW, new Set(), 30);
+  config.pausedModes.splice(0, config.pausedModes.length, ...saved);
   const onlyBounce = h.filter(x => x.group !== "setup" && x.modes.length === 1 && x.modes[0] === "bounce");
   assert.equal(onlyBounce.length, 5);
   assert.ok(h.some(x => x.mint === "PROVEN"));
@@ -87,8 +92,8 @@ test("Watching is for coins near a buy: far setups and breaking-down coins leave
   assert.ok(watchedMints("ultra", NOW).includes("TSIFAR"));
 });
 
-test("paused modes stay off Watching: dip and ride coins show under Would have bought instead", () => {
-  hot.clean("dip", "PAUSEDDIP", "PAUSEDDIP", 1, NOW - M); hot.status("dip", "PAUSEDDIP", "dip found, waiting for a green 5m reclaim", NOW - M);
+test("paused modes stay off Watching: bounce and ride coins show under Would have bought instead", () => {
+  hot.clean("bounce", "PAUSEDDIP", "PAUSEDDIP", 1, NOW - M); hot.status("bounce", "PAUSEDDIP", "only 3% off the post-migration high, no dip yet", NOW - M);
   hot.clean("ride", "PAUSEDRIDE", "PAUSEDRIDE", 1, NOW - M);
   const mints = hotList(NOW).map(x => x.mint);
   assert.ok(!mints.includes("PAUSEDDIP") && !mints.includes("PAUSEDRIDE"));

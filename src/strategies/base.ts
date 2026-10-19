@@ -95,7 +95,10 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
     // 500 holders matches launch's own floor (19 Oct: at 1,000, launch's 500-999 holder coins needed a DexScreener profile).
     const young = ageHours(s) < 3 && (safe.holders ?? 0) >= 500;
     const sw = isStonkListed(s.mint) || young ? await socialsWhy(s.mint, links, safe.metaUri) : dexProfileWhy(links);
-    if (sw) return { ok: false, why: `rejected: ${sw}` };
+    // 19 Oct (Nat: yes): launch may buy a coin whose only link is a tweet. Fresh memes are often about one tweet
+    // (UHI ran 15x and PIERRE 26x with just that). No links at all, link-in-bio pages and hosted pages still fail.
+    const tweetOnlyOk = mode === "launch" && !!sw && sw.startsWith("no community");
+    if (sw && !tweetOnlyOk) return { ok: false, why: `rejected: ${sw}` };
     // TTP (18 Oct 21:25): holders +8,330% in 10 minutes, an hour after launch. Real coins don't grow 6x in holders in
     // ten minutes once they're past the launch rush; that's a wallet farm faking a crowd to beat holder floors.
     const hv = holderVelocity(s.mint);

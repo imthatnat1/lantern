@@ -49,8 +49,10 @@ export const config = {
    * them because it was rate-limited or not checking those coins.
    * ride (19 Oct): live 6 trades, -$8.67; lab 17 trades, 2 winners, -$17.88. Its coins ($1M+) never ran past 1.8x.
    * Paused modes still scan and log would-buys, so nothing it would have caught goes unseen.
+   * 19 Oct 16:05 (Nat: yes): dip unpaused with the turn rule (lab +$3.37 over 9 trades; the old trigger -$17.43) at $4.
+   * bounce paused: lab 10 trades, 0 wins, -$7.25. Launch now covers fresh migrations.
    */
-  pausedModes: ["dip", "ride", ...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
+  pausedModes: ["ride", "bounce", ...env("PAUSED_MODES").split(",").map(s => s.trim()).filter(Boolean)] as string[],
   /**
    * Always checked, like pinned coins, but with every safety check still applied (pinned coins skip
    * RugCheck and the copycat filter). For coins Nat wants eyes on but hasn't vouched for.
@@ -176,10 +178,12 @@ export const config = {
       // 19 Oct 11:30: pump.fun coins migrate at ~$27-38k with a $12-15k pool (UBI $27k/$12k, then 6.7x; WAND $31k/$13.5k).
       // The first numbers ($25k pool, $60k cap) meant waiting until a coin had already doubled.
       minLiquidity: 10_000, mcapMin: 25_000, mcapMax: 3_000_000,
-      minBuys5m: 40, minBuySell: 1.3,
+      // 19 Oct 16:05: 40 buys in 5m refused the real pools (KAHO 36, UHI 36, HOOT 29). 20 still needs a crowd.
+      minBuys5m: 20, minBuySell: 1.3,
       minHolders: 500, maxTop10: 35,
       maxOffHigh: 0.15, minGain15m: 0.10, maxCandleX: 1.6, minVolX: 1.0,
-      stopPct: 0.25, hardFloorPct: 0.40,
+      // 35% (was 25%): the lab's "wider stop" row lost less (-$0.54 vs -$1.14 over 3 days). First legs shake hard.
+      stopPct: 0.35, hardFloorPct: 0.40,
     },
     pullback: {
       scanEveryMs: 2 * 60_000,
@@ -199,7 +203,7 @@ export const config = {
       scanEveryMs: 5 * 60_000,
       cooldownMs: 12 * 3_600_000,
       maxOpen: 5,
-      sizeUsd: 8,
+      sizeUsd: 4,   // half size while the turn rule proves itself live (19 Oct)
       /** Pullback depth from the 24h high, judged on 5m candles. */
       dipMin: 0.06, dipMax: 0.30,
       /** Skip if the 24h move is still > +150% (overheated). */

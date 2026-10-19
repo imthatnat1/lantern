@@ -27,7 +27,8 @@ test("a coin that went straight up fell nothing first", () => {
 test("reasons we've already fixed or paused are marked", () => {
   assert.match(honest({ mode: "dip", reason: "couldn't check: cooling api.geckoterminal.com", price: 1 }).fixed!, /own charts/);
   assert.match(honest({ mode: "ride", reason: "cooldown after a recent stop-out", price: 1 }).fixed!, /ride is paused/);
-  assert.match(honest({ mode: "bounce", reason: "rejected: $43k market cap, under the $45k bounce floor", price: 1 }).fixed!, /\$25k/);
-  assert.equal(honest({ mode: "bounce", reason: "rejected: top 10 hold 71%", price: 1 }).fixed, null);
+  assert.match(honest({ mode: "bounce", reason: "rejected: $43k market cap, under the $45k bounce floor", price: 1 }).fixed!, /bounce is paused/);
+  assert.match(honest({ mode: "launch", reason: "$27k market cap, under launch's $60k", price: 1 }).fixed!, /\$10k pool/);
+  assert.equal(honest({ mode: "launch", reason: "rejected: top 10 hold 71%", price: 1 }).fixed, null);
   assert.equal(honest({ mode: "dip", reason: "dip is paused: watching only", price: 1 }).fixed, null, "a would-buy isn't a fixed miss");
 });

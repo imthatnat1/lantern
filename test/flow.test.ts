@@ -96,3 +96,9 @@ test("a valuation nobody traded to is fake (Glow, 18 Oct)", async () => {
   assert.equal(c(2_838_666, 170_802, 37.7, 3_661_477), null); // ELON, older than a day
   assert.equal(c(900_000, 80_000, 2, 50_000), null, "under $1M: other rules judge it");
 });
+
+test("SXSITBL (19 Oct): a coin under 6 hours old isn't flagged for buyers outnumbering sellers in a dip", () => {
+  const now = Date.now();
+  assert.equal(divergence({ buys1h: 1800, sells1h: 1000, change1h: -17, createdAt: now - 2 * 3_600_000 }, now), null);
+  assert.match(divergence({ buys1h: 1800, sells1h: 1000, change1h: -17, createdAt: now - 8 * 3_600_000 }, now)!, /bot buys/);
+});
