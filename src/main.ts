@@ -25,6 +25,8 @@ import { launch } from "./strategies/launch.js";
 import { startServer, snapshotEquity } from "./server.js";
 import { ensureWebhook, soldSince, rotateKols } from "./data/wallets.js";
 import { takeGraduations } from "./data/stonkfun.js";
+import { flagshipMints } from "./data/universe.js";
+import { currentMood, moodScore, moodSizeX, saveMood } from "./engine/mood.js";
 
 const strategies: Strategy[] = [ride, dip, ultra, launch, bounce, pullback, trusted];
 const lastRun = new Map<string, number>();
@@ -158,6 +160,9 @@ async function scanLoop() {
     sigs.sort((a, b) => b.score - a.score);
     for (const sig of sigs) {
       if (paused) { logSignal(sig, false, `${sig.mode} is paused: watching only`); continue; }
+      // Market mood sizing: half size when fearful, 1.5x when green (engine/mood.ts). Capped by the single-trade limit.
+      const mx = moodSizeX(sig.mode, now);
+      if (mx !== 1) { sig.sizeUsd = Math.min(sig.sizeUsd * mx, config.risk.maxSingleTradeUsd); sig.reason += ` · ${mx}x size, ${currentMood()?.level} market`; }
       const cfg = (config.modes as any)[sig.mode];
       if (broker.modeOpenCount(sig.mode) >= cfg.maxOpen) { logSignal(sig, false, "mode full"); continue; }
       const r = broker.canOpen(sig, markPrices, feedHealthy);
@@ -167,6 +172,35 @@ async function scanLoop() {
       markPrices.set(sig.mint, sig.snapshot.priceUsd);
     }
   }
+}
+
+/**
+ * Market mood: every 10 minutes, read the flagships, SOL and the pump.fun launch flow, and score the market
+ * 0-100 (engine/mood.ts). New bets are sized by it: half when fearful, 1.5x when green.
+ */
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+let lastMoodAt = 0;
+async function moodLoop() {
+  const now = Date.now();
+  if (now - lastMoodAt < 10 * 60_000) return;
+  lastMoodAt = now;
+  const flag = [...(await dex.snapshots(flagshipMints().slice(0, 30))).values()];
+  const share = (xs: number[]) => xs.length ? xs.filter(x => x > 0).length / xs.length : null;
+  const sol = (await dex.snapshots([SOL_MINT])).get(SOL_MINT);
+  const ats = [...migrations.values()];
+  const lastHour = ats.filter(t => now - t < 3_600_000).length;
+  const perHour12 = ats.filter(t => now - t < 12 * 3_600_000).length / 12;
+  const recent = [...migrations.entries()].filter(([, t]) => now - t < 3 * 3_600_000).map(([m]) => m).slice(-60);
+  const recentSnaps = [...(await dex.snapshots(recent)).values()].filter(s => s.liquidityUsd >= 10_000);
+  const m = moodScore({
+    flagships6h: share(flag.map(s => s.change6h)),
+    flagships1h: share(flag.map(s => s.change1h)),
+    sol24h: sol ? sol.change24h : null, sol6h: sol ? sol.change6h : null,
+    launchesRatio: perHour12 >= 1 ? lastHour / perHour12 : null,
+    followThru: recentSnaps.length >= 5 ? share(recentSnaps.map(s => s.change1h)) : null,
+  }, currentMood()?.score, now);
+  saveMood(m);
+  log.info({ score: m.score, level: m.level, sizeX: m.sizeX, parts: m.parts }, "market mood");
 }
 
 async function heartbeat() {
@@ -212,6 +246,7 @@ async function main() {
     try { await scanLoop(); } catch (e) { log.error({ err: String(e) }, "scanLoop crashed"); }
     try { await missedRunnersLoop(); } catch (e) { log.warn({ err: String(e) }, "missedRunners failed"); }
     try { await holdersLoop(); } catch (e) { log.warn({ err: String(e) }, "holdersLoop failed"); }
+    try { await moodLoop(); } catch (e) { log.warn({ err: String(e) }, "moodLoop failed"); }
     setTimeout(tick, 5000);
   };
   tick();

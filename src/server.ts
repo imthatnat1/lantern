@@ -1,5 +1,7 @@
 import { createServer } from "node:http";
 import { db, positions, kv } from "./db.js";
+import { currentMood, moodHistory } from "./engine/mood.js";
+import { shadowSummary } from "./engine/shadow.js";
 import * as broker from "./engine/broker.js";
 import { config } from "./config.js";
 import { ingest, scorecard, currentKols } from "./data/wallets.js";
@@ -308,7 +310,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
         // lastOkAt/lastErr are the backup poller, which only runs when the webhook has been quiet for an hour. lastPushAt is the webhook.
         lastPushAt: kv.get("helius:lastPushAt", 0) }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
-    open, closed, fills, equity, byMode, looks, wouldBuy, hot: hotList(now, new Set(open.map(o => o.mint))), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
+    open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: shadowSummary(now - 7 * 24 * 3_600_000), hot: hotList(now, new Set(open.map(o => o.mint))), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
   };
 }

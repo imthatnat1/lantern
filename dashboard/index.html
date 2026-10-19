@@ -57,6 +57,7 @@
   .stat .v { font-size: 21px; font-weight: 500; }
   .stat .k { font-size: 13px; color: var(--ivory-dim); margin-top: 1px; }
   .stat .v.vault { color: var(--gold); }
+  .stat .v small { font-size: 13px; opacity: .6; font-weight: 400; margin-left: 4px; }
 
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 28px 0 0; }
   .chips button { font-size: 13px; padding: 4px 11px; color: var(--ivory-dim); }
@@ -335,6 +336,28 @@ function chart(eqAll, startCap) {
   $("chartRange").textContent = `low ${usd(Math.min(...ys))} · high ${usd(Math.max(...ys))} · now ${usd(end)}`;
 }
 
+/** Market mood (19 Oct): fearful, neutral or green, the score, how it moved today, and what it does to bet size. */
+function moodTile(m, hist) {
+  if (!m) return `<div class="stat"><div class="v">…</div><div class="k">market mood · first reading within 10 min</div></div>`;
+  const name = { fearful: "Fearful", neutral: "Neutral", green: "Green" }[m.level] || m.level;
+  const cls = m.level === "green" ? "up" : m.level === "fearful" ? "down" : "";
+  const h = (hist || []).map(x => x.score);
+  const first = h.length ? h[0] : m.score;
+  const trend = m.score - first >= 5 ? "rising" : first - m.score >= 5 ? "falling" : "steady";
+  const bets = m.sizeX === 1 ? "normal bets" : `bets ${m.sizeX}x`;
+  return `<div class="stat"><div class="v ${cls}">${name} <small>${m.score}</small></div><div class="k">market mood · ${trend} today · ${bets}</div></div>`;
+}
+
+/** Shadow live (19 Oct): what real Jupiter swaps would have filled at, against the paper fills. */
+function shadowTile(sh) {
+  if (!sh || !sh.n) return `<div class="stat"><div class="v">…</div><div class="k">real-money check · starts with the next trade</div></div>`;
+  if (sh.avgWorsePct == null) return `<div class="stat"><div class="v">${sh.n}</div><div class="k">real-money check · no Jupiter route yet</div></div>`;
+  const w = sh.avgWorsePct;
+  const cls = w > 0.02 ? "down" : w < 0.005 ? "up" : "";
+  const word = w >= 0 ? "worse" : "better";
+  return `<div class="stat"><div class="v ${cls}">${(Math.abs(w) * 100).toFixed(1)}% ${word}</div><div class="k">real fills vs paper · ${sh.priced} trades${sh.noRoute ? ` · ${sh.noRoute} no route` : ""} · ${usd(-sh.usdEffect, true)}</div></div>`;
+}
+
 function stats(s) {
   const a = s.account, total = a.equity + a.vault;
   const d = total - a.startingCapital;
@@ -343,6 +366,8 @@ function stats(s) {
   $("stats").innerHTML = `
     <div class="stat"><div class="v">${usd(total)}</div><div class="k">account value · <span class="${d >= 0 ? "up" : "down"}">${usd(d, true)}</span> vs ${usd(a.startingCapital)} put in</div></div>
     <div class="stat"><div class="v ${a.realizedToday >= 0 ? "up" : "down"}">${usd(a.realizedToday, true)}</div><div class="k">today · ${pct(todayPct)}</div></div>
+    ${moodTile(s.mood, s.moodHistory)}
+    ${shadowTile(s.shadow)}
     <div class="stat"><div class="v vault">${usd(a.vault)}</div><div class="k">locked profit, never traded</div></div>
     <div class="stat"><div class="v">${usd(s.guardrails.capitalAtRisk)}</div><div class="k">open risk · of ${usd(s.guardrails.maxCapitalAtRisk)} cap · ${s.open.length} open</div></div>
     <div class="stat"><div class="v">${a.closedCount}</div><div class="k">closed trades · ${winRate == null ? "—" : Math.round(winRate * 100) + "%"} won</div></div>

@@ -39,3 +39,12 @@ export async function testSell(mint: string, tokenQty: number): Promise<TestSell
 export async function solPrice(): Promise<number> {
   return (await price(SOL)) ?? 150;
 }
+
+/** A raw swap quote (amount in base units). Null when Jupiter has no route. Used by shadow live (engine/shadow.ts). */
+export async function quote(inputMint: string, outputMint: string, amount: number, slippageBps = 300): Promise<{ outAmount: string; priceImpactPct: string } | null> {
+  if (!(amount > 0)) return null;
+  try {
+    return await getJson<{ outAmount: string; priceImpactPct: string }>(
+      `https://lite-api.jup.ag/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}`, { ttlMs: 5_000 });
+  } catch { return null; }
+}

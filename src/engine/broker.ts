@@ -5,6 +5,7 @@ import { log } from "../log.js";
 import { isCreativePair } from "../data/universe.js";
 import type { Fill, Mode, Position, Signal } from "../types.js";
 import { applyAdd, type AddRule } from "./exits.js";
+import { shadow } from "./shadow.js";
 
 /** Paper account: cash, vault, peak equity, daily P&L. */
 export interface Account { cash: number; vault: number; peakEquity: number }
@@ -103,6 +104,7 @@ export function openPosition(sig: Signal, solPrice: number, now = Date.now()): P
   });
   const f: Fill = { side: "buy", mint: sig.mint, mode: sig.mode, qty, priceUsd: effPrice, grossUsd: size, feesUsd, netUsd: size, reason: sig.reason, at: now };
   fills.insert(f, p.id);
+  shadow({ positionId: p.id, mode: sig.mode, symbol: sig.symbol, side: "buy", mint: sig.mint, usd: size, qty, paperPrice: effPrice, solPrice });
   log.info({ mode: sig.mode, sym: sig.symbol, size, price: effPrice, score: sig.score, reason: sig.reason }, "BUY");
   return p;
 }
@@ -133,6 +135,7 @@ export function sell(p: Position, fraction: number, priceUsd: number, liquidityU
   saveAccount(a);
 
   fills.insert({ side: "sell", mint: p.mint, mode: p.mode, qty, priceUsd: effPrice, grossUsd: gross, feesUsd, netUsd: net, reason, at: now }, p.id);
+  shadow({ positionId: p.id, mode: p.mode, symbol: p.symbol, side: "sell", mint: p.mint, usd: gross, qty, paperPrice: effPrice, solPrice });
   log.info({ mode: p.mode, sym: p.symbol, frac: fraction.toFixed(2), price: effPrice, pnl: pnl.toFixed(2), reason, status: p.status }, "SELL");
 }
 
@@ -177,6 +180,7 @@ export function addTo(p: Position, usd: number, priceUsd: number, liquidityUsd: 
   applyAdd(p, usd, effPrice, feesUsd, lastCloseT);
   positions.update(p);
   fills.insert({ side: "buy", mint: p.mint, mode: p.mode, qty: p.qty - qtyBefore, priceUsd: effPrice, grossUsd: usd, feesUsd, netUsd: usd, reason, at: now }, p.id);
+  shadow({ positionId: p.id, mode: p.mode, symbol: p.symbol, side: "buy", mint: p.mint, usd, qty: p.qty - qtyBefore, paperPrice: effPrice, solPrice });
   log.info({ mode: p.mode, sym: p.symbol, usd: usd.toFixed(2), price: effPrice, avg: p.entryPrice, stop: p.plan.closeStopPrice, reason }, "ADD");
   return true;
 }
