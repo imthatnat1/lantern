@@ -3,6 +3,7 @@ import { log } from "../log.js";
 import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { atr, highestHigh } from "../data/gecko.js";
 import { natWatchMints } from "../data/natwatch.js";
+import { fakeValuation, microTrades } from "../data/flow.js";
 import { buySellRatio, candles5and15, churnLabel, dex, dist, gate, holderScore, holderVelocity, logLook, logSignal, pairScore, prefilter, sniperPenalty, walletScore, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"launch"> = config.modes.launch;
@@ -65,7 +66,17 @@ export const launch: Strategy = {
 };
 
 /** Checks that need no I/O. Null = worth a closer look. */
-export function cheapWhy(m: Mkt & { volume1h?: number; buys1h?: number; sells1h?: number; createdAt?: number }, C: ModeCfg<"launch">, now = Date.now()): string | null {
+export function cheapWhy(m: Mkt & { volume1h?: number; volume5m?: number; buys1h?: number; sells1h?: number; createdAt?: number; onCurve?: boolean }, C: ModeCfg<"launch">, now = Date.now()): string | null {
+  // Scams first, so they're named as scams. Moonoween (19 Oct 21:04): 1h old, "$157M" on a $1M pool, 1,798 buys to
+  // 70 sells. It used to stop at "past launch's $3M", which the radar read as still waiting.
+  if (m.createdAt != null) {
+    const fake = fakeValuation({ mcapUsd: m.mcapUsd, liquidityUsd: m.liquidityUsd, createdAt: m.createdAt, onCurve: !!m.onCurve, buys5m: m.buys5m, sells5m: m.sells5m, volume24h: m.volume24h }, now);
+    if (fake) return `rejected: ${fake}`;
+  }
+  if (m.volume5m != null && m.volume1h != null) {
+    const micro = microTrades({ buys5m: m.buys5m, sells5m: m.sells5m, volume5m: m.volume5m, buys1h: m.buys1h, sells1h: m.sells1h, volume1h: m.volume1h });
+    if (micro) return `rejected: ${micro}`;
+  }
   if (m.liquidityUsd < C.minLiquidity) return `too thin, $${Math.round(m.liquidityUsd / 1000)}k liquidity (launch needs $${C.minLiquidity / 1000}k)`;
   if (m.mcapUsd < C.mcapMin) return `$${Math.round(m.mcapUsd / 1000)}k market cap, under launch's $${C.mcapMin / 1000}k`;
   if (m.mcapUsd > C.mcapMax) return `$${(m.mcapUsd / 1e6).toFixed(1)}M market cap, past launch's $${C.mcapMax / 1e6}M`;

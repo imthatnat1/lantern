@@ -68,3 +68,9 @@ test("breakout needs both: a new high and the volume", () => {
 test("past 6 hours, launch is done with a coin", () => {
   assert.equal(C.breakoutMaxAgeH, 6);
 });
+
+test("Moonoween (19 Oct): a fake valuation is named a scam before any size check", () => {
+  const t = Date.now();
+  const why = cheapWhy({ ...mkt, mcapUsd: 157_700_000, liquidityUsd: 1_000_000, buys5m: 300, sells5m: 12, createdAt: t - 60 * 60_000, volume24h: 541_000, onCurve: false }, C, t);
+  assert.match(why!, /^rejected: (fake valuation|bot buys)/);
+});

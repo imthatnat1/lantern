@@ -257,7 +257,8 @@ export function radarList(now = Date.now(), held = new Set<string>(), max = 12) 
     JOIN (SELECT mint, max(at) AS at FROM signals_log WHERE mode='launch' AND at > ? GROUP BY mint) l ON l.mint=s.mint AND l.at=s.at
     WHERE s.mode='launch'`).all(now - 45 * 60_000) as { mint: string; symbol: string; reason: string; at: number }[];
   return rows
-    .filter(r => !/^(too thin|rejected|couldn't)/i.test(r.reason) && !held.has(r.mint) && !onWatching.has(r.mint) && !blockedWhy(r.mint))
+    // Coins too big for launch aren't "up and coming" either (STRK, USDC, Moonoween all showed this way on 19 Oct).
+    .filter(r => !/^(too thin|rejected|couldn't)|past launch's/i.test(r.reason) && !held.has(r.mint) && !onWatching.has(r.mint) && !blockedWhy(r.mint))
     .map(r => {
       const m = mkt(r.mint);
       return { mint: r.mint, symbol: r.symbol, waiting: r.reason, checkedAt: r.at, market: m, watched: isNatWatched(r.mint, now),
