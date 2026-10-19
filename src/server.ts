@@ -258,6 +258,17 @@ const mk = db.prepare("SELECT * FROM market WHERE mint=?");
  * at in the last 45 minutes, with what each is waiting for. Dead pools ("too thin") and hard rejections (rugs, scams,
  * bots, copycats) are left out. Coins already on Watching or held are left out too.
  */
+/** Why a radar coin looks rugged or dumping, or null. Pure. */
+export function radarDumpedWhy(m: { ch5m?: number | null; ch1h?: number | null; updated_at?: number }, waiting: string, now: number): string | null {
+  if ((m.ch5m ?? 0) <= -35) return `down ${Math.round(-(m.ch5m ?? 0))}% in 5m`;
+  if ((m.ch1h ?? 0) <= -50) return `down ${Math.round(-(m.ch1h ?? 0))}% in 1h`;
+  const off = /(\d+)% off its high/.exec(waiting);
+  if (off && Number(off[1]) >= 50) return `${off[1]}% off its high`;
+  // The bot stopped refreshing it (usually because it died): not fresh enough to show.
+  if (m.updated_at && now - m.updated_at > 15 * 60_000) return "no fresh price in 15 minutes";
+  return null;
+}
+
 export function radarList(now = Date.now(), held = new Set<string>(), max = 12) {
   const onWatching = new Set(hotList(now, held).map(h => h.mint));
   const rows = db.prepare(`SELECT s.mint, s.symbol, s.reason, s.at FROM signals_log s
@@ -273,6 +284,9 @@ export function radarList(now = Date.now(), held = new Set<string>(), max = 12) 
     })
     // Fresh coins only (pool under 6h old), with a real market cap.
     .filter(r => r.market && (r.market.liquidity ?? 0) >= 5_000 && (r.market.mcap ?? 0) >= 15_000 && now - (r.market.created_at ?? 0) < 6 * 3_600_000)
+    // 20 Oct (Nat's SpaceX screenshot, -78% in one candle off a $14.5k dump): rugged or dumping coins come off the radar.
+    // Watched coins stay so Nat can see what happened to them.
+    .filter(r => r.watched || !radarDumpedWhy(r.market, r.waiting, now))
     .sort((a, b) => Number(b.watched) - Number(a.watched) || (b.market.vol5m ?? 0) - (a.market.vol5m ?? 0))
     .slice(0, max);
 }
