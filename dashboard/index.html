@@ -1083,8 +1083,12 @@ function fail(msg) {
   $("verdict").className = "verdict flat"; $("verdict").innerHTML = `Can't reach the bot.`; $("sub").textContent = msg;
 }
 
+let demoIn = false;   // ?demo&login shows the Beacon login first; any password gets in (sample data only)
 async function load() {
-  if (location.search.includes("demo")) { loadLab(); return render(demo()); }
+  if (location.search.includes("demo")) {
+    if (/login/.test(location.search) && !demoIn) { $("login").style.display = "flex"; return; }
+    $("login").style.display = "none"; loadLab(); return render(demo());
+  }
   try {
     const r = await fetch("/api/state", { cache: "no-store" });
     if (r.status === 401) { $("login").style.display = "flex"; return; }
@@ -1104,7 +1108,8 @@ $("loginForm").onsubmit = async e => {
   e.preventDefault();
   $("loginBtn").disabled = true;
   let r;
-  try { r = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) }); }
+  if (location.search.includes("demo")) { demoIn = true; r = { ok: true }; }
+  else try { r = await fetch("/api/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: $("pw").value }) }); }
   catch { r = null; }
   if (!r || !r.ok) {
     $("loginBtn").disabled = false;
