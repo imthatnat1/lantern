@@ -169,7 +169,7 @@ export const config = {
       scanEveryMs: 60_000,
       cooldownMs: 2 * 3_600_000,
       maxOpen: 3,
-      sizeUsd: 3,
+      sizeUsd: 12,   // 19 Oct 16:12: was $3; thin pools (<$50k) halve it to $6. Fees ate launch's lab edge at $1.50-$3.
       checksPerScan: 15,
       maxSinceMigrationMin: 60,
       // 19 Oct: Blossom's best trade was PIERRE, an "ultra breakout" 2.3h old on 4.5x volume ($3 -> +$9.28).
@@ -203,7 +203,8 @@ export const config = {
       scanEveryMs: 5 * 60_000,
       cooldownMs: 12 * 3_600_000,
       maxOpen: 5,
-      sizeUsd: 4,   // half size while the turn rule proves itself live (19 Oct)
+      // 19 Oct 16:12 (Nat): bigger bids. A fixed ~$0.25 round-trip network fee is ~6% of a $4 trade, 2.5% of $10.
+      sizeUsd: 10,
       /** Pullback depth from the 24h high, judged on 5m candles. */
       dipMin: 0.06, dipMax: 0.30,
       /** Skip if the 24h move is still > +150% (overheated). */
