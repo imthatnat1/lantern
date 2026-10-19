@@ -1,4 +1,5 @@
 import type { Candle, Signal, TokenSnapshot } from "../types.js";
+import { isNatWatched, natWatchMints } from "../data/natwatch.js";
 import * as dex from "../data/dexscreener.js";
 import * as gecko from "../data/gecko.js";
 import * as live from "../data/livecandles.js";
@@ -65,7 +66,7 @@ export async function prefilter(s: TokenSnapshot, mode: Signal["mode"]): Promise
   if (!pinned && s.mcapUsd < 3_000) return { ok: false, why: `rejected: no real market, $${Math.round(s.mcapUsd)} market cap` };
   if (cooldowns.active(mode, s.mint)) return { ok: false, why: "cooldown after a recent stop-out" };
   // Coins Nat hand-picked (watch list) and Stonk.fun's own listings keep their names out of the burned-names list.
-  const handPicked = config.watch.includes(s.mint);
+  const handPicked = config.watch.includes(s.mint) || isNatWatched(s.mint);
   const burnable = !handPicked && !isStonkListed(s.mint) ? s.name : undefined;
   if (!pinned) {
     const b = blockedWhy(s.mint);
@@ -226,7 +227,8 @@ export function watchedMints(mode: Signal["mode"], now = Date.now(), max = 10): 
       AND status NOT LIKE '%dead%' AND status NOT LIKE 'cooldown%' AND status NOT LIKE 'no sell route%'
       AND status NOT LIKE '%deeper than%' AND status NOT LIKE '%too deep%' AND status NOT LIKE 'too thin%'))
     ORDER BY at DESC LIMIT ?`).all(mode, now - 30 * 60_000, max) as { mint: string }[]).map(r => r.mint);
-  return [...new Set([...setups, ...onWay])].slice(0, max);
+  // Coins Nat tapped Watch on come first in every mode (19 Oct).
+  return [...new Set([...natWatchMints(now), ...setups, ...onWay])].slice(0, max);
 }
 
 const lastChecked = new Map<string, number>();

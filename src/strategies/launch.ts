@@ -2,6 +2,7 @@ import { config, type ModeCfg } from "../config.js";
 import { log } from "../log.js";
 import type { Candle, ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { atr, highestHigh } from "../data/gecko.js";
+import { natWatchMints } from "../data/natwatch.js";
 import { buySellRatio, candles5and15, churnLabel, dex, dist, gate, holderScore, holderVelocity, logLook, logSignal, pairScore, prefilter, sniperPenalty, walletScore, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
 const C: ModeCfg<"launch"> = config.modes.launch;
@@ -32,8 +33,18 @@ export const launch: Strategy = {
     const recent = [...ctx.migrations.entries()]
       .filter(([, at]) => ctx.now - at < C.breakoutMaxAgeH * 3_600_000)
       .map(([m]) => m);
-    if (!recent.length) return out;
-    const snaps = [...(await dex.snapshots(recent)).values()];
+    // Coins Nat tapped Watch on: checked too while young, with their pool's creation time standing in for migration.
+    const watched = natWatchMints(ctx.now).filter(m => !ctx.migrations.has(m));
+    if (!recent.length && !watched.length) return out;
+    const all = await dex.snapshots([...recent, ...watched]);
+    // Local copy: the shared migrations map also feeds bounce and the market mood, which shouldn't see these.
+    const migratedAt = new Map(ctx.migrations);
+    for (const m of watched) {
+      const s = all.get(m);
+      if (s && !s.onCurve && ctx.now - s.createdAt < C.breakoutMaxAgeH * 3_600_000) migratedAt.set(m, s.createdAt);
+      else all.delete(m);
+    }
+    const snaps = [...all.values()];
     // Cheap checks first; the busiest buy-side coins get the candle and safety calls.
     const live = snaps.filter(s => {
       const why = cheapWhy(s, C, ctx.now);
@@ -41,10 +52,11 @@ export const launch: Strategy = {
       return !why;
     })
       .sort((a, b) => (b.volume5m || 0) * buySellRatio(b) - (a.volume5m || 0) * buySellRatio(a))
+      .sort((a, b) => Number(watched.includes(b.mint)) - Number(watched.includes(a.mint)))
       .slice(0, C.checksPerScan);
     for (const s of live) {
       try {
-        const sig = await check(s, ctx, ctx.migrations.get(s.mint)!);
+        const sig = await check(s, ctx, migratedAt.get(s.mint)!);
         if (sig) out.push(sig);
       } catch (e) { log.debug({ sym: s.symbol, err: String(e) }, "launch check failed"); }
     }

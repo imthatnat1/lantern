@@ -5,6 +5,7 @@ import { recorder, creators, kv } from "../db.js";
 import { setTax } from "./tax.js";
 import { isStonkReward, isStonkListed } from "./stonkfun.js";
 import { burnName } from "./flow.js";
+import { isNatWatched } from "./natwatch.js";
 
 interface RcReport {
   rugged?: boolean;
@@ -106,7 +107,7 @@ export async function safety(mint: string, onCurve: boolean): Promise<SafetyResu
   if (rep.rugged) {
     reasons.push("flagged rugged");
     if (rep.creator) { try { creators.markRugged(rep.creator, mint); } catch { /* best effort */ } }
-    if (rep.tokenMeta?.name && !isStonkListed(mint) && !config.watch.includes(mint)) burnName(rep.tokenMeta.name, mint, "was flagged rugged");
+    if (rep.tokenMeta?.name && !isStonkListed(mint) && !config.watch.includes(mint) && !isNatWatched(mint)) burnName(rep.tokenMeta.name, mint, "was flagged rugged");
   }
   if (rep.creator && creators.isRugger(rep.creator)) reasons.push("creator has rugged before");
   if (rep.creator && rep.creatorBalance && rep.totalSupply && rep.creatorBalance / rep.totalSupply > 0.10) reasons.push(`creator holds ${(rep.creatorBalance / rep.totalSupply * 100).toFixed(0)}%`);

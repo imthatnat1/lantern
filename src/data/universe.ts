@@ -1,4 +1,5 @@
 import { getJson } from "./http.js";
+import { natWatchMints } from "./natwatch.js";
 import * as dex from "./dexscreener.js";
 import type { TokenSnapshot } from "../types.js";
 import { config } from "../config.js";
@@ -80,7 +81,7 @@ export async function trendingMints(): Promise<string[]> {
  */
 export async function allCandidates(): Promise<string[]> {
   const [stonk, sf, fresh, trend] = await Promise.all([stonkMints(), stonkfunMints().catch(() => [] as string[]), stonkfunFresh().catch(() => [] as string[]), trendingMints()]);
-  return [...new Set([...config.pinned, ...config.watch, ...interleave([fresh, trend, sf, stonk])])];
+  return [...new Set([...config.pinned, ...config.watch, ...natWatchMints(), ...interleave([fresh, trend, sf, stonk])])];
 }
 
 /** Round-robin merge: a1, b1, c1, a2, b2, c2, ... */

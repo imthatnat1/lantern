@@ -98,6 +98,12 @@
   .pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--ivory-faint); }
   .pick .buy { border-color: var(--gold); color: var(--gold); font-weight: 500; }
   .pick .buy:disabled { opacity: .5; cursor: default; }
+  .pick .watch { border-color: var(--blossom); color: var(--blossom); }
+  .pick .watch.on { background: var(--blossom); color: var(--night); }
+  .labels span.warn { border-color: var(--coral); color: var(--coral); }
+  .natwatch { margin: 0 0 8px; align-items: center; }
+  .natwatch .unwatch { background: none; border: 0; color: inherit; padding: 0 0 0 4px; cursor: pointer; font-size: 13px; }
+  .card.radar .note { margin-top: 6px; }
   .pick .res { flex: 1 1 100%; color: var(--ivory-dim); }
   .pick .res.ok { color: var(--sage); } .pick .res.no { color: var(--coral); }
   .setup.stale .need b { color: var(--ivory-dim); }
@@ -223,12 +229,17 @@
 <h2>Open positions <small id="openCount"></small></h2>
 <div id="open"></div>
 
+<h2>Launch radar <small id="radarCount"></small></h2>
+<p class="dim" style="font-size:13px;margin:0 0 6px">Fresh coins launch is tracking right now, before they make Watching, and what each is waiting for. Tap <b>Watch</b> on one that catches your eye and Lantern checks it every scan for 3 days. Rug, honeypot and bot checks still apply.</p>
+<div id="natWatch"></div>
+<div id="radar"></div>
+
 <h2>Watching <small id="hotCount"></small></h2>
 <p class="dim" style="font-size:13px;margin:0 0 6px">The hot list: coins that passed every safety check in the last 30 minutes. <b>In a setup</b> shows how close price is to the trigger. <b>Not yet</b> says what we're waiting for. These are re-checked first every scan, so the moment one meets every rule it gets bought.</p>
 <div id="hot"></div>
 
 <h2>Would have bought <small id="wouldCount"></small></h2>
-<p class="dim" style="font-size:13px;margin:0 0 6px">Paused modes keep looking. Dip is paused, so it watches flagships (your pinned coins and Stonk.fun's biggest) and logs where it would have bought. No money used. How these play out decides when dip comes back.</p>
+<p class="dim" style="font-size:13px;margin:0 0 6px">Paused modes keep looking. Ride and bounce are paused, so they log where they would have bought. No money used. How these play out decides when they come back.</p>
 <div id="would"></div>
 
 <h2>Today's trades <small id="tradesSummary"></small></h2>
@@ -472,6 +483,48 @@ function wouldRows(rows) {
   }).join("");
 }
 
+/** Launch radar rows (19 Oct). Compact: what it is, how it's trading, what launch is waiting for, and a Watch button. */
+const watching = {};   // mint -> true/false while a tap is on its way, so the button flips straight away
+function radarRows(rows) {
+  $("radarCount").textContent = rows.length ? `${rows.length} tracking` : "";
+  if (!rows.length) return `<div class="empty">No fresh coins with a real pool in the last 45 minutes. Quiet market.</div>`;
+  return rows.map(r => {
+    const m = r.market || {};
+    const on = watching[r.mint] ?? r.watched;
+    const age = m.created_at ? ago(Date.now() - m.created_at) : "";
+    const bs = m.sells5m ? (m.buys5m / m.sells5m).toFixed(1) + "x" : (m.buys5m ? "all buys" : "·");
+    const chips = (r.chips || []).map(x => `<span class="${/churn/i.test(x) ? "warn" : "hot"}">${esc(x)}</span>`).join("");
+    return `<div class="card radar">
+      <div class="head">${av(r.symbol, m)}<div class="sym">${esc(r.symbol)}<small class="dim">${age ? age + " old · " : ""}${big(m.mcap)} · pool ${big(m.liquidity)}</small></div>
+        <div class="gain">${m.ch1h != null ? `<span class="${m.ch1h >= 0 ? "up" : "down"}">${pct(m.ch1h / 100)}</span>` : "·"}<small>1h · buys ${bs}</small></div>
+        ${links(r.mint, m)}</div>
+      <div class="note">Waiting for: ${esc(r.waiting)}</div>
+      ${chips ? `<div class="labels">${chips}</div>` : ""}
+      <div class="pick"><button class="watch${on ? " on" : ""}" data-mint="${esc(r.mint)}" data-sym="${esc(r.symbol)}" data-on="${on ? 1 : 0}">${on ? "Watching ✓" : "Watch"}</button><span>${on ? "checked every scan" : "check it every scan for 3 days"}</span></div>
+    </div>`;
+  }).join("");
+}
+function natWatchRow(list) {
+  if (!list.length) return "";
+  return `<div class="labels natwatch"><span class="dim">Your watch list:</span>${list.map(w => `<span class="hot">${esc(w.symbol || short(w.mint))} <button class="unwatch" data-mint="${esc(w.mint)}" data-sym="${esc(w.symbol)}" title="stop watching">×</button></span>`).join("")}</div>`;
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest && (e.target.closest(".watch") || e.target.closest(".unwatch"));
+  if (!b) return;
+  const mint = b.dataset.mint, sym = b.dataset.sym;
+  const on = b.classList.contains("unwatch") ? false : b.dataset.on !== "1";
+  watching[mint] = on;
+  if (S) render(S);
+  try {
+    if (!location.search.includes("demo")) {
+      const r = await (await fetch("/api/watch", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mint, symbol: sym, on }) })).json();
+      if (!r.ok) throw new Error(r.why || "failed");
+      if (S) S.natWatch = r.natWatch;
+    }
+  } catch (err) { delete watching[mint]; alert("Couldn't reach the bot: " + err.message); }
+  if (S) render(S);
+});
+
 function hotCard(h) {
   const m = h.market || {};
   const l = { mode: h.mode, setup: h.setup, at: h.checkedAt, watchedSince: h.since, reason: h.status };
@@ -694,6 +747,8 @@ function render(s) {
   $("open").innerHTML = openRows(s.open);
   $("hotCount").textContent = "updated " + ago(Date.now() - s.at) + " ago";
   $("hot").innerHTML = hotRows(s.looks, s.open, s.hot);
+  $("radar").innerHTML = radarRows(s.radar || []);
+  $("natWatch").innerHTML = natWatchRow(s.natWatch || []);
   $("would").innerHTML = wouldRows(s.wouldBuy || []);
   $("trades").innerHTML = tradeRows(s.fills);
   $("modes").innerHTML = modeTable(s.byMode);

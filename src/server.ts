@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { db, positions, kv } from "./db.js";
 import { currentMood, moodHistory } from "./engine/mood.js";
 import { shadowSummary } from "./engine/shadow.js";
+import { isNatWatched, natWatchList, setNatWatch } from "./data/natwatch.js";
 import * as broker from "./engine/broker.js";
 import { config } from "./config.js";
 import { ingest, scorecard, currentKols } from "./data/wallets.js";
@@ -61,6 +62,21 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
           log.info({ mint }, "pick requested from dashboard");
           res.end(JSON.stringify(await buy(String(mint ?? ""))));
         } catch (e) { res.statusCode = 500; res.end(JSON.stringify({ ok: false, why: `check failed: ${String(e).replace(/^Error:\s*/, "").slice(0, 80)}` })); }
+      });
+      return;
+    }
+    // Watch button on the Launch radar: add or remove a coin from Nat's watch list (data/natwatch.ts).
+    if (req.method === "POST" && req.url === "/api/watch") {
+      let body = "";
+      req.on("data", c => body += c);
+      req.on("end", () => {
+        try {
+          const { mint, symbol, on } = JSON.parse(body || "{}");
+          if (typeof mint !== "string" || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) { res.statusCode = 400; res.end('{"ok":false,"why":"not a Solana mint"}'); return; }
+          const list = setNatWatch(mint, String(symbol ?? ""), on !== false);
+          log.info({ mint, on: on !== false }, "watch list changed from dashboard");
+          res.end(JSON.stringify({ ok: true, natWatch: list }));
+        } catch (e) { res.statusCode = 400; res.end(JSON.stringify({ ok: false, why: String(e).slice(0, 80) })); }
       });
       return;
     }
@@ -208,6 +224,28 @@ export function snapshotEquity(marks: Map<string, number>) {
 }
 
 const mk = db.prepare("SELECT * FROM market WHERE mint=?");
+/**
+ * Launch radar (19 Oct, Nat: "whats on the up and coming before our watchlist"): the fresh migrations launch looked
+ * at in the last 45 minutes, with what each is waiting for. Dead pools ("too thin") and hard rejections (rugs, scams,
+ * bots, copycats) are left out. Coins already on Watching or held are left out too.
+ */
+export function radarList(now = Date.now(), held = new Set<string>(), max = 12) {
+  const onWatching = new Set(hotList(now, held).map(h => h.mint));
+  const rows = db.prepare(`SELECT s.mint, s.symbol, s.reason, s.at FROM signals_log s
+    JOIN (SELECT mint, max(at) AS at FROM signals_log WHERE mode='launch' AND at > ? GROUP BY mint) l ON l.mint=s.mint AND l.at=s.at
+    WHERE s.mode='launch'`).all(now - 45 * 60_000) as { mint: string; symbol: string; reason: string; at: number }[];
+  return rows
+    .filter(r => !/^(too thin|rejected|couldn't)/i.test(r.reason) && !held.has(r.mint) && !onWatching.has(r.mint) && !blockedWhy(r.mint))
+    .map(r => {
+      const m = mkt(r.mint);
+      return { mint: r.mint, symbol: r.symbol, waiting: r.reason, checkedAt: r.at, market: m, watched: isNatWatched(r.mint, now),
+        chips: ((m?.labels ?? []) as string[]).filter(l => /holders \+|churn\?|bought|KOL|trusted/i.test(l)) };
+    })
+    .filter(r => r.market && (r.market.liquidity ?? 0) >= 5_000)
+    .sort((a, b) => Number(b.watched) - Number(a.watched) || (b.market.vol5m ?? 0) - (a.market.vol5m ?? 0))
+    .slice(0, max);
+}
+
 function mkt(mint: string) {
   const m = mk.get(mint) as any;
   if (!m) return null;
@@ -310,7 +348,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
         // lastOkAt/lastErr are the backup poller, which only runs when the webhook has been quiet for an hour. lastPushAt is the webhook.
         lastPushAt: kv.get("helius:lastPushAt", 0) }, rugcheck: { lastOkAt: kv.get("rugcheck:lastOkAt", 0), lastErr: kv.get("rugcheck:lastErr", "") }, walletEvents1h: (db.prepare("SELECT count(*) AS n FROM wallet_events WHERE at > ?").get(now - 3_600_000) as any).n, build: kv.get("build", "") },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
-    open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: shadowSummary(now - 7 * 24 * 3_600_000), hot: hotList(now, new Set(open.map(o => o.mint))), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
+    open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: shadowSummary(now - 7 * 24 * 3_600_000), hot: hotList(now, new Set(open.map(o => o.mint))), radar: radarList(now, new Set(open.map(o => o.mint))), natWatch: natWatchList(now), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
     wallets: scorecard(7), kols: currentKols().map(k => k.name), trusted: config.trustedWallets.map(config.walletName),
   };
 }
