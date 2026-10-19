@@ -81,3 +81,13 @@ test("sells from before we entered don't count", async () => {
   const p = pos("MINT3", "trusted", [WIRELYSS]);
   assert.equal(await walletSellCheck(p, T + 60_000), null);
 });
+
+test("trusted cluster (COUP, 20 Oct): two trusted wallets 20 minutes apart are counted together", async () => {
+  const { trustedBuyerAddrs } = await import("../src/data/wallets.js");
+  const SAPPHY = "B5TrL7PsRUwCTL5bVcueieht5QchTw4TWLQDKqEaxEzi";
+  const now = Date.now();
+  swap(HEXI, "COUPxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", "buy", 1000, now - 20 * 60_000);
+  swap(SAPPHY, "COUPxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", "buy", 1000, now);
+  assert.equal(trustedBuyerAddrs("COUPxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", 30 * 60_000, now).length, 2);
+  assert.equal(trustedBuyerAddrs("COUPxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", 10 * 60_000, now).length, 1);
+});

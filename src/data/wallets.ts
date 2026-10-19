@@ -88,6 +88,11 @@ export function buyersOf(mint: string, windowMs: number, tier?: "trusted" | "kol
   return rows.map(r => walletName(r.wallet));
 }
 
+/** Addresses of trusted wallets that bought `mint` in the last `windowMs` (20 Oct: the two-wallet cluster). */
+export function trustedBuyerAddrs(mint: string, windowMs: number, now = Date.now()): string[] {
+  return (db.prepare("SELECT DISTINCT wallet FROM wallet_events WHERE side='buy' AND tier='trusted' AND mint=? AND at >= ?").all(mint, now - windowMs) as { wallet: string }[]).map(r => r.wallet);
+}
+
 /** Did any watched wallet sell `mint` since `sinceMs`? Used to mirror exits. */
 export function soldSince(mint: string, sinceMs: number, wallets: string[]): boolean {
   if (!wallets.length) return false;

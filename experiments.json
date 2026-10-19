@@ -2,6 +2,24 @@
   "hours": 72,
   "experiments": [
     {
+      "name": "Ultra: old second-leg rule",
+      "why": "20 Oct ultra switched to Blossom-style breakouts (a 5m close above the 2h high on 1.3x volume, not in a 6h downtrend). This puts the old rule back (dump, 1.8x recovery, 3 higher lows, then a breakout). If it says Helps, go back.",
+      "config": {
+        "ultra": {
+          "secondLeg": true
+        }
+      }
+    },
+    {
+      "name": "Ultra breakout: needs 2x volume",
+      "why": "Is 1.3x volume too easy? Blossom's PIERRE entry was 4.5x, startupSI 1.4x.",
+      "config": {
+        "ultra": {
+          "breakoutVolX": 2
+        }
+      }
+    },
+    {
       "name": "No adding to winners",
       "why": "19 Oct: launch, dip, ultra and pullback add half their first bid at two levels on a winner (Nat: \"if it looks like its going to run can we keep bidding?\"). This switches adds off. If it says Helps, adding is costing more than it earns.",
       "config": {

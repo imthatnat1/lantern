@@ -146,6 +146,13 @@ export const config = {
       buySellMin: 1.0, buySellMax: 3.0,
       maxAboveRangeTop: 0.25, maxAboveRangeTopHot: 0.60, hotVolX: 5, hotMinLiq: 50_000,
       addAtGains: [0.5, 1.2], addFraction: 0.5,   // adding to winners (19 Oct)
+      /**
+       * 20 Oct: the second-leg rule (dump, 1.8x recovery, 3 higher lows, then a breakout) never fired in 3 days, live
+       * or in the lab. Blossom's ultra, its one steady earner, buys a plain breakout: PIERRE 2.3h old on 4.5x volume,
+       * startupSI 19h old on 1.4x. false = breakout rule (a 5m close above the 2h range on 1.3x volume, not in a 6h
+       * downtrend). true = the old second-leg rule, kept for the lab comparison.
+       */
+      secondLeg: false,
     },
     bounce: {
       scanEveryMs: 3 * 60_000,
@@ -262,6 +269,8 @@ export const config = {
       maxOpen: 4,
       sizeUsd: 4, sizeUsdTwoWallets: 8, twoWalletWindowMs: 30 * 60_000,
       minScore: 50,
+      /** Two+ trusted wallets within twoWalletWindowMs (20 Oct). */
+      minScoreCluster: 40,
       mcapMax: 150_000,
       maxPump5m: 0.40,
       minLiquidity: 10_000, minHolders: 30,

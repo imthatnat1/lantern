@@ -22,8 +22,11 @@ export const ultra: Strategy = {
   async scan(ctx: Context): Promise<Signal[]> {
     const out: Signal[] = [];
     const watched = watchedMints("ultra", ctx.now);
-    const mints = [...new Set([...watched, ...await allCandidates()])];
-    const snaps = await dex.snapshots(mints.slice(0, 90));
+    // Recent pump.fun / bonk migrations 2h+ old too (PIERRE broke out at 2.3h); before 20 Oct ultra only saw Stonk.fun and trending.
+    const migrated = [...ctx.migrations.entries()].filter(([m, at]) => ctx.now - at >= C.minAgeH * 3_600_000 && /(pump|bonk)$/.test(m))
+      .sort((a, b) => b[1] - a[1]).map(([m]) => m).slice(0, 40);
+    const mints = [...new Set([...watched, ...migrated, ...await allCandidates()])];
+    const snaps = await dex.snapshots(mints.slice(0, 120));
     // Candles are the scarce resource (GeckoTerminal 30/min per IP). Coins with a setup forming first, then the most active, cap per scan.
     const ranked = watchedFirst(watched, [...snaps.values()], 20, (a, b) => (b.volume1h || 0) - (a.volume1h || 0), "ultra");
     for (const s of ranked) {
@@ -99,6 +102,7 @@ export function ultraPattern(m: Mkt, c5: Candle[], now: number, long: boolean, C
     : [C.mcapMin, C.mcapMax, C.minLiquidity];
   if (m.mcapUsd < mcMin || m.mcapUsd > mcMax || m.liquidityUsd < liqMin) return { ok: false };
   if (c5.length < 30) return { ok: false };
+  if (!C.secondLeg) return breakoutPattern(m, c5, long, C);
   const dumpLow = lowestLow(c5, now - 12 * 3_600_000);
   if (m.priceUsd < dumpLow * C.recoverFromLowX) return { ok: false, why: `only ${(m.priceUsd / dumpLow).toFixed(2)}x off the dump low, need 1.8x`, setup: { need: `recover to ${(dumpLow * C.recoverFromLowX).toPrecision(3)} (1.8x the dump low)`, level: dumpLow * C.recoverFromLowX, distance: dist(m.priceUsd, dumpLow * C.recoverFromLowX) } };
   const hl = higherLows(c5.slice(-40), C.higherLows, C.lowTolerance);
@@ -120,6 +124,31 @@ export function ultraPattern(m: Mkt, c5: Candle[], now: number, long: boolean, C
   if (above > maxAbove) return { ok: false, why: `breakout already ${(above * 100).toFixed(0)}% above the range top, chasing` };
   const base = 65 + Math.min(15, volX * 3) + (bs > 1.5 ? 10 : 0) + (long ? 5 : 10);
   return { ok: true, base, volX, lows: hl.lows.length, dumpLow, rangeTop, breakoutVol: k.v };
+}
+
+/**
+ * Blossom-style breakout (20 Oct): the last closed 5m candle is green and closes above the high of the 2 hours before it,
+ * on at least 1.3x their average volume, and the coin isn't in a 6h downtrend. Same buy/sell and not-chasing limits.
+ */
+export function breakoutPattern(m: Mkt, c5: Candle[], long: boolean, C: ModeCfg<"ultra">): Pattern<{ base: number; volX: number; lows: number; dumpLow: number; rangeTop: number; breakoutVol: number }> {
+  if (m.change6h < 0) return { ok: false, why: `down ${Math.abs(m.change6h).toFixed(0)}% over 6h, waiting for the trend to turn` };
+  const range = c5.slice(-26, -2);
+  const rangeTop = Math.max(...range.map(k => k.h));
+  const rangeVol = range.reduce((a, k) => a + k.v, 0) / 2;
+  if (rangeVol < C.minRangeVolPerHour) return { ok: false, why: "too quiet: under $3k an hour of volume" };
+  const k = c5.at(-2)!;
+  const avgV = range.reduce((a, b) => a + b.v, 0) / range.length;
+  const volX = avgV ? k.v / avgV : 0;
+  if (!(k.c > rangeTop && k.c > k.o && volX >= C.breakoutVolX))
+    return { ok: false, why: `waiting for a 5m close above the 2h high on ${C.breakoutVolX}x volume`, setup: { need: `5m close above ${rangeTop.toPrecision(3)} on ${C.breakoutVolX}x volume`, level: rangeTop, distance: dist(m.priceUsd, rangeTop) } };
+  const bs = buySellRatio(m);
+  if (bs < C.buySellMin || bs > C.buySellMax) return { ok: false, why: `buy/sell ratio ${bs.toFixed(1)} outside 1-3` };
+  const above = m.priceUsd / rangeTop - 1;
+  const maxAbove = volX >= C.hotVolX && m.liquidityUsd >= C.hotMinLiq ? C.maxAboveRangeTopHot : C.maxAboveRangeTop;
+  if (above > maxAbove) return { ok: false, why: `breakout already ${(above * 100).toFixed(0)}% above the 2h high, chasing` };
+  const dumpLow = Math.min(...c5.slice(-72).map(x => x.l));
+  const base = 60 + Math.min(15, volX * 3) + (bs > 1.5 ? 10 : 0) + (long ? 5 : 10);
+  return { ok: true, base, volX, lows: 0, dumpLow, rangeTop, breakoutVol: k.v };
 }
 
 export function ultraPlan(sixHLow: number): (entry: number, atr15: number) => ExitPlan {
@@ -159,7 +188,7 @@ async function check(s: TokenSnapshot, ctx: Context): Promise<Signal | null> {
 
   const sig: Signal = {
     mode: "ultra", mint: s.mint, symbol: s.symbol, sizeUsd: size, score,
-    reason: `second leg breakout, vol ${p.volX.toFixed(1)}x, ${p.lows} higher lows`,
+    reason: C.secondLeg ? `second leg breakout, vol ${p.volX.toFixed(1)}x, ${p.lows} higher lows` : `breakout ${ageHours(s, ctx.now).toFixed(1)}h old, vol ${p.volX.toFixed(1)}x, $${Math.round(s.mcapUsd / 1000)}k`,
     snapshot: s, candles15: c15,
     meta: { atr15: a15, dumpLow: p.dumpLow, rangeTop: p.rangeTop, breakoutVol: p.breakoutVol, holders: g.holders },
     plan: ultraPlan(sixHLow),

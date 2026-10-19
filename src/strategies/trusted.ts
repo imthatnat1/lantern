@@ -4,7 +4,7 @@ import type { ExitPlan, Signal, TokenSnapshot } from "../types.js";
 import { structuralStop } from "../engine/exits.js";
 import { atr, lowestLow } from "../data/gecko.js";
 import * as helius from "../data/helius.js";
-import { ingest, recentBuys as pushedBuys } from "../data/wallets.js";
+import { ingest, recentBuys as pushedBuys, trustedBuyerAddrs as buyersAddrs } from "../data/wallets.js";
 import { kv } from "../db.js";
 import { buySellRatio, candles5and15, dex, gate, logLook, holderScore, pairScore, sniperPenalty, holderVelocity, logSignal, prefilter, type Context, type Mkt, type Pattern, type Strategy } from "./base.js";
 
@@ -55,6 +55,9 @@ export const trusted: Strategy = {
     kv.set("trusted:seen", seen);
     if (!byMint.size) return out;
 
+    // 20 Oct: count every trusted wallet that bought this coin in the last 30 minutes, not just this scan's. hexi bought
+    // COUP and Sapphy followed 20 minutes later; Lantern saw two one-wallet buys, Blossom saw the pair (+$7.37).
+    for (const [mint, ws] of byMint) for (const w of buyersAddrs(mint, C.twoWalletWindowMs)) ws.add(w);
     const snaps = await dex.snapshots([...byMint.keys()]);
     for (const [mint, ws] of byMint) {
       const s = snaps.get(mint);
@@ -106,7 +109,9 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names:
   score += (g.top10 ?? 100) > 40 ? -15 : (g.top10 ?? 100) > 25 ? -5 : 5;
   score += s.liquidityUsd >= 25_000 ? 10 : 0;
   score += holderScore(s.mint) + pairScore(s) + sniperPenalty(g);
-  if (score < C.minScore) { logSignal({ mode: "trusted", mint: s.mint, symbol: s.symbol, sizeUsd: size, score, reason: "score floor", snapshot: s, candles15: [], plan: () => null as any }, false, "score below floor"); return null; }
+  // Two or more trusted wallets agreeing is the strongest signal we have: a lower bar (Blossom bought COUP at 42).
+  const floor = walletCount >= 2 ? C.minScoreCluster : C.minScore;
+  if (score < floor) { logSignal({ mode: "trusted", mint: s.mint, symbol: s.symbol, sizeUsd: size, score, reason: "score floor", snapshot: s, candles15: [], plan: () => null as any }, false, "score below floor"); return null; }
 
   let c15 = [] as Awaited<ReturnType<typeof candles5and15>>["c15"];
   let a15 = 0; let low = s.priceUsd * 0.8;
