@@ -60,6 +60,15 @@ export async function readPrice(
     return { price: p, at: now, confirmed: true, source: "primary+secondary" };
   }
 
+  // A 5x+ rise in one read can only be confirmed by the second source. Next-tick agreement isn't enough: a wrong pool
+  // agrees with itself every tick (ALLINU, 19 Oct). Big drops keep the next-tick fallback so a rug can still be exited.
+  if (lastGood > 0 && p / lastGood >= 5) {
+    const note = s ? `secondary ${s} disagrees with a ${Math.round(p / lastGood)}x jump` : `no secondary for a ${Math.round(p / lastGood)}x jump`;
+    audit.rejectedTick(mint, "primary", p, lastGood, note);
+    log.warn({ mint, p, lastGood, note }, "extreme price jump, holding");
+    return { price: p, at: now, confirmed: false, source: "primary", note };
+  }
+
   // Second source missing or disagrees. Fall back to next-tick confirmation.
   const prev = pending.get(mint);
   if (prev && now - prev.at >= 5000 && Math.abs(prev.price - p) / p <= config.risk.sanityAgreePct) {

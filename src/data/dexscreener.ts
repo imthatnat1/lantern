@@ -62,7 +62,10 @@ export async function pairsByMint(mints: string[]): Promise<Map<string, DsPair[]
 
 export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
   const r = await getJson<{ pairs: DsPair[] | null }>(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, { ttlMs: 5000 });
-  const pairs = (r.pairs ?? []).filter(p => p.chainId === "solana");
+  // Only pools where this coin is the token being priced. 19 Oct: ALLINU is also the PAIRING token for other coins;
+  // the biggest pool containing it was "<another coin> / ALLINU" at $19.17, so the exit loop re-priced a $0.0048
+  // position at 3,900x and booked a fake $7,682 sale. pairsByMint (the scanners' batch call) already did this.
+  const pairs = (r.pairs ?? []).filter(p => p.chainId === "solana" && p.baseToken?.address === mint);
   const p = bestPair(pairs);
   if (!p) return null;
   const price = Number(p.priceUsd ?? 0);
