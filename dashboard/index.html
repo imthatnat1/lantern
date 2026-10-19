@@ -251,7 +251,7 @@
 <p class="dim" style="font-size:13px;margin:0 0 6px">Trusted wallets can trigger buys (after our own checks). KOLs only add score. Both are audited here: of the coins each wallet bought, how many went 2x within 6 hours, and how many halved.</p>
 <div id="wallets"></div>
 
-<h2>By strategy <small>all time</small></h2>
+<h2>By strategy <small>today and all time</small></h2>
 <div id="modes"></div>
 
 <h2>Lab <small id="labMeta"></small></h2>
@@ -649,10 +649,20 @@ function walletTable(ws) {
   return bench + `<table><tr><th>wallet</th><th>buys</th><th>hit 2x</th><th>halved</th><th>median now</th></tr>${rows}</table>`;
 }
 
-function modeTable(byMode) {
+function modeTable(byMode, cap) {
+  // 20 Oct (Nat: "how do I know what the cap for each mode is? and when they're close"): each mode's today vs its cap.
+  const capCell = m => {
+    const t = m.today || 0;
+    if (m.paused) return `<span class="faint">paused</span>`;
+    if (m.stopped) return `<span class="down">hit cap · back at midnight</span>`;
+    if (!cap) return "";
+    const left = cap + t;   // a mode in profit today has its winnings as extra room
+    return left <= cap / 3 ? `<span class="down">$${left.toFixed(0)} left · near cap</span>` : `<span class="faint">$${left.toFixed(0)} left</span>`;
+  };
   const rows = byMode.sort((a, b) => b.pnl - a.pnl).map(m =>
-    `<tr><td>${m.mode}${m.paused ? ` <span class="faint">paused</span>` : m.stopped ? ` <span class="down" style="font-size:12px">sitting out today</span>` : ""}</td><td>${m.open}</td><td>${m.n}</td><td>${m.n ? Math.round(m.wins / m.n * 100) + "%" : "—"}</td><td class="${(m.today || 0) > 0 ? "up" : (m.today || 0) < 0 ? "down" : ""}">${m.today == null ? "—" : usd(m.today, true)}</td><td class="${m.pnl > 0 ? "up" : m.pnl < 0 ? "down" : ""}">${usd(m.pnl, true)}</td></tr>`).join("");
-  return `<table><tr><th>strategy</th><th>open</th><th>trades</th><th>won</th><th>today</th><th>P&amp;L</th></tr>${rows}</table>`;
+    `<tr><td>${m.mode}</td><td>${m.open}</td><td>${m.n}</td><td>${m.n ? Math.round(m.wins / m.n * 100) + "%" : "—"}</td><td class="${(m.today || 0) > 0 ? "up" : (m.today || 0) < 0 ? "down" : ""}">${m.today == null ? "—" : usd(m.today, true)}</td><td style="font-size:12px">${capCell(m)}</td><td class="${m.pnl > 0 ? "up" : m.pnl < 0 ? "down" : ""}">${usd(m.pnl, true)}</td></tr>`).join("");
+  return `<table><tr><th>strategy</th><th>open</th><th>trades</th><th>won</th><th>today</th><th>daily cap${cap ? ` $${cap}` : ""}</th><th>P&amp;L</th></tr>${rows}</table>
+    ${cap ? `<div class="faint" style="font-size:12px;margin-top:6px">Each mode can lose $${cap} on closed trades per day, then sits out until midnight. Open trades count once they're sold.</div>` : ""}`;
 }
 
 function missedRows(missed) {
@@ -755,7 +765,7 @@ function render(s) {
   $("natWatch").innerHTML = natWatchRow(s.natWatch || []);
   $("would").innerHTML = wouldRows(s.wouldBuy || []);
   $("trades").innerHTML = tradeRows(s.fills);
-  $("modes").innerHTML = modeTable(s.byMode);
+  $("modes").innerHTML = modeTable(s.byMode, s.guardrails && s.guardrails.modeDailyLossUsd);
   $("wallets").innerHTML = walletTable(s.wallets || []);
   $("missed").innerHTML = missedRows(s.missed);
   $("looks").innerHTML = looksRows(s.looks);
@@ -912,7 +922,7 @@ function demo() {
     at: now, paused: false,
     activity: { charts: { tracking: 64, charts: 512, own: 497, geckoCalls: 15, geckoFailed: 0 }, checked: 284, looked: 118, setups: 12, rejected: 96, bought: 0, stonk: 23, rejectedBy: { "rug risk": 38, "bot volume": 21, "overheated": 17, "too new or thin": 11, "copycat or slop": 6, "honeypot": 3 } },
     account: { cash: 275.1, vault: 6.2, equity: 303.7, peakEquity: 312, startingCapital: 300, realizedToday: 7.4, openPnl: 6.1, closedCount: 18, closedWins: 9, closedPnl: 16.6 },
-    guardrails: { dailyLossStopUsd: 30, drawdownHaltAt: 249.6, capitalAtRisk: 21.5, maxCapitalAtRisk: 180 },
+    guardrails: { dailyLossStopUsd: 60, modeDailyLossUsd: 15, drawdownHaltAt: 249.6, capitalAtRisk: 21.5, maxCapitalAtRisk: 180 },
     health: { feedDownS: 0, dexStaleS: 4, rejectedTicks24h: 3, startedAt: now - 2 * 86400e3, uptimeMs: 2 * 86400e3, rejected: [{ at: now - 3e6, mint: "6GmAxxxxxxxxUNgx", price: 0.0011, last_good: 0.11 }] },
     config: { modes: { pullback: { sizeUsd: 5, maxOpen: 3 } }, allocation: { ultra: .4, bounce: .2, pullback: .25, trusted: .15 } },
     open: [
@@ -933,7 +943,7 @@ function demo() {
       { side: "buy", mode: "pullback", symbol: "KURP", mint: "xpobxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxpump", at: now - 4.2 * 3600e3, usd: 5, fraction: 1, reason: "pullback 28% from 1h high, reclaim on vol", market: mk("KURP", "SOL", 0.00212, 2100000, 180000, [4, 61, 320], 4120, 9, 2.4e6) },
     ],
     equity: eq,
-    byMode: [{ mode: "pullback", n: 6, wins: 3, pnl: 14.2, open: 1 }, { mode: "ultra", n: 4, wins: 2, pnl: 3.1, open: 1 }, { mode: "bounce", n: 5, wins: 2, pnl: -2.6, open: 0 }, { mode: "trusted", n: 3, wins: 2, pnl: 1.9, open: 1 }],
+    byMode: [{ mode: "pullback", n: 6, wins: 3, pnl: 14.2, open: 1, today: 2.1 }, { mode: "ultra", n: 4, wins: 2, pnl: 3.1, open: 1, today: -11.2 }, { mode: "bounce", n: 5, wins: 2, pnl: -2.6, open: 0, today: -15.4, stopped: true }, { mode: "trusted", n: 3, wins: 2, pnl: 1.9, open: 1 }],
     wouldBuy: [
       { mode: "dip", mint: "6GmAFSYs4gk3FDao5FzzySQpPZaWsa4rUJHacpMpUNgx", symbol: "STONK", score: 68, at: now - 5 * 3600e3, price: 0.0021, peak_price: 0.00246, last_price: 0.00232, mcap: 2.1e6, peakX: 1.17, nowX: 1.105, flagship: true, market: mk("STONK", "SOL", 0.00232, 2.3e6, 310000, [1, 6, 12], 9100, 60 * 24, 900000) },
       { mode: "dip", mint: "8RNUw4N655VSrZKuhGdywhbSMDTrheguFPfxbpE2NZHQ", symbol: "PURR", score: 61, at: now - 11 * 3600e3, price: 0.0181, peak_price: 0.0188, last_price: 0.0163, mcap: 1.8e6, peakX: 1.04, nowX: 0.9, flagship: true, market: mk("PURR", "HYPE", 0.0163, 1.6e6, 220000, [-2, -6, -9], 5200, 40 * 24, 410000) },
