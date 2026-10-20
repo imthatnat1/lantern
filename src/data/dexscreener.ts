@@ -63,6 +63,18 @@ export async function pairsByMint(mints: string[]): Promise<Map<string, DsPair[]
   return byMint;
 }
 
+/**
+ * Prices of a coin's OTHER real pools (traded, $5k+ liquidity), from the same DexScreener answer snapshot() just used.
+ * The price check compares the chosen pool with them when Jupiter has no price. 20 Oct 15:03: Dacity's Meteora SOL pool
+ * reported $0.0000014 twice in a row while its PumpSwap and other pools sat at $0.0059, and the next-tick fallback
+ * confirmed the junk. No extra API call: filled by snapshot().
+ */
+const otherPools = new Map<string, { at: number; prices: number[] }>();
+export function otherPoolPrices(mint: string, maxAgeMs = 30_000): number[] {
+  const o = otherPools.get(mint);
+  return o && Date.now() - o.at <= maxAgeMs ? o.prices : [];
+}
+
 export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
   const r = await getJson<{ pairs: DsPair[] | null }>(`https://api.dexscreener.com/latest/dex/tokens/${mint}`, { ttlMs: 5000 });
   // Only pools where this coin is the token being priced. 19 Oct: ALLINU is also the PAIRING token for other coins;
@@ -73,6 +85,11 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
   if (!p) return null;
   const price = Number(p.priceUsd ?? 0);
   if (!price) return null;
+  otherPools.set(mint, {
+    at: Date.now(),
+    prices: tradedPairs(pairs).filter(x => x !== p && (x.liquidity?.usd ?? 0) >= 5_000).map(x => Number(x.priceUsd ?? 0)).filter(x => x > 0),
+  });
+  if (otherPools.size > 2000) otherPools.clear();
   const snap: TokenSnapshot = {
     mint, symbol: p.baseToken.symbol, name: p.baseToken.name, pairAddress: p.pairAddress, quoteSymbol: p.quoteToken.symbol,
     priceUsd: price,

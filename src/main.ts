@@ -11,6 +11,7 @@ import * as rug from "./data/rugcheck.js";
 import { readPrice } from "./engine/price.js";
 import { evaluate, wantAdd } from "./engine/exits.js";
 import { repairAllinu19Oct, repairDacity20Oct } from "./repair.js";
+import { watchdogWhy } from "./engine/watchdog.js";
 import * as broker from "./engine/broker.js";
 import { candles5and15, logSignal, type Context, type Strategy } from "./strategies/base.js";
 import * as liveCandles from "./data/livecandles.js";
@@ -38,6 +39,9 @@ const migrations = new Map<string, number>(kv.get<[string, number][]>("migration
 const markPrices = new Map<string, number>();
 let solPrice = 150;
 let lastDexOk = Date.now();
+// Main loop health, for the watchdog and /api/state health.loop.
+let tickStartedAt = Date.now(), lastTickDoneAt = Date.now(), tickStage = "starting";
+const loopErrs: Record<string, { at: number; err: string }> = {};
 
 const feed = new PumpPortal();
 function addMigration(m: { mint: string; at: number }) {
@@ -250,6 +254,7 @@ async function main() {
   startServer(() => markPrices, () => ({
     feedDownS: Math.round(Math.min(feed.downForMs, 99_999_000) / 1000),
     dexStaleS: Math.round((Date.now() - Math.max(lastDexOk, dex.lastOkAt)) / 1000),
+    loop: { stage: tickStage, lastTickAgoS: Math.round((Date.now() - lastTickDoneAt) / 1000), errors: loopErrs, lastWatchdog: kv.get("watchdog:last", null) },
   }), mint => pickBuy(mint, {
     marks: markPrices, solPrice,
     feedHealthy: Date.now() - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs,
@@ -266,15 +271,32 @@ async function main() {
   setInterval(() => refreshFx().catch(() => null), 3_600_000);   // USD/AUD for tax (data/fx.ts)
   solPrice = await jup.solPrice();
   setInterval(async () => { solPrice = await jup.solPrice(); }, 60_000);
+  const step = async (name: string, fn: () => Promise<void>) => {
+    tickStage = name;
+    try { await fn(); } catch (e) { loopErrs[name] = { at: Date.now(), err: String(e).slice(0, 200) }; log.warn({ loop: name, err: String(e) }, "loop failed"); }
+  };
   const tick = async () => {
-    try { await exitLoop(); } catch (e) { log.error({ err: String(e) }, "exitLoop crashed"); }
-    try { await scanLoop(); } catch (e) { log.error({ err: String(e) }, "scanLoop crashed"); }
-    try { await missedRunnersLoop(); } catch (e) { log.warn({ err: String(e) }, "missedRunners failed"); }
-    try { await holdersLoop(); } catch (e) { log.warn({ err: String(e) }, "holdersLoop failed"); }
-    try { await moodLoop(); } catch (e) { log.warn({ err: String(e) }, "moodLoop failed"); }
+    tickStartedAt = Date.now();
+    await step("exit", exitLoop);
+    await step("scan", scanLoop);
+    await step("missed", missedRunnersLoop);
+    await step("holders", holdersLoop);
+    await step("mood", moodLoop);
+    tickStage = "idle";
+    lastTickDoneAt = Date.now();
     setTimeout(tick, 5000);
   };
   tick();
+  // Watchdog. 20 Oct 15:19 to 22:30: the main loop stopped (no prices, scans, exits or mood for 7 hours) while the
+  // dashboard API kept answering. If a loop hangs or DexScreener goes silent, exit and let pm2 start us fresh.
+  setInterval(() => {
+    const now = Date.now();
+    const why = watchdogWhy({ now, lastTickDoneAt, tickStartedAt, tickStage, dexLastOk: Math.max(lastDexOk, dex.lastOkAt), upMs: process.uptime() * 1000 });
+    if (!why) return;
+    log.error({ why, stage: tickStage, loopErrs }, "watchdog: restarting");
+    kv.set("watchdog:last", { at: now, why, stage: tickStage });
+    setTimeout(() => process.exit(1), 500);
+  }, 60_000);
   setInterval(heartbeat, 5 * 60_000);
   setInterval(() => { try { hot.prune(); } catch { /* best effort */ } }, 3_600_000);
   setInterval(() => { try { recorder.prune(14); pruneCreates(); } catch (e) { log.warn({ err: String(e) }, "prune failed"); } }, 6 * 3_600_000);

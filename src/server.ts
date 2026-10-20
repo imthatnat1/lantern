@@ -25,7 +25,7 @@ import { isStonkListed } from "./data/stonkfun.js";
  *   GET  /api/lab                    latest lab report (entry replay experiments) and run status
  *   POST /api/lab {action:"run"}     start a lab run now
  */
-export function startServer(getMarks: () => Map<string, number>, getHealth: () => { feedDownS: number; dexStaleS: number }, buy?: (mint: string) => Promise<unknown>) {
+export function startServer(getMarks: () => Map<string, number>, getHealth: () => { feedDownS: number; dexStaleS: number; loop?: unknown }, buy?: (mint: string) => Promise<unknown>) {
   const token = process.env.DASHBOARD_TOKEN ?? "";
   const port = Number(process.env.DASHBOARD_PORT ?? 8787);
   if (!token) { log.warn("DASHBOARD_TOKEN not set, dashboard API disabled"); return; }
@@ -297,7 +297,7 @@ function mkt(mint: string) {
   return { ...m, labels: JSON.parse(m.labels || "[]") };
 }
 
-function state(marks: Map<string, number>, health: { feedDownS: number; dexStaleS: number }) {
+function state(marks: Map<string, number>, health: { feedDownS: number; dexStaleS: number; loop?: unknown }) {
   const a = broker.account();
   const now = Date.now();
   const dayStart = broker.brisbaneDayStart(now);

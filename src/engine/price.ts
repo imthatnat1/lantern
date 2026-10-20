@@ -16,12 +16,21 @@ export interface PriceRead {
 export interface PriceSources {
   primary(mint: string): Promise<number | null>;
   secondary(mint: string): Promise<number | null>;
+  /** The coin's other real pools (optional). Used when Jupiter has no price. */
+  others?(mint: string): Promise<number[]>;
 }
 
 export const liveSources: PriceSources = {
   primary: async (mint) => (await dex.snapshot(mint))?.priceUsd ?? null,
   secondary: (mint) => jup.price(mint),
+  others: async (mint) => dex.otherPoolPrices(mint),
 };
+
+function median(xs: number[]): number {
+  const a = [...xs].sort((x, y) => x - y);
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
 
 interface Pending { price: number; at: number }
 const pending = new Map<string, Pending>();
@@ -79,7 +88,25 @@ export async function readPrice(
     return { price: p, at: now, confirmed: false, source: "primary", note };
   }
 
-  // No second source. Fall back to next-tick confirmation.
+  // No Jupiter price. If the coin trades in other real pools, they decide: agree = confirmed, disagree = junk.
+  // 20 Oct 15:03: Dacity's biggest pool said $0.0000014 twice in a row while every other pool said $0.0059. Jupiter had
+  // no price that minute, so next-tick agreement "confirmed" it and ride booked a fake -$8.10 hard floor.
+  const others = sources.others ? (await sources.others(mint)).filter(x => Number.isFinite(x) && x > 0) : [];
+  if (others.length) {
+    const med = median(others);
+    if (Math.abs(med - p) / p <= config.risk.sanityAgreePct) {
+      pending.delete(mint);
+      log.info({ mint, p, med, lastGood }, "big move confirmed by the coin's other pools");
+      return { price: p, at: now, confirmed: true, source: "primary+pools" };
+    }
+    pending.delete(mint);
+    const note = `other pools say ${med}`;
+    audit.rejectedTick(mint, "primary", p, lastGood, note);
+    log.warn({ mint, p, lastGood, med }, "price disagrees with the coin's other pools, holding");
+    return { price: p, at: now, confirmed: false, source: "primary", note };
+  }
+
+  // No second source and no other pools. Fall back to next-tick confirmation.
   const prev = pending.get(mint);
   if (prev && now - prev.at >= 5000 && Math.abs(prev.price - p) / p <= config.risk.sanityAgreePct) {
     pending.delete(mint);
