@@ -19,6 +19,7 @@ const DEFAULT_PINNED = [
   "DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP", // SI (NVDAx pair)
   "nxPqZ4F7ux8Vph5NFu25rEP6Kx9Gr1U6Fmj36Rjpump", // Dacity (TTWO pair)
   "6UtY9iTZMQQ5QZVrbzFnNaJntV7oySm9k97mvwnuZcxr", // NEARKAT (NEAR pair)
+  "HuAXPyDWDaMYFKuwQHpqL1oPnj93zdzWmtvFGzCeCUa7", // MASK, Nullmask (ZEC pair; Nat, 21 Oct: "another key stonks token, like zcat")
   "AGi2s9zPRPHs3zEDPhPTroumTEXK5ufymYSfEFndCSSW", // LEVERCAT (xSOL pair)
   "HTmQz7My6MehV7bjhJ6jde8nDND1yvsz68d24LP7YgUQ", // GP (GLDx pair)
   "DFMt2FyLpB6ekPNAzVErLXgpSnJ9CRf1VnxBAkTLpump", // FTR
