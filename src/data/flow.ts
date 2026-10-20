@@ -193,13 +193,23 @@ export function blockedWhy(mint: string): string | null {
   return b && b.until > Date.now() ? `blocked for ${Math.ceil((b.until - Date.now()) / 3_600_000)}h: ${b.why}` : null;
 }
 
+/**
+ * Buy or sell of OUR coin. GeckoTerminal's `kind` is relative to the pool's base token, and on pools it lists the
+ * other way round (ZEC/ZCAT) a ZCAT buy shows as "sell" (21 Oct). The token addresses say which way it really went.
+ */
+export function tradeKind(a: { kind: string; from_token_address?: string; to_token_address?: string }, mint: string): "buy" | "sell" {
+  if (a.to_token_address === mint) return "buy";
+  if (a.from_token_address === mint) return "sell";
+  return a.kind === "sell" ? "sell" : "buy";
+}
+
 /** Recent trades on a pool from GeckoTerminal. Cached 2 minutes. Null when unavailable. */
 export async function flow(mint: string, pool: string, name?: string): Promise<{ f: Flow; verdict: string | null } | null> {
   try {
-    const r = await getJson<{ data?: { attributes: { kind: string; volume_in_usd: string; tx_from_address: string; block_timestamp: string } }[] }>(
+    const r = await getJson<{ data?: { attributes: { kind: string; volume_in_usd: string; tx_from_address: string; block_timestamp: string; from_token_address?: string; to_token_address?: string } }[] }>(
       `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pool}/trades`, { ttlMs: 2 * 60_000 });
     const trades: Trade[] = (r.data ?? []).map(d => ({
-      kind: d.attributes.kind === "sell" ? "sell" : "buy", usd: Number(d.attributes.volume_in_usd) || 0,
+      kind: tradeKind(d.attributes, mint), usd: Number(d.attributes.volume_in_usd) || 0,
       from: d.attributes.tx_from_address ?? "", at: Date.parse(d.attributes.block_timestamp) || 0,
     }));
     if (!trades.length) return null;

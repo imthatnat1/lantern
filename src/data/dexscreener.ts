@@ -2,6 +2,7 @@ import { getJson } from "./http.js";
 import type { TokenSnapshot } from "../types.js";
 import { recorder } from "../db.js";
 import { learnQuote } from "./universe.js";
+import { notePairMint } from "./pairmint.js";
 
 /** Last time DexScreener answered with usable data. Read by the health check. */
 export let lastOkAt = 0;
@@ -108,6 +109,7 @@ export async function snapshot(mint: string): Promise<TokenSnapshot | null> {
     fetchedAt: Date.now(),
   };
   lastOkAt = Date.now();
+  notePairMint(p.pairAddress, mint);
   try { recorder.tick(snap); learnQuote(snap.quoteSymbol); } catch { /* best effort */ }
   return snap;
 }
@@ -141,6 +143,7 @@ export async function snapshotFromPair(mint: string, p: DsPair): Promise<TokenSn
     fetchedAt: Date.now(),
   };
   lastOkAt = Date.now();
+  notePairMint(p.pairAddress, mint);
   try { recorder.tick(snap); learnQuote(snap.quoteSymbol); } catch { /* best effort */ }
   return snap;
 }

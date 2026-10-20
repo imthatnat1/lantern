@@ -1,6 +1,7 @@
 import { getJson } from "./http.js";
 import type { Candle } from "../types.js";
 import { recorder } from "../db.js";
+import { mintForPair } from "./pairmint.js";
 
 type Tf = "minute" | "hour";
 
@@ -8,9 +9,18 @@ type Tf = "minute" | "hour";
  * GeckoTerminal OHLCV. aggregate: 1/5/15 for minute. Returns oldest -> newest.
  * Cached for most of the candle length so we don't hammer their 30/min limit.
  */
-export async function candles(pairAddress: string, agg: 1 | 5 | 15, limit = 100): Promise<Candle[]> {
+/**
+ * The OHLCV URL. With the coin's mint, GeckoTerminal charts that coin whichever side of the pool it lists it on.
+ * Without it, it charts the pool's "base", which for ZCAT/ZEC was ZEC: $1,235 candles for a $0.056 coin, so dip read
+ * every Stonk.fun pair as "down 100% from the high" and never bought their turn (20 to 21 Oct).
+ */
+export function ohlcvUrl(pairAddress: string, agg: number, limit: number, mint?: string): string {
   const tf: Tf = "minute";
-  const url = `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddress}/ohlcv/${tf}?aggregate=${agg}&limit=${limit}&currency=usd`;
+  return `https://api.geckoterminal.com/api/v2/networks/solana/pools/${pairAddress}/ohlcv/${tf}?aggregate=${agg}&limit=${limit}&currency=usd${mint ? `&token=${mint}` : ""}`;
+}
+
+export async function candles(pairAddress: string, agg: 1 | 5 | 15, limit = 100, mint = mintForPair(pairAddress)): Promise<Candle[]> {
+  const url = ohlcvUrl(pairAddress, agg, limit, mint);
   const r = await getJson<{ data: { attributes: { ohlcv_list: number[][] } } }>(url, { ttlMs: agg * 60_000 * 0.8 });
   const list = r.data?.attributes?.ohlcv_list ?? [];
   const out = list

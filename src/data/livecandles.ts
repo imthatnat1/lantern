@@ -20,6 +20,7 @@
 import { db } from "../db.js";
 import { getJson } from "./http.js";
 import * as gecko from "./gecko.js";
+import { notePairMint } from "./pairmint.js";
 import { log } from "../log.js";
 import type { Candle } from "../types.js";
 
@@ -86,11 +87,12 @@ export async function poll(now = Date.now()) {
   for (let i = 0; i < pairs.length; i += 30) {
     const chunk = pairs.slice(i, i + 30);
     try {
-      const r = await getJson<{ pairs?: { pairAddress: string; priceUsd?: string; volume?: { m5?: number } }[] | null; pair?: { pairAddress: string; priceUsd?: string; volume?: { m5?: number } } | null }>(
+      type Row = { pairAddress: string; priceUsd?: string; volume?: { m5?: number }; baseToken?: { address?: string } };
+      const r = await getJson<{ pairs?: Row[] | null; pair?: Row | null }>(
         `https://api.dexscreener.com/latest/dex/pairs/solana/${chunk.join(",")}`);
       const rows = r.pairs ?? (r.pair ? [r.pair] : []);
       const t = Date.now();
-      for (const p of rows) sample(p.pairAddress, Number(p.priceUsd ?? 0), p.volume?.m5 ?? 0, t);
+      for (const p of rows) { notePairMint(p.pairAddress, p.baseToken?.address); sample(p.pairAddress, Number(p.priceUsd ?? 0), p.volume?.m5 ?? 0, t); }
     } catch (e) { log.debug({ err: String(e) }, "live candles poll failed"); }
   }
 }
