@@ -21,7 +21,17 @@ const limits: Record<string, { rate: number; cap: number }> = {
   "lite-api.jup.ag": { rate: 3, cap: 6 },
 };
 
-const cache = new Map<string, { at: number; v: unknown }>();
+const cache = new Map<string, { at: number; v: unknown; ttl: number }>();
+/** 21 Oct: the cache was never emptied, so it grew for the whole life of the process (85h on 20 Oct, RugCheck reports included). */
+const CACHE_MAX = 3000;
+export function pruneCache(now = Date.now()): void {
+  if (cache.size <= CACHE_MAX) return;
+  for (const [k, c] of cache) if (now - c.at >= c.ttl) cache.delete(k);
+  // Still too big (everything fresh): drop the oldest. Map keeps insertion order.
+  for (const k of cache.keys()) { if (cache.size <= CACHE_MAX * 0.8) break; cache.delete(k); }
+}
+export function _cacheSize(): number { return cache.size; }
+export function _cacheSet(url: string, at: number, ttl: number): void { cache.set(url, { at, v: null, ttl }); }
 /** After a 429, stop calling that host for a while instead of burning the quota on retries. */
 const coolUntil = new Map<string, number>();
 export function hostCooling(host: string): boolean { return (coolUntil.get(host) ?? 0) > Date.now(); }
@@ -51,7 +61,7 @@ export async function getJson<T>(url: string, opts: { ttlMs?: number; headers?: 
     }
     if (!res.ok) throw new Error(`${res.status} ${url}`);
     const v = (await res.json()) as T;
-    if (ttl > 0) cache.set(url, { at: Date.now(), v });
+    if (ttl > 0) { cache.set(url, { at: Date.now(), v, ttl }); pruneCache(); }
     return v;
   } finally {
     clearTimeout(t);

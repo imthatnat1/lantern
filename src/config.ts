@@ -228,7 +228,10 @@ export const config = {
     dip: {
       scanEveryMs: 5 * 60_000,
       cooldownMs: 12 * 3_600_000,
-      maxOpen: 5,
+      // 21 Oct: 5 -> 8. All 5 slots were held by 19 Oct buys still under water, so at 06:40 dip saw AgenC (a Stonk.fun
+      // flagship) and logged "mode full". Nat: "when you turn strategies off no bids get placed". Capital at risk is
+      // still capped bot-wide (risk.maxCapitalAtRiskUsd).
+      maxOpen: 8,
       // 19 Oct 16:12 (Nat): bigger bids. A fixed ~$0.25 round-trip network fee is ~6% of a $4 trade, 2.5% of $10.
       sizeUsd: 10,
       /** Pullback depth from the 24h high, judged on 5m candles. */

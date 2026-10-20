@@ -97,8 +97,12 @@ async function check(s: TokenSnapshot, ctx: Context, walletCount: number, names:
   if (!pre.ok) { logLook("trusted", s, pre.why!, pre.holders); return null; }
   const size = walletCount >= 2 ? C.sizeUsdTwoWallets : C.sizeUsd;
   const g = await gate(s, "trusted", size);
-  if ((g.holders ?? 0) < C.minHolders) return null;
-  if (s.mcapUsd > C.minHoldersAtMcap.mcap && (g.holders ?? 0) < C.minHoldersAtMcap.holders) return null;
+  // 21 Oct: these two used to return silently, so a skipped trusted buy never showed on the dashboard.
+  if ((g.holders ?? 0) < C.minHolders) { logLook("trusted", s, `${who}, but only ${g.holders ?? "?"} holders (needs ${C.minHolders})`, g.holders); return null; }
+  if (s.mcapUsd > C.minHoldersAtMcap.mcap && (g.holders ?? 0) < C.minHoldersAtMcap.holders) {
+    logLook("trusted", s, `${who}, but ${g.holders ?? "?"} holders at $${Math.round(s.mcapUsd / 1000)}k (needs ${C.minHoldersAtMcap.holders} above $${C.minHoldersAtMcap.mcap / 1000}k)`, g.holders);
+    return null;
+  }
 
   // Our own score. Not fixed at 60 anymore.
   const bs = buySellRatio(s);
