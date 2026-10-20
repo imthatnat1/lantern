@@ -121,6 +121,12 @@ export function sane(rows: Candle[], ref: number | undefined, x = 100): Candle[]
   return rows.filter(k => k.h <= ref * x && k.l >= ref / x);
 }
 
+/** At least 20 of the last 24 hours of 5m candles on record (after the sanity filter), the newest within 15 minutes. */
+export function storedIsWhole(pair: string, now: number, bucket = Math.floor(now / M5) * M5): boolean {
+  const rows = sane(history.all(pair, now - 24 * 3_600_000, bucket) as Candle[], refPrice(pair));
+  return rows.length >= 240 && bucket - rows[rows.length - 1].t <= 3 * M5;
+}
+
 export type HistoryFetch = (pair: string) => Promise<unknown>;
 const fetchHistory: HistoryFetch = (pair) => gecko.candles(pair, 5, 288);
 
@@ -138,7 +144,12 @@ export async function candles5(pair: string, now = Date.now(), fetch: HistoryFet
   const whole = since !== undefined && fetched !== undefined && Math.ceil(since / M5) * M5 <= fetched + M5
     && now - (lastSampleAt.get(pair) ?? 0) <= BREAK_MS;
   let own = whole;
-  if (!whole) {
+  // 21 Oct: every restart forgot which pairs had history (geckoFetchBucket lives in memory) and asked GeckoTerminal
+  // again for every wanted pair. On an IP shared with Blossom that storm got 34 of 34 calls refused at 07:20, and coins
+  // with no history at all (MASK) couldn't be checked. If the stored record already covers the day and is recent,
+  // use it and save GeckoTerminal for the pairs that really need it.
+  if (!whole && storedIsWhole(pair, now, bucket)) { geckoFetchBucket.set(pair, bucket); own = true; }
+  else if (!whole) {
     try {
       geckoCalls.push(now);
       await fetch(pair);

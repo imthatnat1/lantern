@@ -10,7 +10,7 @@ import * as jup from "./data/jupiter.js";
 import * as rug from "./data/rugcheck.js";
 import { readPrice } from "./engine/price.js";
 import { evaluate, wantAdd } from "./engine/exits.js";
-import { repairAllinu19Oct, repairDacity20Oct } from "./repair.js";
+import { repairAllinu19Oct, repairDacity20Oct, repairDacityRide20Oct } from "./repair.js";
 import { watchdogWhy } from "./engine/watchdog.js";
 import * as broker from "./engine/broker.js";
 import { candles5and15, logSignal, type Context, type Strategy } from "./strategies/base.js";
@@ -245,6 +245,7 @@ async function main() {
   if (!kv.get("startedAt", 0)) kv.set("startedAt", Date.now());
   repairAllinu19Oct();
   repairDacity20Oct();
+  repairDacityRide20Oct();
   try { kv.set("build", (await import("node:child_process")).execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim()); } catch { /* not a git checkout */ }
   feed.start();
   const publicUrl = process.env.PUBLIC_URL ?? "http://134.199.147.128:8787";

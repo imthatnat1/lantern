@@ -79,3 +79,36 @@ export function repairDacity20Oct(): void {
   }
   kv.set(flag, true);
 }
+
+/**
+ * 20 Oct 15:03: ride bought Dacity at $0.00701 and 18 seconds later "sold" it at the hard floor for -$8.10. Its Meteora SOL
+ * pool reported $0.0000014 twice in a row while Jupiter had no price, so next-tick agreement confirmed the junk; every
+ * other pool sat at $0.0059. Same repair as the morning one: undo the fake sale and reopen; the exit engine judges it
+ * from the current price. engine/price.ts now checks the coin's other pools first. Nat OK'd it 21 Oct 07:25.
+ */
+export function repairDacityRide20Oct(): void {
+  const flag = "repair:dacity-ride-20oct";
+  if (kv.get(flag, false)) return;
+  const pos = db.prepare("SELECT * FROM positions WHERE mint=? AND mode='ride' ORDER BY id DESC LIMIT 1").get(DACITY) as any;
+  if (!pos) { kv.set(flag, true); return; }
+  const bad = db.prepare("SELECT * FROM fills WHERE position_id=? AND side='sell' AND price_usd < ?").all(pos.id, pos.entry_price / 50) as any[];
+  if (bad.length) {
+    const a = kv.get<{ cash: number; vault: number; peakEquity: number }>("account", { cash: config.startingCapital, vault: 0, peakEquity: config.startingCapital });
+    let qtyBack = 0, pnlBack = 0;
+    for (const f of bad) {
+      const pnl = f.net_usd - pos.cost_usd * (f.qty / pos.qty);
+      const toVault = pnl > 0 ? pnl * config.risk.vaultShare : 0;
+      a.cash -= f.net_usd - toVault; a.vault -= toVault;
+      qtyBack += f.qty; pnlBack += pnl;
+    }
+    db.prepare(`UPDATE positions SET remaining_qty = remaining_qty + ?, realized_usd = realized_usd - ?, status='open', closed_at=NULL, close_reason=NULL,
+        peak_price = MAX(peak_price, entry_price), last_good_price = entry_price WHERE id=?`).run(qtyBack, pnlBack, pos.id);
+    db.prepare(`DELETE FROM fills WHERE id IN (${bad.map(() => "?").join(",")})`).run(...bad.map(f => f.id));
+    db.prepare("DELETE FROM ticks WHERE mint=? AND price < ?").run(DACITY, pos.entry_price / 50);
+    db.prepare("DELETE FROM cooldowns WHERE mint=?").run(DACITY);
+    try { db.prepare("DELETE FROM stop_gaps WHERE position_id=?").run(pos.id); } catch { /* table may not exist yet */ }
+    kv.set("account", a);
+    log.warn({ fills: bad.length, qtyBack, pnlBack: pnlBack.toFixed(2), cash: a.cash.toFixed(2) }, "repaired the fake Dacity ride sale");
+  }
+  kv.set(flag, true);
+}
