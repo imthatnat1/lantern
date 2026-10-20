@@ -20,7 +20,7 @@
 import { db } from "../db.js";
 import { getJson } from "./http.js";
 import * as gecko from "./gecko.js";
-import { notePairMint } from "./pairmint.js";
+import { mintForPair, notePairMint } from "./pairmint.js";
 import { log } from "../log.js";
 import type { Candle } from "../types.js";
 
@@ -97,6 +97,30 @@ export async function poll(now = Date.now()) {
   }
 }
 
+/**
+ * Our coin's latest price for this pool: the forming candle, the last close, or the last DexScreener tick for the coin.
+ * DexScreener always prices the coin we asked about, so this is the yardstick for stored history.
+ */
+const lastTick = db.prepare("SELECT price FROM ticks WHERE mint=? ORDER BY at DESC LIMIT 1");
+function refPrice(pair: string): number | undefined {
+  const f = forming.get(pair)?.c ?? lastClose.get(pair);
+  if (f && f > 0) return f;
+  const mint = mintForPair(pair);
+  const r = mint ? lastTick.get(mint) as { price: number } | undefined : undefined;
+  return r?.price && r.price > 0 ? r.price : undefined;
+}
+
+/**
+ * Drop stored candles 100x away from the coin's live price. 21 Oct: GeckoTerminal history for inverted Stonk.fun pools
+ * (ZEC/ZCAT) was stored in ZEC's price, $1,235 against $0.056, and with GeckoTerminal rate limiting most refetches the
+ * bad rows kept being served, so dip read ZCAT as "down 100%". A real coin 100x off its price within a day is dead and
+ * fails every mode's other checks anyway. Exported for tests.
+ */
+export function sane(rows: Candle[], ref: number | undefined, x = 100): Candle[] {
+  if (!ref || !(ref > 0)) return rows;
+  return rows.filter(k => k.h <= ref * x && k.l >= ref / x);
+}
+
 export type HistoryFetch = (pair: string) => Promise<unknown>;
 const fetchHistory: HistoryFetch = (pair) => gecko.candles(pair, 5, 288);
 
@@ -126,7 +150,7 @@ export async function candles5(pair: string, now = Date.now(), fetch: HistoryFet
       if (rows.length < 12) throw e;
     }
   }
-  const rows = history.all(pair, now - HISTORY_MS, bucket) as Candle[];
+  const rows = sane(history.all(pair, now - HISTORY_MS, bucket) as Candle[], refPrice(pair));
   const f = forming.get(pair);
   const formingCandle: Candle | undefined = f && f.bucket === bucket
     ? { t: f.bucket, o: f.o, h: f.h, l: f.l, c: f.c, v: f.v }
