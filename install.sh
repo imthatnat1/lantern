@@ -22,13 +22,10 @@ say "3/5  Your keys (paste each one and press Enter)"
 if [ -f .env ]; then
   echo "A .env already exists, keeping it. Edit /opt/lantern/.env if you need to change something."
 else
-  # Try to find keys from the old bot on this box so Nat doesn't have to hunt.
-  OLD=$(grep -rhs "^HELIUS_API_KEY=" /root /opt /home 2>/dev/null | head -1 | cut -d= -f2- || true)
-  [ -n "$OLD" ] && echo "Found a Helius key from the old bot, press Enter to reuse it."
-  HELIUS=$(ask "Helius API key${OLD:+ [Enter = reuse]}"); HELIUS=${HELIUS:-$OLD}
-  OLDR=$(grep -rhs "^RUGCHECK_API_KEY=" /root /opt /home 2>/dev/null | head -1 | cut -d= -f2- || true)
-  [ -n "$OLDR" ] && echo "Found a RugCheck key too, press Enter to reuse it."
-  RUG=$(ask "RugCheck API key (Enter to skip)${OLDR:+ [Enter = reuse]}"); RUG=${RUG:-$OLDR}
+  # Keys are typed in, never looked for. 21 Oct: this used to search /root, /opt and /home for another bot's keys
+  # and reuse them; a script that hunts a server for secrets must never run near a wallet key.
+  HELIUS=$(ask "Helius API key (Lantern's own, from dashboard.helius.dev)")
+  RUG=$(ask "RugCheck API key (Enter to skip)")
   WALLETS=$(ask "Your 3 trusted wallet addresses, separated by commas")
   TOKEN=$(ask "Dashboard token (the lnt_... value from Claude)")
   cat > .env <<EOF
