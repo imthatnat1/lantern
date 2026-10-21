@@ -94,9 +94,13 @@ export function cheapWhy(m: Mkt & { volume1h?: number; volume5m?: number; buys1h
 }
 
 /** The candle setup. Pure, shared by the live scan and the lab. */
-export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: number, C: ModeCfg<"launch">): Pattern<{ base: number; gain15: number; kind: "first leg" | "breakout"; plan: (entry: number, atr15: number) => ExitPlan }> {
+export type LaunchKind = "first leg" | "first dip" | "breakout";
+export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: number, C: ModeCfg<"launch">): Pattern<{ base: number; gain15: number; kind: LaunchKind; depth?: number; plan: (entry: number, atr15: number) => ExitPlan }> {
   const c5 = c5all.filter(k => k.t >= migratedAt - M5 && k.t + M5 <= now);   // closed candles since migration
   if (c5.length < 3) return { ok: false, why: `${c5.length * 5} minutes since migration, needs 15 to read the first leg` };
+  // 21 Oct (Nat: yes): in the first hour launch no longer buys the spike. 12 trades, 1 win, -$31.91; GOBLO hit the
+  // hard floor 2 minutes after buying. It waits for the first dip after the first leg to hold, like pullback does.
+  if (now - migratedAt <= C.maxSinceMigrationMin * 60_000 && !C.firstLeg && C.firstDip) return firstDipPattern(m, c5, C);
   const last = c5.at(-1)!;
   const hi = highestHigh(c5, migratedAt - M5);
   const offHigh = 1 - last.c / hi;
@@ -106,7 +110,7 @@ export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: 
   if (last.c / last.o > C.maxCandleX) return { ok: false, why: `last 5m candle +${((last.c / last.o - 1) * 100).toFixed(0)}%, too vertical to chase` };
   if (last.c < last.o) return { ok: false, why: "last 5m candle red, waiting for a green one" };
   const firstHour = now - migratedAt <= C.maxSinceMigrationMin * 60_000;
-  let kind: "first leg" | "breakout";
+  let kind: LaunchKind;
   if (firstHour && !C.firstLeg) return { ok: false, why: "under an hour since migration, waiting for it to prove itself (breakouts from 1h)" };
   if (firstHour) {
     // First leg: still running, on at least average volume.
@@ -139,13 +143,56 @@ export function launchPattern(m: Mkt, c5all: Candle[], migratedAt: number, now: 
 }
 
 /**
+ * The first dip (21 Oct): a real first leg (+firstDipMinLeg from the first candle to the high), then a pullback of
+ * firstDipMin to firstDipMax that has stopped (the low is at least one candle old), a green 5m candle bouncing off it,
+ * buys at least matching sells, and not already back near the high. The stop sits under the dip low. Pure.
+ */
+export function firstDipPattern(m: Mkt, c5: Candle[], C: ModeCfg<"launch">): ReturnType<typeof launchPattern> {
+  if (c5.length < 4) return { ok: false, why: `${c5.length * 5} minutes since migration, needs 20 to see a first leg and a dip` };
+  let iH = 0;
+  for (let i = 1; i < c5.length; i++) if (c5[i].c > c5[iH].c) iH = i;
+  const hi = c5[iH].c;
+  const leg = hi / c5[0].o - 1;
+  if (leg < C.firstDipMinLeg) return { ok: false, why: `first leg only +${Math.round(leg * 100)}%, waiting for a real run (+${Math.round(C.firstDipMinLeg * 100)}%)` };
+  const after = c5.slice(iH + 1);
+  if (!after.length) return { ok: false, why: "still running, waiting for the first dip" };
+  let iL = 0;
+  for (let i = 1; i < after.length; i++) if (after[i].l < after[iL].l) iL = i;
+  const L = after[iL].l;
+  const depth = 1 - L / hi;
+  if (depth < C.firstDipMin) return { ok: false, why: `only ${Math.round(depth * 100)}% off the high, waiting for a ${Math.round(C.firstDipMin * 100)}-${Math.round(C.firstDipMax * 100)}% dip`, setup: { need: `dip to ${(hi * (1 - C.firstDipMin)).toPrecision(3)}`, level: hi * (1 - C.firstDipMin), distance: dist(m.priceUsd, hi * (1 - C.firstDipMin)) } };
+  if (depth > C.firstDipMax) return { ok: false, why: `${Math.round(depth * 100)}% off the high, more than a dip` };
+  const last = c5.at(-1)!;
+  if (iL === after.length - 1) return { ok: false, why: "still making new lows" };
+  if (last.c < last.o) return { ok: false, why: "last 5m candle red, waiting for a green one off the low" };
+  if (last.c < L * 1.05) return { ok: false, why: "no bounce off the low yet" };
+  if (last.c > hi * 0.92) return { ok: false, why: "already back near the high, chasing" };
+  if (buySellRatio(m) < 1.0) return { ok: false, why: "more sells than buys in 5m" };
+  const ref = c5.at(-4)?.c ?? c5[0].o;
+  const gain15 = last.c / ref - 1;
+  const base = 55 + Math.min(15, depth * 40) + (buySellRatio(m) > 1.5 ? 10 : 0) + (m.liquidityUsd > 50_000 ? 5 : 0);
+  return {
+    ok: true, base, gain15, kind: "first dip", depth,
+    plan: (entry) => ({
+      hardFloorPct: C.hardFloorPct,
+      closeStopPrice: Math.max(L * 0.92, entry * (1 - C.stopPct)),
+      takeProfits: [{ gain: 1.0, sell: 0.5 }],
+      trailPct: 0.30, trailAfterGain: 0.50,
+      trailLadder: [{ peakGain: 3.0, trailPct: 0.35 }],
+      maxHoldMs: 6 * 3_600_000,
+    }),
+  };
+}
+
+/**
  * 20 Oct: the stricter first leg. Overnight, 8 of 11 first legs were dumped to ~$2k within 30 minutes. A first leg now
  * also needs a spread-out crowd (top 10 under firstLegMaxTop10%) that is still growing fast. Unknown = refused.
  * Pure, shared with the lab. Returns why it's refused, or null.
  */
 export function firstLegWhy(kind: string, top10: number | undefined | null, holderGrowth10m: number | null, C: ModeCfg<"launch">): string | null {
-  if (kind !== "first leg") return null;
+  if (kind !== "first leg" && kind !== "first dip") return null;
   if ((top10 ?? 100) > C.firstLegMaxTop10) return `first leg: top 10 hold ${top10 == null ? "?" : top10.toFixed(0)}%, needs under ${C.firstLegMaxTop10}% this early`;
+  if (kind === "first dip") return null;   // a dip doesn't need the crowd growing 10% in 10 minutes, just spread out
   if (C.firstLegMinHolderGrowth > -1 && (holderGrowth10m == null || holderGrowth10m < C.firstLegMinHolderGrowth)) return `first leg: holders ${holderGrowth10m == null ? "not measured yet" : `+${(holderGrowth10m * 100).toFixed(0)}%`} in 10m, needs +${(C.firstLegMinHolderGrowth * 100).toFixed(0)}%`;
   return null;
 }
@@ -168,7 +215,7 @@ async function check(s: TokenSnapshot, ctx: Context, migratedAt: number): Promis
   const score = p.base + (hv != null && hv >= 0.1 ? 10 : 0) + holderScore(s.mint) + pairScore(s) + walletScore(s.mint) + sniperPenalty(g);
   const sig: Signal = {
     mode: "launch", mint: s.mint, symbol: s.symbol, sizeUsd: C.sizeUsd, score,
-    reason: `launch: ${p.kind} +${(p.gain15 * 100).toFixed(0)}% in 15m, ${((ctx.now - migratedAt) / 3_600_000).toFixed(1)}h after migrating, ${pre.holders} holders, buys ${buySellRatio(s).toFixed(1)}x sells`,
+    reason: `launch: ${p.kind === "first dip" ? `first dip ${Math.round((p.depth ?? 0) * 100)}% off the high, bouncing` : `${p.kind} +${(p.gain15 * 100).toFixed(0)}% in 15m`}, ${((ctx.now - migratedAt) / 3_600_000).toFixed(1)}h after migrating, ${pre.holders} holders, buys ${buySellRatio(s).toFixed(1)}x sells`,
     snapshot: s, candles15: c15,
     meta: { atr15: atr(c15), migratedAt, holders: pre.holders },
     plan: p.plan,

@@ -41,6 +41,10 @@ let solPrice = 150;
 let lastDexOk = Date.now();
 // Main loop health, for the watchdog and /api/state health.loop.
 let tickStartedAt = Date.now(), lastTickDoneAt = Date.now(), tickStage = "starting";
+let lastExitDoneAt = Date.now(), exitStage = "starting";
+/** Strategy scans still running, with when they started (a timed-out scan stays here until it really ends). */
+const scanInFlight = new Map<string, number>();
+const SCAN_TIMEOUT_MS = 4 * 60_000;
 const loopErrs: Record<string, { at: number; err: string }> = {};
 
 const feed = new PumpPortal();
@@ -152,6 +156,12 @@ async function holdersLoop() {
   }
 }
 
+/** Resolves with p, or rejects after ms. p keeps running; its late result is dropped (it never buys on its own). */
+function withTimeout<T>(p: Promise<T>, ms: number, why: string): Promise<T> {
+  let t: NodeJS.Timeout;
+  return Promise.race([p, new Promise<T>((_, rej) => { t = setTimeout(() => rej(new Error(why)), ms); })]).finally(() => clearTimeout(t));
+}
+
 async function scanLoop() {
   const now = Date.now();
   if (kv.get("paused", false)) return;
@@ -180,8 +190,14 @@ async function scanLoop() {
     // Paused dip still runs at full pace: it's the flagship dip watch (fewer coins, flagships first, see dip.ts).
     if (now - (lastRun.get(s.name) ?? 0) < s.everyMs * (paused && s.name !== "dip" ? 3 : 1)) continue;
     lastRun.set(s.name, now);
+    // A scan still running from before (it timed out and hasn't come back) isn't started twice.
+    if (scanInFlight.has(s.name)) continue;
+    tickStage = `scan:${s.name}`;
+    scanInFlight.set(s.name, now);
+    const running = s.scan(ctx).finally(() => scanInFlight.delete(s.name));
     let sigs;
-    try { sigs = await s.scan(ctx); } catch (e) { log.warn({ mode: s.name, err: String(e) }, "scan failed"); continue; }
+    try { sigs = await withTimeout(running, SCAN_TIMEOUT_MS, `${s.name} scan ran over ${SCAN_TIMEOUT_MS / 60_000} min`); }
+    catch (e) { loopErrs[`scan:${s.name}`] = { at: Date.now(), err: String(e).slice(0, 200) }; log.warn({ mode: s.name, err: String(e) }, "scan failed"); continue; }
     sigs.sort((a, b) => b.score - a.score);
     for (const sig of sigs) {
       if (paused) { logSignal(sig, false, `${sig.mode} is paused: watching only`); continue; }
@@ -255,7 +271,12 @@ async function main() {
   startServer(() => markPrices, () => ({
     feedDownS: Math.round(Math.min(feed.downForMs, 99_999_000) / 1000),
     dexStaleS: Math.round((Date.now() - Math.max(lastDexOk, dex.lastOkAt)) / 1000),
-    loop: { stage: tickStage, lastTickAgoS: Math.round((Date.now() - lastTickDoneAt) / 1000), errors: loopErrs, lastWatchdog: kv.get("watchdog:last", null) },
+    loop: {
+      stage: tickStage, lastTickAgoS: Math.round((Date.now() - lastTickDoneAt) / 1000),
+      exitStage, lastExitAgoS: Math.round((Date.now() - lastExitDoneAt) / 1000),
+      scansInFlight: Object.fromEntries([...scanInFlight].map(([n, t]) => [n, Math.round((Date.now() - t) / 1000)])),
+      errors: loopErrs, lastWatchdog: kv.get("watchdog:last", null),
+    },
   }), mint => pickBuy(mint, {
     marks: markPrices, solPrice,
     feedHealthy: Date.now() - Math.max(lastDexOk, dex.lastOkAt) < config.risk.feedStaleMs,
@@ -276,9 +297,17 @@ async function main() {
     tickStage = name;
     try { await fn(); } catch (e) { loopErrs[name] = { at: Date.now(), err: String(e).slice(0, 200) }; log.warn({ loop: name, err: String(e) }, "loop failed"); }
   };
+  // 21 Oct: stops get their own loop. At 15:44 a scan hung for 21 minutes and, sharing one loop, no stop was judged
+  // for any open position until the watchdog restarted the bot. Exits now run every 5s whatever the scans are doing.
+  const exitTick = async () => {
+    exitStage = "exit";
+    try { await exitLoop(); } catch (e) { loopErrs.exit = { at: Date.now(), err: String(e).slice(0, 200) }; log.warn({ loop: "exit", err: String(e) }, "loop failed"); }
+    exitStage = "idle";
+    lastExitDoneAt = Date.now();
+    setTimeout(exitTick, 5000);
+  };
   const tick = async () => {
     tickStartedAt = Date.now();
-    await step("exit", exitLoop);
     await step("scan", scanLoop);
     await step("missed", missedRunnersLoop);
     await step("holders", holdersLoop);
@@ -287,12 +316,16 @@ async function main() {
     lastTickDoneAt = Date.now();
     setTimeout(tick, 5000);
   };
+  exitTick();
   tick();
-  // Watchdog. 20 Oct 15:19 to 22:30: the main loop stopped (no prices, scans, exits or mood for 7 hours) while the
-  // dashboard API kept answering. If a loop hangs or DexScreener goes silent, exit and let pm2 start us fresh.
+  // Watchdog. 20 Oct 15:19 to 06:30: the main loop stopped for 15 hours while the dashboard API kept answering.
+  // If a loop hangs, a strategy's scan never comes back, or DexScreener goes silent, exit and let pm2 start us fresh.
   setInterval(() => {
     const now = Date.now();
-    const why = watchdogWhy({ now, lastTickDoneAt, tickStartedAt, tickStage, dexLastOk: Math.max(lastDexOk, dex.lastOkAt), upMs: process.uptime() * 1000 });
+    const why = watchdogWhy({
+      now, lastTickDoneAt, tickStartedAt, tickStage, dexLastOk: Math.max(lastDexOk, dex.lastOkAt), upMs: process.uptime() * 1000,
+      lastExitDoneAt, exitStage, scansInFlight: [...scanInFlight.entries()].map(([name, since]) => ({ name, since })),
+    });
     if (!why) return;
     log.error({ why, stage: tickStage, loopErrs }, "watchdog: restarting");
     kv.set("watchdog:last", { at: now, why, stage: tickStage });

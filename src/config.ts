@@ -198,7 +198,10 @@ export const config = {
       // 20 Oct (later): back on so every mode is tested live, but stricter than the overnight version. A first leg also
       // needs the top 10 under firstLegMaxTop10% and holders up firstLegMinHolderGrowth in 10 minutes (the rugs had
       // concentrated holders and a flat crowd). Breakouts keep the normal rules.
-      firstLeg: true, firstLegMaxTop10: 20, firstLegMinHolderGrowth: 0.10,
+      // 21 Oct (Nat: yes): first legs off again, 12 trades, 1 win, -$31.91 (GOBLO: hard floor 2 minutes after buying).
+      // In the first hour launch buys the first dip instead: a +30% leg, then a 20-45% pullback that holds and bounces.
+      firstLeg: false, firstLegMaxTop10: 20, firstLegMinHolderGrowth: 0.10,
+      firstDip: true, firstDipMinLeg: 0.30, firstDipMin: 0.20, firstDipMax: 0.45,
       // 19 Oct 11:30: pump.fun coins migrate at ~$27-38k with a $12-15k pool (UBI $27k/$12k, then 6.7x; WAND $31k/$13.5k).
       // The first numbers ($25k pool, $60k cap) meant waiting until a coin had already doubled.
       minLiquidity: 10_000, mcapMin: 25_000, mcapMax: 3_000_000,

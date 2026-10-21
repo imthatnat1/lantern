@@ -25,3 +25,13 @@ test("loop finishing but DexScreener silent 30+ min = restart", () => {
 test("silent DexScreener right after a restart waits out the grace period", () => {
   assert.equal(watchdogWhy({ ...base, dexLastOk: base.now - 45 * M, upMs: 10 * M }), null);
 });
+
+test("21 Oct: stop checks on their own loop; 5 min without a finished exit pass = restart", () => {
+  assert.equal(watchdogWhy({ ...base, lastExitDoneAt: base.now - 2 * M, exitStage: "exit" }), null);
+  assert.match(watchdogWhy({ ...base, lastExitDoneAt: base.now - 6 * M, exitStage: "exit" })!, /stop checks/);
+});
+
+test("a strategy scan that never comes back is named", () => {
+  assert.equal(watchdogWhy({ ...base, scansInFlight: [{ name: "launch", since: base.now - 10 * M }] }), null);
+  assert.match(watchdogWhy({ ...base, scansInFlight: [{ name: "launch", since: base.now - 31 * M }] })!, /launch scan never came back/);
+});

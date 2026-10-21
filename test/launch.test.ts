@@ -76,16 +76,19 @@ test("Moonoween (19 Oct): a fake valuation is named a scam before any size check
 });
 
 test("with first legs off, under an hour after migration launch waits", async () => {
-  const off = { ...config.modes.launch, firstLeg: false };
+  const off = { ...config.modes.launch, firstLeg: false, firstDip: false };
   const p = launchPattern(mkt, run([1, 1.2, 1.45, 1.7, 2.0]), MIG, now(5), off) as any;
   assert.equal(p.ok, false);
   assert.match(p.why, /under an hour since migration/);
 });
 
-test("first legs are back on live (20 Oct) but need a spread-out, fast-growing crowd", async () => {
+test("first legs (off live since 21 Oct) need a spread-out, fast-growing crowd; a first dip only the spread", async () => {
   const { firstLegWhy } = await import("../src/strategies/launch.js");
   const C = config.modes.launch;
-  assert.equal(C.firstLeg, true);
+  assert.equal(C.firstLeg, false);
+  assert.equal(C.firstDip, true);
+  assert.match(firstLegWhy("first dip", 31, null, C)!, /top 10 hold 31%/, "first dip: concentrated refused");
+  assert.equal(firstLegWhy("first dip", 15, null, C), null, "first dip: no growth needed");
   assert.match(firstLegWhy("first leg", 31, 0.2, C)!, /top 10 hold 31%/, "concentrated: refused");
   assert.match(firstLegWhy("first leg", 15, 0.04, C)!, /holders \+4%/, "slow crowd: refused");
   assert.match(firstLegWhy("first leg", 15, null, C)!, /not measured yet/, "unknown growth: refused");
@@ -99,4 +102,35 @@ test("launchpad coins only: pump.fun and bonk mints, not tokenized stocks or wra
   assert.ok(isLaunchpadMint("Goqx3oFohWoTnuJbVhT7DcGfq6EjLrPyhTEuyHUZpump"));
   assert.ok(isLaunchpadMint("AbcdEfgh1234bonk"));
   assert.ok(!isLaunchpadMint("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), "USDC");
+});
+
+// 21 Oct: live launch buys the first dip, not the spike.
+const live = { ...config.modes.launch };
+const firstDipMkt = { ...mkt, priceUsd: 1.45, buys5m: 200, sells5m: 150 };
+
+test("live config: no spike buying in the first hour", () => {
+  const p = launchPattern(mkt, run([1, 1.2, 1.45, 1.7, 2.0]), MIG, now(5), live);
+  assert.equal(p.ok, false);
+  assert.match((p as any).why, /waiting for the first dip/);
+});
+
+test("first dip: +100% leg, 35% pullback that stopped, green bounce = buy, stop under the dip low", () => {
+  // run to 2.0, dip to a 1.3 close (low ~1.26), then a green candle to 1.45
+  const c5 = run([1, 1.4, 2.0, 1.6, 1.3, 1.35, 1.45]);
+  const p = launchPattern(firstDipMkt, c5, MIG, now(7), live);
+  assert.ok(p.ok, JSON.stringify(p));
+  if (p.ok) {
+    assert.equal(p.kind, "first dip");
+    const plan = p.plan(1.45, 0.1);
+    assert.ok(plan.closeStopPrice < 1.26 && plan.closeStopPrice >= 1.45 * (1 - live.stopPct) - 1e-9, `stop ${plan.closeStopPrice}`);
+  }
+});
+
+test("first dip refuses: no real leg, too shallow, too deep, still falling, red, more sells", () => {
+  assert.match((launchPattern(firstDipMkt, run([1, 1.1, 1.15, 1.0, 1.05]), MIG, now(5), live) as any).why, /first leg only/);
+  assert.match((launchPattern(firstDipMkt, run([1, 1.5, 2.0, 1.9, 1.95]), MIG, now(5), live) as any).why, /waiting for a 20-45% dip/);
+  assert.match((launchPattern(firstDipMkt, run([1, 1.5, 2.0, 1.2, 0.8, 0.9]), MIG, now(6), live) as any).why, /more than a dip/);
+  assert.match((launchPattern(firstDipMkt, run([1, 1.5, 2.0, 1.6, 1.3]), MIG, now(5), live) as any).why, /new lows/);
+  assert.match((launchPattern(firstDipMkt, run([1, 1.5, 2.0, 1.4, 1.5, 1.42]), MIG, now(6), live) as any).why, /red/);
+  assert.match((launchPattern({ ...firstDipMkt, buys5m: 100, sells5m: 150 }, run([1, 1.4, 2.0, 1.6, 1.3, 1.35, 1.45]), MIG, now(7), live) as any).why, /more sells/);
 });
