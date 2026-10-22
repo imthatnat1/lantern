@@ -198,6 +198,16 @@ try { db.exec("ALTER TABLE signals_log ADD COLUMN pair TEXT"); } catch { /* alre
 // fell before it ran (sampled every 20 min, so a quick wick can be missed).
 try { db.exec("ALTER TABLE signals_log ADD COLUMN low_price REAL NOT NULL DEFAULT 0"); } catch { /* already there */ }
 try { db.exec("ALTER TABLE signals_log ADD COLUMN low_before_peak REAL NOT NULL DEFAULT 0"); } catch { /* already there */ }
+// 22 Oct: the dashboard went dark (proxy gave up at 8s; the bot took 5-10s per /api/state). signals_log only had an
+// index on time, so every "this coin" lookup walked a whole day or two of looks: ~120 of them per dashboard refresh,
+// and 120 more every 20 minutes in the missed-runner tracker (reprice). Both blocked the bot while they ran.
+// signals_mint_at serves reprice and the lab; signals_mode_mint serves per-mode-per-coin lookups;
+// signals_missed and signals_paused serve the missed-runner and would-have-bought cards: partial indexes holding only
+// looks that went 2x+ or were paused-mode would-buys, so they stay small. Their WHERE must match the queries word for word.
+db.exec(`CREATE INDEX IF NOT EXISTS signals_mint_at ON signals_log(mint, at);
+CREATE INDEX IF NOT EXISTS signals_mode_mint ON signals_log(mode, mint, at);
+CREATE INDEX IF NOT EXISTS signals_missed ON signals_log(at) WHERE taken=0 AND peak_price >= price * 2;
+CREATE INDEX IF NOT EXISTS signals_paused ON signals_log(at) WHERE taken=0 AND reason LIKE '%paused: watching only%';`);
 // Recorded for the replay lab: which pair a tick came from (dust pools can be filtered out), when coins
 // migrated (bounce needs it), and what the safety gate saw (so gate rules can be replayed later).
 try { db.exec("ALTER TABLE ticks ADD COLUMN pair TEXT"); } catch { /* already there */ }
@@ -308,6 +318,10 @@ export const recorder = {
     db.prepare("DELETE FROM holders_history WHERE at < ?").run(cut);
     db.prepare("DELETE FROM safety_history WHERE at < ?").run(cut);
     try { db.prepare("DELETE FROM flow_history WHERE at < ?").run(cut); } catch { /* table made by data/flow.ts */ }
+    // 22 Oct: looks were never pruned. Nothing reads them past 48h except the lab, which replays days, not weeks.
+    // Taken looks (actual buys) are kept for the record.
+    db.prepare("DELETE FROM signals_log WHERE at < ? AND taken=0").run(cut);
+    db.prepare("DELETE FROM rejected_ticks WHERE at < ?").run(cut);
   },
 };
 

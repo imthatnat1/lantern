@@ -1,5 +1,8 @@
 import { isAuthed } from "./_auth.js";
 
+// 22 Oct: the bot usually answers in well under a second now (cached, gzipped). 20s is a safety net, not the plan.
+export const config = { maxDuration: 25 };
+
 // Proxies to the bot. Keeps BOT_TOKEN server-side; the browser only ever has the session cookie.
 // Env: BOT_URL (http://<droplet-ip>:8787), BOT_TOKEN (same as DASHBOARD_TOKEN on the droplet), DASH_PASSWORD
 export default async function handler(req, res) {
@@ -11,7 +14,7 @@ export default async function handler(req, res) {
     const r = await fetch(`${base.replace(/\/$/, "")}${path}`, {
       method: req.method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: req.method === "POST" ? JSON.stringify(req.body || {}) : undefined,
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(20000),
     });
     res.setHeader("cache-control", "no-store");
     res.status(r.status).send(await r.text());

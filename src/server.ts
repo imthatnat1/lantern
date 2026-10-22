@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { gzipSync } from "node:zlib";
 import { db, positions, kv } from "./db.js";
 import { currentMood, moodHistory } from "./engine/mood.js";
 import { shadowSummary } from "./engine/shadow.js";
@@ -15,7 +16,7 @@ import { log } from "./log.js";
 import { labStatus, runLabNow } from "./lab/scheduler.js";
 import { blockedWhy } from "./data/flow.js";
 import { liveCandleStats } from "./data/livecandles.js";
-import { isFlagship, isStonkPair } from "./data/universe.js";
+import { flagshipMints, isFlagship, isStonkPair } from "./data/universe.js";
 import { isStonkListed } from "./data/stonkfun.js";
 
 /**
@@ -33,8 +34,14 @@ export function startServer(getMarks: () => Map<string, number>, getHealth: () =
   const srv = createServer((req, res) => {
     res.setHeader("content-type", "application/json");
     if (req.headers.authorization !== `Bearer ${token}`) { res.statusCode = 401; res.end('{"error":"unauthorized"}'); return; }
+    // Stop/Resume, picks, watch taps and approvals change what the dashboard shows: drop the cached state once done.
+    if (req.method === "POST") res.on("finish", resetStateCache);
     if (req.method === "GET" && req.url === "/api/state") {
-      try { res.end(JSON.stringify(state(getMarks(), getHealth()))); }
+      try {
+        const body = stateBody(() => state(getMarks(), getHealth()));
+        if (/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) { res.setHeader("content-encoding", "gzip"); res.setHeader("vary", "accept-encoding"); res.end(body.gz()); }
+        else res.end(body.json);
+      }
       catch (e) { res.statusCode = 500; res.end(JSON.stringify({ error: String(e) })); }
       return;
     }
@@ -269,8 +276,8 @@ export function radarDumpedWhy(m: { ch5m?: number | null; ch1h?: number | null; 
   return null;
 }
 
-export function radarList(now = Date.now(), held = new Set<string>(), max = 12) {
-  const onWatching = new Set(hotList(now, held).map(h => h.mint));
+export function radarList(now = Date.now(), held = new Set<string>(), max = 12, watching?: Set<string>) {
+  const onWatching = watching ?? new Set(hotList(now, held).map(h => h.mint));
   const rows = db.prepare(`SELECT s.mint, s.symbol, s.reason, s.at FROM signals_log s
     JOIN (SELECT mint, max(at) AS at FROM signals_log WHERE mode='launch' AND at > ? GROUP BY mint) l ON l.mint=s.mint AND l.at=s.at
     WHERE s.mode='launch'`).all(now - 45 * 60_000) as { mint: string; symbol: string; reason: string; at: number }[];
@@ -296,6 +303,85 @@ function mkt(mint: string) {
   if (!m) return null;
   return { ...m, labels: JSON.parse(m.labels || "[]") };
 }
+
+/**
+ * The latest look per (mode, coin) in the last 24h, unless that look was a buy: the newest 80, plus up to 40 with a
+ * setup forming in the last 3h. Same answer as grouping a day of looks, but walks them newest first and stops once
+ * both lists are full (22 Oct: the GROUP BY over a day of looks ran on every refresh and blocked the bot).
+ */
+export function latestLooks(now = Date.now(), nRecent = 80, nForming = 40) {
+  const recent: any[] = [], forming: any[] = [];
+  const seen = new Set<string>();
+  const formingSince = now - 3 * 3_600_000;
+  for (const r of db.prepare("SELECT * FROM signals_log WHERE at > ? ORDER BY at DESC").iterate(now - 24 * 3_600_000) as Iterable<any>) {
+    const k = `${r.mode}:${r.mint}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (r.taken) continue;
+    if (recent.length < nRecent) recent.push(r);
+    if (forming.length < nForming && r.at > formingSince && r.setup != null && !/^rejected/i.test(r.reason)) forming.push(r);
+    // Forming only takes looks from the last 3h, so once we're past that it can't grow.
+    if (recent.length >= nRecent && (forming.length >= nForming || r.at <= formingSince)) break;
+  }
+  return { recent, forming };
+}
+
+/**
+ * GET /api/state is built at most once every 15s and served gzipped (22 Oct). Every open dashboard tab polls it,
+ * and a request Vercel gave up on still had to be built, so repeats were pure cost.
+ */
+const STATE_TTL_MS = 15_000;
+let stateCache: { at: number; json: string; gz: Buffer | null } | null = null;
+export function stateBody(build: () => unknown, now = Date.now()): { json: string; gz: () => Buffer } {
+  if (!stateCache || now - stateCache.at >= STATE_TTL_MS) stateCache = { at: now, json: JSON.stringify(build()), gz: null };
+  const c = stateCache;
+  return { json: c.json, gz: () => (c.gz ??= gzipSync(c.json, { level: 6 })) };
+}
+export function resetStateCache() { stateCache = null; }
+
+/**
+ * Would-have-bought and missed-runner cards (48h of looks). Their prices only change when the missed-runner tracker
+ * reprices, every 20 minutes, so they're rebuilt at most every 5 minutes (22 Oct: these scans were the slowest part
+ * of /api/state after the per-coin lookups were indexed).
+ */
+const OUTCOMES_TTL_MS = 5 * 60_000;
+let outcomesCache: { at: number; v: { wouldBuy: any[]; missed: any[] } } | null = null;
+export function outcomeCards(now = Date.now()) {
+  if (outcomesCache && now - outcomesCache.at < OUTCOMES_TTL_MS) return outcomesCache.v;
+  // Missed runners: anything we declined in 48h that then went 2x or more from the look price.
+  // Would have bought: full signals from paused modes (dip = the flagship dip watch), latest per coin in 48h,
+  // with how price went after. Paper money is never used; this is how a paused mode earns its way back.
+  const wouldBuy = (db.prepare(`SELECT s.mode, s.mint, s.symbol, s.score, s.at, s.price, s.peak_price, s.last_price, s.mcap FROM signals_log s
+    JOIN (SELECT mode, mint, max(at) AS at FROM signals_log WHERE at > ? AND taken=0 AND reason LIKE '%paused: watching only%' GROUP BY mode, mint) l
+    ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at ORDER BY s.at DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
+    .map(r => ({ ...r, peakX: r.price ? r.peak_price / r.price : null, nowX: r.price ? r.last_price / r.price : null, flagship: isFlagship(r.mint), market: mkt(r.mint),
+      // 20 Oct (Nat: "why we have runners on our would have bought list but didnt buy them"): say why, and whether
+      // another mode bought the coin anyway.
+      whyNot: config.pausedModes.includes(r.mode) ? `${r.mode} is paused (watching only)` : `${r.mode} was paused then (watching only), buying again now`, pausedNow: config.pausedModes.includes(r.mode),
+      boughtBy: (db.prepare("SELECT mode FROM positions WHERE mint=? AND entry_at > ? ORDER BY entry_at LIMIT 1").get(r.mint, r.at - 6 * 3_600_000) as { mode: string } | undefined)?.mode ?? null }));
+
+  const missed = (db.prepare(`SELECT mode, mint, symbol, reason, at, price, peak_price, last_price, mcap, low_before_peak FROM signals_log
+    WHERE taken=0 AND at > ? AND mcap >= 5000 AND peak_price >= price * 2 ORDER BY peak_price / price DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
+    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, ...honest(r), market: mkt(r.mint) }));
+  // Plus coins we were stopped out of that then ran.
+  // Flagship bounces: a pinned or big Stonk.fun coin we passed on that bounced 25% or more (below the 2x bar above).
+  const seenMissed = new Set(missed.map((m: any) => m.mint));
+  // Only flagships can make this list, so look up just those coins (by coin index) instead of 48h of every look.
+  const flags = flagshipMints();
+  const inFlags = flags.map(() => "?").join(",");
+  const flagshipBounces = (!flags.length ? [] : db.prepare(`SELECT s.mode, s.mint, s.symbol, s.reason, s.at, s.price, s.peak_price, s.last_price, s.mcap, s.low_before_peak FROM signals_log s
+    JOIN (SELECT mint, max(peak_price / price) AS x FROM signals_log WHERE mint IN (${inFlags}) AND taken=0 AND at > ? AND price > 0 GROUP BY mint) b ON b.mint=s.mint AND s.peak_price / s.price = b.x
+    WHERE s.mint IN (${inFlags}) AND s.taken=0 AND s.at > ? AND s.price > 0 AND s.peak_price >= s.price * 1.25 AND s.peak_price < s.price * 2`).all(...flags, now - 48 * 3_600_000, ...flags, now - 48 * 3_600_000) as any[])
+    .filter(r => isFlagship(r.mint) && !seenMissed.has(r.mint))
+    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, flagshipBounce: true, ...honest(r), market: mkt(r.mint) }));
+  const stoppedThenRan = (db.prepare(`SELECT p.mode, p.mint, p.symbol, p.close_reason AS reason, p.closed_at AS at, p.entry_price AS price, m.price AS last_price
+    FROM positions p JOIN market m ON m.mint=p.mint WHERE p.status='closed' AND p.closed_at > ? AND p.realized_usd < 0 AND m.price >= p.entry_price * 2`).all(now - 48 * 3_600_000) as any[])
+    .map(r => ({ ...r, peakX: r.last_price / r.price, nowX: r.last_price / r.price, soldEarly: true, market: mkt(r.mint) }));
+  const v = { wouldBuy, missed: [...missed, ...flagshipBounces, ...stoppedThenRan] };
+  outcomesCache = { at: now, v };
+  return v;
+}
+export function resetOutcomeCards() { outcomesCache = null; }
 
 function state(marks: Map<string, number>, health: { feedDownS: number; dexStaleS: number; loop?: unknown }) {
   const a = broker.account();
@@ -348,10 +434,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
   // Looks in the last 24h: latest per (mode, mint). Two pulls, so the flood of pump.fun rejections can't
   // push forming setups off the Watching list: the latest 80 looks of any kind, plus every coin with a
   // setup forming in the last 3h.
-  const latest = `SELECT s.* FROM signals_log s JOIN (SELECT mode, mint, max(at) AS at FROM signals_log WHERE at > ? GROUP BY mode, mint) l
-    ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at WHERE s.taken=0`;
-  const recent = db.prepare(`${latest} ORDER BY s.at DESC LIMIT 80`).all(now - 24 * 3_600_000) as any[];
-  const forming = db.prepare(`${latest} AND s.setup IS NOT NULL AND s.reason NOT LIKE 'rejected%' AND s.at > ? ORDER BY s.at DESC LIMIT 40`).all(now - 24 * 3_600_000, now - 3 * 3_600_000) as any[];
+  const { recent, forming } = latestLooks(now);
   const seen = new Set<string>();
   const looks = [...forming, ...recent].filter(r => { const k = `${r.mode}:${r.mint}`; if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((a, b) => b.at - a.at)
@@ -360,32 +443,9 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       paused: config.pausedModes.includes(r.mode),
       watchedSince: (db.prepare("SELECT min(at) AS t FROM signals_log WHERE mode=? AND mint=? AND at > ?").get(r.mode, r.mint, now - 24 * 3_600_000) as any)?.t ?? r.at, market: mkt(r.mint) }));
 
-  // Missed runners: anything we declined in 48h that then went 2x or more from the look price.
-  // Would have bought: full signals from paused modes (dip = the flagship dip watch), latest per coin in 48h,
-  // with how price went after. Paper money is never used; this is how a paused mode earns its way back.
-  const wouldBuy = (db.prepare(`SELECT s.mode, s.mint, s.symbol, s.score, s.at, s.price, s.peak_price, s.last_price, s.mcap FROM signals_log s
-    JOIN (SELECT mode, mint, max(at) AS at FROM signals_log WHERE at > ? AND taken=0 AND reason LIKE '%paused: watching only%' GROUP BY mode, mint) l
-    ON l.mode=s.mode AND l.mint=s.mint AND l.at=s.at ORDER BY s.at DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
-    .map(r => ({ ...r, peakX: r.price ? r.peak_price / r.price : null, nowX: r.price ? r.last_price / r.price : null, flagship: isFlagship(r.mint), market: mkt(r.mint),
-      // 20 Oct (Nat: "why we have runners on our would have bought list but didnt buy them"): say why, and whether
-      // another mode bought the coin anyway.
-      whyNot: config.pausedModes.includes(r.mode) ? `${r.mode} is paused (watching only)` : `${r.mode} was paused then (watching only), buying again now`, pausedNow: config.pausedModes.includes(r.mode),
-      boughtBy: (db.prepare("SELECT mode FROM positions WHERE mint=? AND entry_at > ? ORDER BY entry_at LIMIT 1").get(r.mint, r.at - 6 * 3_600_000) as { mode: string } | undefined)?.mode ?? null }));
-
-  const missed = (db.prepare(`SELECT mode, mint, symbol, reason, at, price, peak_price, last_price, mcap, low_before_peak FROM signals_log
-    WHERE taken=0 AND at > ? AND mcap >= 5000 AND peak_price >= price * 2 ORDER BY peak_price / price DESC LIMIT 20`).all(now - 48 * 3_600_000) as any[])
-    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, ...honest(r), market: mkt(r.mint) }));
-  // Plus coins we were stopped out of that then ran.
-  // Flagship bounces: a pinned or big Stonk.fun coin we passed on that bounced 25% or more (below the 2x bar above).
-  const seenMissed = new Set(missed.map((m: any) => m.mint));
-  const flagshipBounces = (db.prepare(`SELECT s.mode, s.mint, s.symbol, s.reason, s.at, s.price, s.peak_price, s.last_price, s.mcap, s.low_before_peak FROM signals_log s
-    JOIN (SELECT mint, max(peak_price / price) AS x FROM signals_log WHERE taken=0 AND at > ? AND price > 0 GROUP BY mint) b ON b.mint=s.mint AND s.peak_price / s.price = b.x
-    WHERE s.taken=0 AND s.at > ? AND s.price > 0 AND s.peak_price >= s.price * 1.25 AND s.peak_price < s.price * 2`).all(now - 48 * 3_600_000, now - 48 * 3_600_000) as any[])
-    .filter(r => isFlagship(r.mint) && !seenMissed.has(r.mint))
-    .map(r => ({ ...r, peakX: r.peak_price / r.price, nowX: r.last_price / r.price, flagshipBounce: true, ...honest(r), market: mkt(r.mint) }));
-  const stoppedThenRan = (db.prepare(`SELECT p.mode, p.mint, p.symbol, p.close_reason AS reason, p.closed_at AS at, p.entry_price AS price, m.price AS last_price
-    FROM positions p JOIN market m ON m.mint=p.mint WHERE p.status='closed' AND p.closed_at > ? AND p.realized_usd < 0 AND m.price >= p.entry_price * 2`).all(now - 48 * 3_600_000) as any[])
-    .map(r => ({ ...r, peakX: r.last_price / r.price, nowX: r.last_price / r.price, soldEarly: true, market: mkt(r.mint) }));
+  const { wouldBuy, missed } = outcomeCards(now);
+  const held = new Set(open.map(o => o.mint));
+  const hot = hotList(now, held);
 
   const closedAll = db.prepare(`SELECT count(*) AS n, sum(case when realized_usd>0 then 1 else 0 end) AS wins, coalesce(sum(realized_usd),0) AS pnl FROM positions WHERE status='closed'`).get() as any;
   // Stop slippage (engine/stopgaps.ts): how far stop, trail and hard floor fills land past their trigger. Also in shadow.stops.
@@ -407,7 +467,7 @@ function state(marks: Map<string, number>, health: { feedDownS: number; dexStale
       // pump.fun creates recorded for the serial creator check, and the ones refused as spoofed (data/creators.ts).
       creates: createStats(now) },
     config: { modes: config.modes, allocation: config.allocation, risk: config.risk, fees: config.fees },
-    open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: { ...shadowSummary(now - 7 * 24 * 3_600_000), stops: { n: stopGaps.n, avgFillGapPct: stopGaps.avgFillGapPct, realN: stopGaps.realN, avgRealGapPct: stopGaps.avgRealGapPct } }, hot: hotList(now, new Set(open.map(o => o.mint))), radar: radarList(now, new Set(open.map(o => o.mint))), natWatch: natWatchList(now), missed: [...missed, ...flagshipBounces, ...stoppedThenRan],
+    open, closed, fills, equity, byMode, looks, wouldBuy, mood: currentMood(), moodHistory: moodHistory(now - 24 * 3_600_000), shadow: { ...shadowSummary(now - 7 * 24 * 3_600_000), stops: { n: stopGaps.n, avgFillGapPct: stopGaps.avgFillGapPct, realN: stopGaps.realN, avgRealGapPct: stopGaps.avgRealGapPct } }, hot, radar: radarList(now, held, 12, new Set(hot.map(h => h.mint))), natWatch: natWatchList(now), missed,
     // AUD for tax (data/fx.ts): rate now, equity/cash/vault in AUD, realised P&L at each fill's own rate.
     aud: audSummary(eq, a.cash, a.vault, now),
     approvals: approvalsState(now),
